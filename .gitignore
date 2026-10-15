@@ -11,6 +11,9 @@ Takeout/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
 
 # OS / editors
 .DS_Store
