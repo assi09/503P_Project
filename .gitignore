@@ -1,0 +1,18 @@
+# Personal health data — never commit (repo is public)
+data/
+*.zip
+Takeout/
+
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
