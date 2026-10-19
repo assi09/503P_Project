@@ -13,7 +13,7 @@ with every insight backed by a computed statistic the user can inspect.
 | Path | Contents |
 |---|---|
 | `backend/` | FastAPI service: data ingestion, analysis tools, agent, API |
-| `mobile/` | Expo (React Native) app |
+| `mobile/` | Expo (React Native) app for iOS, Android and web |
 | `eval/` | Evaluation suite: synthetic data, baselines, adversarial tests |
 | `docs/` | Architecture, API, failure matrix, threat model |
 
@@ -24,9 +24,27 @@ Personal Fitbit exports (Google Takeout) are **never committed**. Place an expor
 
 ## Setup
 
+### Backend
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e "backend[dev]"
 pytest backend
 ```
+
+### Mobile app
+
+Requires Node 22. The app runs on mock data until the backend API exists; set
+`EXPO_PUBLIC_API_URL` to point it at a running backend.
+
+```bash
+cd mobile
+npm install
+npm start             # then scan the QR code with the Expo Go app (iOS/Android)
+npm run web           # web version in the browser
+npm run lint && npm run typecheck && npm test
+```
+
+To try it on a phone that is not on the same Wi-Fi (for example a friend's), run
+`npx expo start --tunnel` and have them scan the QR code with Expo Go.
