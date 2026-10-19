@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from app.ingest.takeout import IngestError, find_export_root, load_daily
+from app.synthetic import BASELINES
 
 TZ = "Asia/Beirut"  # UTC+3 in summer
 ACTIVITY = "Physical Activity_GoogleData"
@@ -205,6 +206,11 @@ def test_skin_temperature_is_relative_to_personal_baseline(export):
     frame = load_daily(export, TZ).frame
     assert day(frame, "2026-07-02")["skin_temp_variation_c"] == 0.4
     assert pd.isna(day(frame, "2026-07-01")["skin_temp_variation_c"])
+
+
+def test_synthetic_data_covers_every_ingested_column(export):
+    columns = list(load_daily(export, TZ).frame.columns)
+    assert [name for name in BASELINES if name in columns] == columns
 
 
 def test_missing_metrics_are_reported(export):

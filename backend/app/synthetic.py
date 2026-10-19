@@ -23,7 +23,9 @@ class Baseline:
 BASELINES = {
     "steps": Baseline(8000, 2500, 0, 40000),
     "calories": Baseline(2300, 250, 1200, 5000),
+    "distance_km": Baseline(6, 2, 0, 60),
     "active_zone_minutes": Baseline(25, 15, 0, 300),
+    "cardio_load": Baseline(60, 40, 0, 600),
     "resting_hr": Baseline(62, 2, 40, 100),
     "hrv_ms": Baseline(45, 8, 5, 150),
     "respiratory_rate": Baseline(15, 0.8, 8, 25),
@@ -37,17 +39,21 @@ BASELINES = {
     "time_in_bed": Baseline(470, 45, 0, 1000),
     "sleep_efficiency": Baseline(90, 4, 0, 100),
     "bedtime_hour": Baseline(-0.5, 0.75, -6, 6),
+    "sleep_score": Baseline(78, 7, 0, 100),
     "deep_sleep_minutes": Baseline(80, 15, 0, 300),
     "light_sleep_minutes": Baseline(230, 30, 0, 600),
     "rem_sleep_minutes": Baseline(95, 20, 0, 300),
     "awake_in_bed_minutes": Baseline(50, 12, 0, 300),
+    "skin_temp_variation_c": Baseline(0, 0.4, -5, 5),
 }
 
 # Metrics that scale with how long the device was worn, used to simulate low-wear days.
 WEAR_DEPENDENT = (
     "steps",
     "calories",
+    "distance_km",
     "active_zone_minutes",
+    "cardio_load",
     "sedentary_minutes",
     "lightly_active_minutes",
     "moderately_active_minutes",
