@@ -22,7 +22,7 @@ import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
 import { floatingTabBar } from '@/lib/platform';
-import { fonts, radius, spacing, useColors } from '@/theme';
+import { column, fonts, radius, spacing, useColors } from '@/theme';
 
 const MAX_LENGTH = 500;
 
@@ -160,6 +160,7 @@ export default function AskScreen() {
       {finding && messages.length > 0 && (
         <ScrollView
           horizontal
+          style={styles.quickRail}
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.quickReplies}
@@ -218,8 +219,10 @@ function useKeyboardOpen(): boolean {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  header: { ...column, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   context: {
+    ...column,
+    maxWidth: column.maxWidth - 2 * spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -228,14 +231,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
   },
-  messages: {
-    padding: spacing.lg,
-    gap: spacing.md,
-    flexGrow: 1,
-    maxWidth: 720,
-    width: '100%',
-    alignSelf: 'center',
-  },
+  messages: { ...column, padding: spacing.lg, gap: spacing.md, flexGrow: 1 },
   empty: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   emptyIcon: {
     width: 48,
@@ -255,8 +251,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     opacity: 0.6,
   },
+  quickRail: { ...column, flexGrow: 0 },
   quickReplies: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  inputBar: {
+  inputBar: { ...column,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.sm,

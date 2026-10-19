@@ -7,7 +7,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { floatingTabBar } from '@/lib/platform';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
-import { radius, spacing, useColors } from '@/theme';
+import { column, radius, spacing, useColors } from '@/theme';
 
 interface ScreenProps {
   children: ReactNode;
@@ -106,13 +106,7 @@ export function QueryState({
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-    maxWidth: 720,
-    width: '100%',
-    alignSelf: 'center',
-  },
+  content: { ...column, paddingHorizontal: spacing.lg, gap: spacing.md },
   header: { gap: 2, marginBottom: spacing.sm },
   error: {
     padding: spacing.xl,
