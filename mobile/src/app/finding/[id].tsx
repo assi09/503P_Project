@@ -61,7 +61,9 @@ export default function FindingScreen() {
               <Button
                 label="Ask about this"
                 icon="chatbubble-ellipses-outline"
-                onPress={() => router.push({ pathname: '/ask', params: { findingId: finding.id } })}
+                // dismissTo closes this screen and switches to the existing Ask tab; push and
+                // navigate would stack a second copy of the tabs with its own chat.
+                onPress={() => router.dismissTo({ pathname: '/ask', params: { findingId: finding.id } })}
               />
               <Text style={[styles.caption, { color: colors.muted, textAlign: 'center' }]}>
                 Patterns in your own Fitbit data, not medical advice.

@@ -35,6 +35,17 @@ describe('mock API', () => {
     expect(answer.evidenceIds).toEqual([]);
   });
 
+  it('records which finding a question was about', async () => {
+    const [question, answer] = await mockClient.sendMessage('Tell me more', 'f_eff');
+    expect(question.findingId).toBe('f_eff');
+    expect(answer.evidenceIds).toContain('ev_eff');
+  });
+
+  it('answers about the attached finding rather than keywords in the question', async () => {
+    const [, steps] = await mockClient.sendMessage('Why did this happen?', 'f_steps');
+    expect(steps.evidenceIds).toEqual(['ev_steps']);
+  });
+
   it('keeps chat history across calls', async () => {
     const before = (await mockClient.getChat()).length;
     await mockClient.sendMessage('How are my steps?');
