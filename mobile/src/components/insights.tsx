@@ -1,42 +1,56 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
 import { useAnswerQuestion } from '@/api/hooks';
 import type { ContextQuestion, Finding } from '@/api/types';
 import { LineChart } from '@/components/LineChart';
+import { PressableScale } from '@/components/PressableScale';
+import { Text } from '@/components/Text';
 import { Card, ChangeBadge, Chip } from '@/components/ui';
 import { metricLabel } from '@/lib/format';
-import { spacing, useColors } from '@/theme';
+import { spacing, useColors, useMetricColor } from '@/theme';
 
 export function FindingCard({ finding }: { finding: Finding }) {
   const colors = useColors();
+  const color = useMetricColor(finding.metric);
+  const computations = finding.evidenceIds.length;
   return (
-    <Link href={`/finding/${finding.id}`} asChild>
-      <Pressable accessibilityRole="button" accessibilityHint="Opens the evidence for this finding">
-        {({ pressed }) => (
-          <Card style={{ opacity: pressed ? 0.85 : 1 }}>
-            <View style={styles.row}>
-              <Text style={[styles.metric, { color: colors.muted }]}>{metricLabel(finding.metric)}</Text>
-              <ChangeBadge direction={finding.direction} label={finding.change} />
-            </View>
-            <Text style={[styles.title, { color: colors.text }]}>{finding.title}</Text>
-            <Text style={[styles.summary, { color: colors.muted }]} numberOfLines={2}>
-              {finding.summary}
+    <PressableScale
+      accessibilityRole="link"
+      accessibilityHint="Opens the evidence for this finding"
+      onPress={() => router.push(`/finding/${finding.id}`)}
+    >
+      <Card glow={color}>
+        <View style={styles.row}>
+          <View style={styles.metric}>
+            <View style={[styles.dot, { backgroundColor: color }]} />
+            <Text variant="caption" color="muted">
+              {metricLabel(finding.metric)}
             </Text>
-            <LineChart points={finding.series} metric={finding.metric} highlight={finding.highlight} />
-            <View style={styles.row}>
-              <Text style={[styles.evidence, { color: colors.accent }]}>
-                {finding.evidenceIds.length === 1
-                  ? 'Based on 1 computation'
-                  : `Based on ${finding.evidenceIds.length} computations`}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
-            </View>
-          </Card>
-        )}
-      </Pressable>
-    </Link>
+          </View>
+          <ChangeBadge direction={finding.direction} label={finding.change} color={color} />
+        </View>
+        <Text variant="headline">{finding.title}</Text>
+        <Text color="muted" numberOfLines={2}>
+          {finding.summary}
+        </Text>
+        <View style={styles.chart}>
+          <LineChart
+            points={finding.series}
+            metric={finding.metric}
+            highlight={finding.highlight}
+            height={64}
+          />
+        </View>
+        <View style={styles.row}>
+          <Text variant="caption" color="faint">
+            {computations === 1 ? 'Based on 1 computation' : `Based on ${computations} computations`}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+        </View>
+      </Card>
+    </PressableScale>
   );
 }
 
@@ -46,12 +60,16 @@ export function QuestionCard({ question }: { question: ContextQuestion }) {
   const chosen = answer.isPending ? answer.variables?.answer : question.answer;
 
   return (
-    <Card style={{ borderColor: colors.accent }}>
+    <Card glow={colors.accent}>
       <View style={styles.questionHeader}>
-        <Ionicons name="help-circle-outline" size={20} color={colors.accent} />
-        <Text style={[styles.questionTitle, { color: colors.text }]}>{question.prompt}</Text>
+        <View style={[styles.questionIcon, { backgroundColor: colors.accentSoft }]}>
+          <Ionicons name="sparkles" size={14} color={colors.accent} />
+        </View>
+        <Text variant="headline" style={{ flex: 1 }}>
+          {question.prompt}
+        </Text>
       </View>
-      <Text style={[styles.summary, { color: colors.muted }]}>
+      <Text variant="caption" color="muted">
         Your answer helps explain the change. It is only used for your own analysis.
       </Text>
       <View style={styles.chips}>
@@ -66,10 +84,12 @@ export function QuestionCard({ question }: { question: ContextQuestion }) {
         ))}
       </View>
       {answer.error && (
-        <Text style={{ color: colors.down }}>Could not save your answer. Please try again.</Text>
+        <Text variant="caption" color="danger">
+          Could not save your answer. Please try again.
+        </Text>
       )}
       {question.answer && !answer.isPending && (
-        <Text style={[styles.summary, { color: colors.muted }]}>
+        <Text variant="caption" color="muted">
           Noted: {question.answer}. Tap another option to change it.
         </Text>
       )}
@@ -79,11 +99,17 @@ export function QuestionCard({ question }: { question: ContextQuestion }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  metric: { fontSize: 13, fontWeight: '500' },
-  title: { fontSize: 18, fontWeight: '700' },
-  summary: { fontSize: 14, lineHeight: 20 },
-  evidence: { fontSize: 13, fontWeight: '600' },
+  metric: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  chart: { marginVertical: spacing.xs },
   questionHeader: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  questionTitle: { flex: 1, fontSize: 16, fontWeight: '600', lineHeight: 22 },
+  questionIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -2,
+  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

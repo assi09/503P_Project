@@ -14,7 +14,6 @@ const dark = {
   onAccent: '#07080B', // text and icons on accent backgrounds
   accentSoft: '#1B2033',
   danger: '#FF6B6B',
-  down: '#FF6B6B', // old name for danger, removed once every screen is moved over
   warning: '#F5B544',
   chart: '#8C9EFF',
   chartHighlight: '#1B2033',
@@ -33,7 +32,6 @@ const light: typeof dark = {
   onAccent: '#FFFFFF',
   accentSoft: '#E6E9FD',
   danger: '#D93838',
-  down: '#D93838',
   warning: '#B26B00',
   chart: '#4A5FE8',
   chartHighlight: '#E6E9FD',

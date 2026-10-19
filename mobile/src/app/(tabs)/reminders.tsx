@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
+import { usingMock } from '@/api';
 import {
   useNotificationSettings,
   useReminders,
@@ -10,11 +11,13 @@ import {
   useSetReminderStatus,
   useUpdateNotificationSettings,
 } from '@/api/hooks';
-import { usingMock } from '@/api';
 import type { NotificationSettings, Reminder } from '@/api/types';
+import { PressableScale } from '@/components/PressableScale';
 import { QueryState, Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
 import { Card, Chip, SectionTitle } from '@/components/ui';
-import { radius, spacing, useColors } from '@/theme';
+import { select, success } from '@/lib/haptics';
+import { radius, spacing, useColors, useMetricColor } from '@/theme';
 
 const QUIET_HOURS: { label: string; value: NotificationSettings['quietHours'] }[] = [
   { label: '22:00 – 07:00', value: { start: '22:00', end: '07:00' } },
@@ -29,7 +32,7 @@ export default function RemindersScreen() {
   const [showDeclined, setShowDeclined] = useState(false);
 
   return (
-    <Screen refreshing={reminders.isRefetching} onRefresh={reminders.refetch}>
+    <Screen title="Reminders" refreshing={reminders.isRefetching} onRefresh={reminders.refetch}>
       <QueryState query={reminders}>
         {() => {
           const all = reminders.data!;
@@ -40,8 +43,8 @@ export default function RemindersScreen() {
             <>
               {usingMock && (
                 <View style={[styles.notice, { backgroundColor: colors.accentSoft }]}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.accent} />
-                  <Text style={[styles.noticeText, { color: colors.accent }]}>
+                  <Ionicons name="information-circle" size={16} color={colors.accent} />
+                  <Text variant="caption" color="accent" style={{ flex: 1 }}>
                     Preview: reminders are saved, but notifications are not sent yet.
                   </Text>
                 </View>
@@ -49,10 +52,10 @@ export default function RemindersScreen() {
 
               <SectionTitle>Suggested</SectionTitle>
               {proposed.length === 0 ? (
-                <Text style={{ color: colors.muted }}>No new suggestions.</Text>
+                <Text color="muted">No new suggestions.</Text>
               ) : (
                 <>
-                  <Text style={[styles.hint, { color: colors.muted }]}>
+                  <Text variant="caption" color="muted">
                     Based on patterns in your data. Nothing is scheduled until you approve it.
                   </Text>
                   {proposed.map((r) => (
@@ -63,25 +66,33 @@ export default function RemindersScreen() {
 
               <SectionTitle>Your reminders</SectionTitle>
               {current.length === 0 ? (
-                <Text style={{ color: colors.muted }}>No reminders yet.</Text>
+                <Text color="muted">No reminders yet.</Text>
               ) : (
-                current.map((r) => <ActiveRow key={r.id} reminder={r} />)
+                <Card style={{ paddingVertical: spacing.xs }}>
+                  {current.map((r, i) => (
+                    <ActiveRow key={r.id} reminder={r} divider={i > 0} />
+                  ))}
+                </Card>
               )}
 
               {declined.length > 0 && (
                 <>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setShowDeclined((v) => !v)}
+                    onPress={() => {
+                      select();
+                      setShowDeclined((v) => !v);
+                    }}
                     style={styles.toggle}
+                    hitSlop={8}
                   >
-                    <Text style={{ color: colors.accent, fontWeight: '600' }}>
+                    <Text variant="caption" color="muted">
                       {showDeclined ? 'Hide' : 'Show'} declined ({declined.length})
                     </Text>
                     <Ionicons
                       name={showDeclined ? 'chevron-up' : 'chevron-down'}
                       size={14}
-                      color={colors.accent}
+                      color={colors.muted}
                     />
                   </Pressable>
                   {showDeclined && declined.map((r) => <DeclinedRow key={r.id} reminder={r} />)}
@@ -104,37 +115,61 @@ function useStatus(reminder: Reminder) {
   return {
     pending,
     error: mutation.error,
-    set: (status: Reminder['status']) => mutation.mutate({ id: reminder.id, status }),
+    set: (status: Reminder['status']) =>
+      mutation.mutate(
+        { id: reminder.id, status },
+        { onSuccess: () => (status === 'active' ? success() : select()) },
+      ),
   };
 }
 
 function ProposalCard({ reminder }: { reminder: Reminder }) {
-  const colors = useColors();
   const report = useReport();
   const status = useStatus(reminder);
   const finding = report.data?.findings.find((f) => f.id === reminder.findingId);
+  const color = useMetricColor(finding?.metric ?? 'sleep_minutes');
 
   return (
-    <Card>
+    <Card glow={color}>
       <View style={styles.titleRow}>
-        <Ionicons name="alarm-outline" size={18} color={colors.accent} />
-        <Text style={[styles.title, { color: colors.text }]}>{reminder.title}</Text>
+        <View style={[styles.icon, { backgroundColor: `${color}22` }]}>
+          <Ionicons name="alarm" size={16} color={color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text variant="headline">{reminder.title}</Text>
+          <Text variant="caption" color="muted">
+            {reminder.schedule}
+          </Text>
+        </View>
       </View>
-      <Text style={{ color: colors.text }}>{reminder.schedule}</Text>
-      <Text style={[styles.hint, { color: colors.muted }]}>
-        “{reminder.message}”
+      <View style={[styles.quote, { borderLeftColor: color }]}>
+        <Text color="muted">“{reminder.message}”</Text>
+      </View>
+      <Text variant="caption" color="muted">
+        Why: {reminder.reason}
       </Text>
-      <Text style={[styles.reason, { color: colors.muted }]}>Why: {reminder.reason}</Text>
       {finding && (
-        <Link href={`/finding/${finding.id}`} style={[styles.link, { color: colors.accent }]}>
-          See the finding: {finding.title}
-        </Link>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push(`/finding/${finding.id}`)}
+          hitSlop={6}
+        >
+          <Text variant="caption" color={color}>
+            See the finding: {finding.title} ›
+          </Text>
+        </Pressable>
       )}
       {status.error && (
-        <Text style={{ color: colors.down }}>Could not save. Please try again.</Text>
+        <Text variant="caption" color="danger">
+          Could not save. Please try again.
+        </Text>
       )}
       <View style={styles.actions}>
-        <ActionButton label="Not now" onPress={() => status.set('declined')} disabled={status.pending} />
+        <ActionButton
+          label="Not now"
+          onPress={() => status.set('declined')}
+          disabled={status.pending}
+        />
         <ActionButton
           label="Approve"
           primary
@@ -146,16 +181,23 @@ function ProposalCard({ reminder }: { reminder: Reminder }) {
   );
 }
 
-function ActiveRow({ reminder }: { reminder: Reminder }) {
+function ActiveRow({ reminder, divider }: { reminder: Reminder; divider: boolean }) {
   const colors = useColors();
   const status = useStatus(reminder);
   const on = reminder.status === 'active';
 
   return (
-    <Card style={styles.rowCard}>
+    <View
+      style={[
+        styles.row,
+        divider && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
+      ]}
+    >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[styles.title, { color: on ? colors.text : colors.muted }]}>{reminder.title}</Text>
-        <Text style={{ color: colors.muted, fontSize: 13 }}>
+        <Text variant="bodyStrong" color={on ? 'text' : 'muted'}>
+          {reminder.title}
+        </Text>
+        <Text variant="caption" color="muted">
           {on ? reminder.schedule : 'Muted'}
         </Text>
       </View>
@@ -164,26 +206,32 @@ function ActiveRow({ reminder }: { reminder: Reminder }) {
         value={on}
         disabled={status.pending}
         onValueChange={(value) => status.set(value ? 'active' : 'muted')}
-        trackColor={{ true: colors.accent, false: colors.border }}
+        trackColor={{ true: colors.accent, false: colors.track }}
         thumbColor="#FFFFFF"
+        // react-native-web colors the "on" knob separately.
+        {...({ activeThumbColor: '#FFFFFF' } as object)}
+      />
+    </View>
+  );
+}
+
+function DeclinedRow({ reminder }: { reminder: Reminder }) {
+  const status = useStatus(reminder);
+  return (
+    <Card style={styles.declined}>
+      <Text color="muted" style={{ flex: 1 }}>
+        {reminder.title}
+      </Text>
+      <ActionButton
+        label="Restore"
+        onPress={() => status.set('proposed')}
+        disabled={status.pending}
       />
     </Card>
   );
 }
 
-function DeclinedRow({ reminder }: { reminder: Reminder }) {
-  const colors = useColors();
-  const status = useStatus(reminder);
-  return (
-    <Card style={styles.rowCard}>
-      <Text style={[styles.title, { flex: 1, color: colors.muted }]}>{reminder.title}</Text>
-      <ActionButton label="Restore" onPress={() => status.set('proposed')} disabled={status.pending} />
-    </Card>
-  );
-}
-
 function SettingsCard() {
-  const colors = useColors();
   const settings = useNotificationSettings();
   const update = useUpdateNotificationSettings();
 
@@ -192,10 +240,11 @@ function SettingsCard() {
       <QueryState query={settings}>
         {() => {
           const current = update.isPending ? update.variables! : settings.data!;
-          const save = (next: Partial<NotificationSettings>) => update.mutate({ ...current, ...next });
+          const save = (next: Partial<NotificationSettings>) =>
+            update.mutate({ ...current, ...next });
           return (
             <>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Quiet hours</Text>
+              <Text variant="bodyStrong">Quiet hours</Text>
               <View style={styles.chips}>
                 {QUIET_HOURS.map(({ label, value }) => (
                   <Chip
@@ -206,7 +255,9 @@ function SettingsCard() {
                   />
                 ))}
               </View>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>At most per day</Text>
+              <Text variant="bodyStrong" style={{ marginTop: spacing.sm }}>
+                At most per day
+              </Text>
               <View style={styles.chips}>
                 {MAX_PER_DAY.map((n) => (
                   <Chip
@@ -218,7 +269,9 @@ function SettingsCard() {
                 ))}
               </View>
               {update.error && (
-                <Text style={{ color: colors.down }}>Could not save. Please try again.</Text>
+                <Text variant="caption" color="danger">
+                  Could not save. Please try again.
+                </Text>
               )}
             </>
           );
@@ -241,20 +294,22 @@ function ActionButton({
 }) {
   const colors = useColors();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      haptic={false}
+      style={[
         styles.action,
         primary
-          ? { backgroundColor: colors.accent }
-          : { borderColor: colors.border, borderWidth: 1 },
-        { opacity: pressed || disabled ? 0.6 : 1 },
+          ? { backgroundColor: colors.text }
+          : { backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderWidth: 1 },
       ]}
     >
-      <Text style={{ color: primary ? colors.onAccent : colors.text, fontWeight: '600' }}>{label}</Text>
-    </Pressable>
+      <Text variant="bodyStrong" color={primary ? 'background' : 'text'}>
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 
@@ -266,16 +321,24 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
   },
-  noticeText: { flex: 1, fontSize: 13 },
-  hint: { fontSize: 13, lineHeight: 18 },
-  reason: { fontSize: 13, lineHeight: 18, fontStyle: 'italic' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { fontSize: 16, fontWeight: '600' },
-  link: { fontSize: 13, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end', marginTop: spacing.xs },
-  action: { paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.md },
-  rowCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: spacing.xs },
-  settingLabel: { fontSize: 14, fontWeight: '600' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  icon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quote: { borderLeftWidth: 2, paddingLeft: spacing.md, marginVertical: spacing.xs },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'flex-end',
+    marginTop: spacing.sm,
+  },
+  action: { paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  declined: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

@@ -1,18 +1,21 @@
-import { StyleSheet, Text } from 'react-native';
-
 import { useReport } from '@/api/hooks';
 import { FindingCard, QuestionCard } from '@/components/insights';
 import { QueryState, Screen } from '@/components/Screen';
-import { SectionTitle } from '@/components/ui';
+import { Text } from '@/components/Text';
+import { Card, SectionTitle } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
-import { useColors } from '@/theme';
 
-export default function InsightsScreen() {
-  const colors = useColors();
+export default function TodayScreen() {
   const report = useReport();
+  const period = report.data ? windowLabel(report.data.period) : undefined;
 
   return (
-    <Screen refreshing={report.isRefetching} onRefresh={report.refetch}>
+    <Screen
+      title="Today"
+      subtitle={period}
+      refreshing={report.isRefetching}
+      onRefresh={report.refetch}
+    >
       <QueryState query={report}>
         {() => {
           const data = report.data!;
@@ -20,8 +23,7 @@ export default function InsightsScreen() {
           const answered = data.questions.filter((q) => q.answer);
           return (
             <>
-              <Text style={[styles.period, { color: colors.muted }]}>{windowLabel(data.period)}</Text>
-              <Text style={[styles.headline, { color: colors.text }]}>{data.headline}</Text>
+              <Text variant="title">{data.headline}</Text>
 
               {open.map((question) => (
                 <QuestionCard key={question.id} question={question} />
@@ -29,10 +31,12 @@ export default function InsightsScreen() {
 
               <SectionTitle>What changed</SectionTitle>
               {data.findings.length === 0 ? (
-                <Text style={{ color: colors.muted, lineHeight: 20 }}>
-                  No metric differed clearly from the weeks before. You can still ask about any
-                  metric in the Ask tab.
-                </Text>
+                <Card>
+                  <Text color="muted">
+                    No metric differed clearly from the weeks before. You can still ask about any
+                    metric in the Ask tab.
+                  </Text>
+                </Card>
               ) : (
                 data.findings.map((finding) => <FindingCard key={finding.id} finding={finding} />)
               )}
@@ -41,7 +45,7 @@ export default function InsightsScreen() {
                 <QuestionCard key={question.id} question={question} />
               ))}
 
-              <Text style={[styles.footer, { color: colors.muted }]}>
+              <Text variant="caption" color="faint" style={{ textAlign: 'center', marginTop: 8 }}>
                 Patterns in your own Fitbit data, not medical advice.
               </Text>
             </>
@@ -51,9 +55,3 @@ export default function InsightsScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  period: { fontSize: 13, fontWeight: '600' },
-  headline: { fontSize: 22, fontWeight: '700', lineHeight: 28 },
-  footer: { fontSize: 12, textAlign: 'center', marginTop: 8 },
-});

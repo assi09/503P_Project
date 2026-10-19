@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useDataStatus } from '@/api/hooks';
-import type { DataStatus } from '@/api/types';
+import type { DataStatus, MetricCoverage } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
 import { Card, SectionTitle } from '@/components/ui';
 import { shortDate, timeAgo, windowLabel } from '@/lib/format';
-import { radius, spacing, useColors } from '@/theme';
+import { radius, spacing, useColors, useMetricColor } from '@/theme';
 
 const SOURCE_LABELS: Record<DataStatus['source'], string> = {
   takeout: 'Google Takeout export',
@@ -19,20 +20,20 @@ export default function DataScreen() {
   const status = useDataStatus();
 
   return (
-    <Screen refreshing={status.isRefetching} onRefresh={status.refetch}>
+    <Screen title="Data" refreshing={status.isRefetching} onRefresh={status.refetch}>
       <QueryState query={status}>
         {() => {
           const data = status.data!;
           return (
             <>
-              <Card>
+              <Card glow={colors.accent}>
                 <View style={styles.sourceRow}>
-                  <Ionicons name="watch-outline" size={22} color={colors.accent} />
+                  <View style={[styles.icon, { backgroundColor: colors.accentSoft }]}>
+                    <Ionicons name="watch" size={18} color={colors.accent} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.title, { color: colors.text }]}>
-                      {SOURCE_LABELS[data.source]}
-                    </Text>
-                    <Text style={{ color: colors.muted, fontSize: 13 }}>
+                    <Text variant="headline">{SOURCE_LABELS[data.source]}</Text>
+                    <Text variant="caption" color="muted">
                       {data.lastSync ? `Updated ${timeAgo(data.lastSync)}` : 'Never updated'}
                       {data.range ? ` · ${windowLabel(data.range)}` : ''}
                     </Text>
@@ -42,61 +43,51 @@ export default function DataScreen() {
 
               <SectionTitle>Coverage</SectionTitle>
               <Card>
-                <Text style={[styles.hint, { color: colors.muted }]}>
+                <Text variant="caption" color="muted">
                   Share of days with data. Findings only use metrics with enough days.
                 </Text>
                 {data.coverage.map((c) => (
-                  <View key={c.metric} style={styles.coverageRow}>
-                    <Text style={[styles.coverageLabel, { color: colors.text }]}>{c.label}</Text>
-                    <View
-                      style={[styles.track, { backgroundColor: colors.border }]}
-                      accessible
-                      accessibilityLabel={`${c.label}: ${Math.round(c.fractionPresent * 100)}% of days`}
-                    >
-                      <View
-                        style={[
-                          styles.fill,
-                          { width: `${Math.round(c.fractionPresent * 100)}%`, backgroundColor: colors.accent },
-                        ]}
-                      />
-                    </View>
-                    <Text style={[styles.percent, { color: colors.muted }]}>
-                      {Math.round(c.fractionPresent * 100)}%
-                    </Text>
-                  </View>
+                  <CoverageRow key={c.metric} coverage={c} />
                 ))}
               </Card>
 
               <SectionTitle>Low wear days</SectionTitle>
               <Card>
                 {data.lowWearDays.length === 0 ? (
-                  <Text style={{ color: colors.muted }}>None. Your device was worn enough every day.</Text>
+                  <Text color="muted">None. Your device was worn enough every day.</Text>
                 ) : (
                   <>
-                    <Text style={[styles.hint, { color: colors.muted }]}>
+                    <Text variant="caption" color="muted">
                       Under 10 hours of wear, so activity totals on these days are left out of
                       activity trends.
                     </Text>
-                    <Text style={{ color: colors.text }}>
-                      {data.lowWearDays.map(shortDate).join(', ')}
-                    </Text>
+                    <View style={styles.days}>
+                      {data.lowWearDays.map((day) => (
+                        <View
+                          key={day}
+                          style={[styles.day, { backgroundColor: colors.surfaceRaised }]}
+                        >
+                          <Text variant="caption">{shortDate(day)}</Text>
+                        </View>
+                      ))}
+                    </View>
                   </>
                 )}
               </Card>
 
               <SectionTitle>Update your data</SectionTitle>
               <DisabledAction
-                icon="cloud-upload-outline"
+                icon="cloud-upload"
                 title="Upload a new Takeout export"
                 detail="Uploading from the app is coming next."
               />
               <DisabledAction
-                icon="sync-outline"
+                icon="sync"
                 title="Connect Google Health"
                 detail="Automatic syncing is planned."
               />
 
-              <Text style={[styles.privacy, { color: colors.muted }]}>
+              <Text variant="caption" color="faint" style={styles.privacy}>
                 Your data is only used to analyze your own patterns. Profile and account details from
                 the export are never read.
               </Text>
@@ -105,6 +96,27 @@ export default function DataScreen() {
         }}
       </QueryState>
     </Screen>
+  );
+}
+
+function CoverageRow({ coverage }: { coverage: MetricCoverage }) {
+  const colors = useColors();
+  const color = useMetricColor(coverage.metric);
+  const percent = Math.round(coverage.fractionPresent * 100);
+  return (
+    <View style={styles.coverageRow}>
+      <Text style={styles.coverageLabel}>{coverage.label}</Text>
+      <View
+        style={[styles.track, { backgroundColor: colors.track }]}
+        accessible
+        accessibilityLabel={`${coverage.label}: ${percent}% of days`}
+      >
+        <View style={[styles.fill, { width: `${percent}%`, backgroundColor: color }]} />
+      </View>
+      <Text variant="caption" color="muted" style={styles.percent}>
+        {percent}%
+      </Text>
+    </View>
   );
 }
 
@@ -120,10 +132,16 @@ function DisabledAction({
   const colors = useColors();
   return (
     <Card style={styles.disabled}>
-      <Ionicons name={icon} size={20} color={colors.muted} />
+      <View style={[styles.icon, { backgroundColor: colors.surfaceRaised }]}>
+        <Ionicons name={icon} size={18} color={colors.muted} />
+      </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.title, { color: colors.muted }]}>{title}</Text>
-        <Text style={{ color: colors.muted, fontSize: 13 }}>{detail}</Text>
+        <Text variant="bodyStrong" color="muted">
+          {title}
+        </Text>
+        <Text variant="caption" color="faint">
+          {detail}
+        </Text>
       </View>
     </Card>
   );
@@ -131,13 +149,20 @@ function DisabledAction({
 
 const styles = StyleSheet.create({
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  title: { fontSize: 16, fontWeight: '600' },
-  hint: { fontSize: 13, lineHeight: 18 },
-  coverageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  coverageLabel: { width: 120, fontSize: 14 },
-  track: { flex: 1, height: 8, borderRadius: radius.sm, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: radius.sm },
-  percent: { width: 40, textAlign: 'right', fontSize: 13, fontVariant: ['tabular-nums'] },
-  disabled: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, opacity: 0.8 },
-  privacy: { fontSize: 12, textAlign: 'center', lineHeight: 17, marginTop: spacing.sm },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 4 },
+  coverageLabel: { width: 128 },
+  track: { flex: 1, height: 6, borderRadius: radius.pill, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: radius.pill },
+  percent: { width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  days: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  day: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
+  disabled: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  privacy: { textAlign: 'center', marginTop: spacing.sm },
 });

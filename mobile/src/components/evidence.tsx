@@ -1,48 +1,92 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Evidence } from '@/api/types';
+import { PressableScale } from '@/components/PressableScale';
+import { Text } from '@/components/Text';
 import { Card } from '@/components/ui';
 import { keyStats, metricLabel, toolLabel, windowLabel } from '@/lib/format';
-import { spacing, useColors } from '@/theme';
+import { radius, spacing, useColors, useMetricColor } from '@/theme';
+
+const TOOL_ICONS = {
+  compare_windows: 'git-compare-outline',
+  trend: 'trending-up-outline',
+  correlate: 'git-network-outline',
+  describe: 'stats-chart-outline',
+  coverage: 'grid-outline',
+} as const;
 
 export function EvidenceCard({ evidence }: { evidence: Evidence }) {
   const colors = useColors();
+  const color = useMetricColor(evidence.metrics[0] ?? '');
   const [showRaw, setShowRaw] = useState(false);
+  const icon = TOOL_ICONS[evidence.tool as keyof typeof TOOL_ICONS] ?? 'calculator-outline';
+  const stats = keyStats(evidence);
 
   return (
     <Card>
-      <View style={styles.row}>
-        <Text style={[styles.title, { color: colors.text }]}>{toolLabel(evidence.tool)}</Text>
+      <View style={styles.header}>
+        <View style={[styles.icon, { backgroundColor: `${color}22` }]}>
+          <Ionicons name={icon} size={16} color={color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text variant="headline">{toolLabel(evidence.tool)}</Text>
+          <Text variant="caption" color="muted">
+            {evidence.metrics.map(metricLabel).join(' and ')}
+          </Text>
+        </View>
         {!evidence.sufficient && (
-          <Text style={[styles.warning, { color: colors.warning }]}>Too little data</Text>
+          <View style={[styles.warning, { backgroundColor: `${colors.warning}22` }]}>
+            <Text variant="caption" color="warning">
+              Too little data
+            </Text>
+          </View>
         )}
       </View>
-      <Text style={[styles.caption, { color: colors.muted }]}>
-        {evidence.metrics.map(metricLabel).join(' and ')} ·{' '}
-        {evidence.windows.map(windowLabel).join(' vs ')}
+      <Text variant="caption" color="faint">
+        {evidence.windows.map(windowLabel).join('  vs  ')}
       </Text>
-      {keyStats(evidence).map((line) => (
-        <View key={line.label} style={styles.statRow}>
-          <Text style={{ color: colors.muted }}>{line.label}</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{line.value}</Text>
-        </View>
-      ))}
+      <View style={[styles.stats, { borderColor: colors.border }]}>
+        {stats.map((line, i) => (
+          <View
+            key={line.label}
+            style={[
+              styles.statRow,
+              i > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
+            ]}
+          >
+            <Text color="muted">{line.label}</Text>
+            <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
+              {line.value}
+            </Text>
+          </View>
+        ))}
+      </View>
       <Pressable
         accessibilityRole="button"
         onPress={() => setShowRaw((value) => !value)}
         style={styles.rawToggle}
+        hitSlop={8}
       >
-        <Text style={{ color: colors.accent, fontSize: 13 }}>
+        <Text variant="caption" color="muted">
           {showRaw ? 'Hide' : 'Show'} all statistics
         </Text>
-        <Ionicons name={showRaw ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
+        <Ionicons name={showRaw ? 'chevron-up' : 'chevron-down'} size={14} color={colors.muted} />
       </Pressable>
       {showRaw && (
-        <Text selectable style={[styles.raw, { color: colors.muted, borderColor: colors.border }]}>
-          {JSON.stringify({ id: evidence.id, tool: evidence.tool, n: evidence.n, ...evidence.stats }, null, 2)}
+        <Text
+          selectable
+          variant="caption"
+          color="muted"
+          style={[styles.raw, { backgroundColor: colors.background, borderColor: colors.border }]}
+        >
+          {JSON.stringify(
+            { id: evidence.id, tool: evidence.tool, n: evidence.n, ...evidence.stats },
+            null,
+            2,
+          )}
         </Text>
       )}
     </Card>
@@ -50,48 +94,49 @@ export function EvidenceCard({ evidence }: { evidence: Evidence }) {
 }
 
 /** A compact link to one piece of evidence, shown under chat answers. */
-export function EvidenceChip({ id, label }: { id: string; label: string }) {
-  const colors = useColors();
+export function EvidenceChip({ id, label, metric }: { id: string; label: string; metric?: string }) {
+  const color = useMetricColor(metric ?? '');
   return (
-    <Link href={`/evidence/${id}`} asChild>
-      <Pressable
-        accessibilityRole="link"
-        accessibilityHint="Shows the computation behind this answer"
-        // Link (asChild) needs a single style object: it rejects arrays and pressed-state functions.
-        style={StyleSheet.flatten([
-          styles.chip,
-          { borderColor: colors.border, backgroundColor: colors.surface },
-        ])}
-      >
-        <Ionicons name="stats-chart-outline" size={12} color={colors.accent} />
-        <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>{label}</Text>
-      </Pressable>
-    </Link>
+    <PressableScale
+      accessibilityRole="link"
+      accessibilityHint="Shows the computation behind this answer"
+      onPress={() => router.push(`/evidence/${id}`)}
+      style={[styles.chip, { backgroundColor: `${color}1F`, borderColor: `${color}55` }]}
+    >
+      <Ionicons name="stats-chart" size={11} color={color} />
+      <Text variant="caption" color={color} style={{ fontSize: 12 }}>
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  title: { fontSize: 16, fontWeight: '600' },
-  caption: { fontSize: 12 },
-  warning: { fontSize: 12, fontWeight: '600' },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  statValue: { fontWeight: '600', fontVariant: ['tabular-nums'] },
-  rawToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.xs },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  icon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warning: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  stats: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: spacing.xs },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
+  rawToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
   raw: {
     fontFamily: 'Courier',
-    fontSize: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: spacing.sm,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
     borderWidth: 1,
   },
 });
