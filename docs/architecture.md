@@ -37,8 +37,9 @@ verifier rejects statements it cannot match to one.
 ### Ingestion
 
 Reads a Google Takeout ("Google Health") export into one row per local calendar day and one column
-per metric. Intraday data is bucketed by the user's timezone; profile and account files are never
-opened. Malformed exports raise `IngestError` instead of producing partial data silently.
+per metric (see [metrics.md](metrics.md) for every column and its Fitbit source). Intraday data is
+bucketed by the user's timezone; profile and account files are never opened. Malformed exports
+raise `IngestError` instead of producing partial data silently.
 
 ### Analysis tools
 

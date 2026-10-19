@@ -16,11 +16,16 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 ACTIVITY_DIR = "Physical Activity_GoogleData"
-SLEEP_DIR = "Global Export Data"
+SLEEP_SCORE_DIR = "Sleep Score"
+TEMPERATURE_FOLDER = "Daily Sleep Temperature Derivations"
+LEGACY_DIR = "Global Export Data"  # Fitbit's own export format: sleep logs and daily totals
 
 
 class IngestError(ValueError):
     """The export is missing, unreadable, or not in the expected format."""
+
+
+MINUTES_PER_DAY = 1440
 
 
 @dataclass(frozen=True)
@@ -29,12 +34,16 @@ class Metric:
     folder: str
     column: str
     intraday: bool  # intraday values are summed per local day; daily values are taken as-is
+    scale: float = 1.0  # unit conversion applied after aggregation
 
 
 METRICS = (
     Metric("steps", "Steps", "steps", intraday=True),
     Metric("calories", "Calories", "calories", intraday=True),
+    Metric("distance_km", "Distance", "distance", intraday=True, scale=0.001),  # meters in export
+    # Fitbit counts cardio and peak minutes double; the export already stores them as 2.
     Metric("active_zone_minutes", "Active Zone Minutes", "total minutes", intraday=True),
+    Metric("cardio_load", "Cardio Load", "total", intraday=True),
     Metric("resting_hr", "Daily Resting Heart Rate", "beats per minute", intraday=False),
     Metric(
         "hrv_ms",
@@ -46,12 +55,14 @@ METRICS = (
     Metric("readiness", "Daily Readiness", "score", intraday=False),
 )
 
-ACTIVITY_LEVELS = {
-    "SEDENTARY": "sedentary_minutes",
-    "LIGHTLY_ACTIVE": "lightly_active_minutes",
-    "MODERATELY_ACTIVE": "moderately_active_minutes",
-    "VERY_ACTIVE": "very_active_minutes",
-}
+# Fitbit's own daily activity-minute totals. The per-minute `Activity Level` labels use a different
+# classification and do not add up to these, so they are only used for wear time.
+ACTIVITY_MINUTES = (
+    "sedentary_minutes",
+    "lightly_active_minutes",
+    "moderately_active_minutes",
+    "very_active_minutes",
+)
 
 SLEEP_STAGES = {
     "deep": "deep_sleep_minutes",
@@ -115,27 +126,50 @@ def _read_metric(root: Path, metric: Metric, tz: str) -> pd.Series | None:
         return None
     values = pd.to_numeric(frame[metric.column], errors="coerce")
     if metric.intraday:
-        dates = _local_dates(frame["timestamp"], tz)
-        return values.groupby(dates).sum(min_count=1)
-    dates = _calendar_dates(frame["timestamp"])
-    return values.groupby(dates).mean()
+        daily = values.groupby(_local_dates(frame["timestamp"], tz)).sum(min_count=1)
+    else:
+        daily = values.groupby(_calendar_dates(frame["timestamp"])).mean()
+    return daily * metric.scale
 
 
-def _read_activity_levels(root: Path, tz: str) -> pd.DataFrame | None:
+def _read_json_list(file: Path) -> list:
+    try:
+        return json.loads(file.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise IngestError(f"Unreadable file {file.name}: {exc}") from exc
+
+
+def _read_activity_minutes(root: Path) -> pd.DataFrame | None:
+    columns = {}
+    for name in ACTIVITY_MINUTES:
+        values = {}
+        for file in sorted((root / LEGACY_DIR).glob(f"{name}-*.json")):
+            for entry in _read_json_list(file):
+                try:
+                    day = pd.to_datetime(entry["dateTime"], format="%m/%d/%y %H:%M:%S").date()
+                    values[day] = float(entry["value"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise IngestError(f"Malformed entry in {file.name}: {exc}") from exc
+        if values:
+            columns[name] = pd.Series(values)
+    if not columns:
+        return None
+    frame = pd.DataFrame(columns).reindex(columns=list(ACTIVITY_MINUTES))
+    # Fitbit reports a full day of sedentary time on days the device recorded nothing.
+    frame[frame["sedentary_minutes"] >= MINUTES_PER_DAY] = float("nan")
+    return frame.dropna(how="all")
+
+
+def _read_wear_minutes(root: Path, tz: str) -> pd.DataFrame | None:
     frame = _read_csvs(root / ACTIVITY_DIR / "Activity Level", {"timestamp", "level"})
     if frame is None:
         return None
-    frame = frame[frame["level"].isin(ACTIVITY_LEVELS)]
-    dates = _local_dates(frame["timestamp"], tz)
-    counts = frame.groupby([dates, frame["level"]]).size().unstack(fill_value=0)
-    counts = counts.reindex(columns=list(ACTIVITY_LEVELS), fill_value=0)
-    counts = counts.rename(columns=ACTIVITY_LEVELS)
     # Activity level is only recorded for awake minutes with the device on: a wear-time signal.
-    counts["wear_minutes"] = counts.sum(axis=1)
-    return counts
+    dates = _local_dates(frame["timestamp"], tz)
+    return frame.groupby(dates).size().rename("wear_minutes").to_frame()
 
 
-def _sleep_row(log: dict) -> dict:
+def _sleep_row(log: dict, scores: dict[int, float]) -> dict:
     start = pd.Timestamp(log["startTime"])  # already local time, no offset
     # Bedtime as hours relative to midnight: 23:30 -> -0.5, 01:00 -> 1.0
     bedtime = start.hour + start.minute / 60
@@ -146,6 +180,7 @@ def _sleep_row(log: dict) -> dict:
         "time_in_bed": log["timeInBed"],
         "sleep_efficiency": log["efficiency"],
         "bedtime_hour": round(bedtime, 2),
+        "sleep_score": scores.get(log.get("logId")),
     }
     # Only "stages" logs have deep/light/rem; "classic" logs (short or low-signal nights) do not.
     summary = log.get("levels", {}).get("summary", {}) if log["type"] == "stages" else {}
@@ -154,16 +189,25 @@ def _sleep_row(log: dict) -> dict:
     return row
 
 
+def _read_sleep_scores(root: Path) -> dict[int, float]:
+    columns = {"sleep_log_entry_id", "overall_score"}
+    frame = _read_csvs(root / SLEEP_SCORE_DIR, columns)
+    if frame is None:
+        logger.warning("No sleep scores in export")
+        return {}
+    frame = frame.dropna(subset=list(columns))
+    return dict(
+        zip(frame["sleep_log_entry_id"].astype("int64"), frame["overall_score"], strict=True)
+    )
+
+
 def _read_sleep(root: Path) -> pd.DataFrame | None:
-    files = sorted((root / SLEEP_DIR).glob("sleep-*.json"))
+    files = sorted((root / LEGACY_DIR).glob("sleep-*.json"))
     if not files:
         return None
     logs = []
     for file in files:
-        try:
-            logs.extend(json.loads(file.read_text()))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise IngestError(f"Unreadable file {file.name}: {exc}") from exc
+        logs.extend(_read_json_list(file))
 
     # Keep the longest main sleep per night; naps are ignored.
     best: dict[str, dict] = {}
@@ -179,8 +223,22 @@ def _read_sleep(root: Path) -> pd.DataFrame | None:
 
     if not best:
         return None
-    rows = {pd.Timestamp(date).date(): _sleep_row(log) for date, log in best.items()}
+    scores = _read_sleep_scores(root)
+    rows = {pd.Timestamp(date).date(): _sleep_row(log, scores) for date, log in best.items()}
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def _read_skin_temperature(root: Path) -> pd.Series | None:
+    nightly, baseline = "nightly temperature celsius", "baseline temperature celsius"
+    frame = _read_csvs(root / ACTIVITY_DIR / TEMPERATURE_FOLDER, {"timestamp", nightly, baseline})
+    if frame is None:
+        return None
+    # The Fitbit app shows nightly skin temperature relative to the user's personal baseline.
+    variation = pd.to_numeric(frame[nightly], errors="coerce") - pd.to_numeric(
+        frame[baseline], errors="coerce"
+    )
+    daily = variation.groupby(_calendar_dates(frame["timestamp"])).mean().round(3)
+    return daily.rename("skin_temp_variation_c")
 
 
 def load_daily(path: Path, tz: str) -> DailyData:
@@ -197,8 +255,10 @@ def load_daily(path: Path, tz: str) -> DailyData:
             columns.append(series.rename(metric.name))
 
     grouped_readers = (
-        ("activity_levels", lambda: _read_activity_levels(root, tz)),
+        ("activity_minutes", lambda: _read_activity_minutes(root)),
+        ("wear_minutes", lambda: _read_wear_minutes(root, tz)),
         ("sleep", lambda: _read_sleep(root)),
+        ("skin_temp_variation_c", lambda: _read_skin_temperature(root)),
     )
     for name, read in grouped_readers:
         frame = read()
@@ -213,6 +273,10 @@ def load_daily(path: Path, tz: str) -> DailyData:
         logger.warning("Metrics missing from export: %s", ", ".join(missing))
 
     frame = pd.concat(columns, axis=1).sort_index()
+    if {"active_zone_minutes", "wear_minutes"} <= set(frame.columns):
+        # Zone minutes are only exported for minutes spent in a zone: none on a worn day means 0.
+        no_zones = frame["active_zone_minutes"].isna() & (frame["wear_minutes"] > 0)
+        frame.loc[no_zones, "active_zone_minutes"] = 0
     frame.index = pd.DatetimeIndex(frame.index, name="date")
     full_range = pd.date_range(frame.index.min(), frame.index.max(), freq="D", name="date")
     return DailyData(frame=frame.reindex(full_range), missing=missing)

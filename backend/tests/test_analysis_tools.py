@@ -113,11 +113,16 @@ def test_compare_with_empty_window_reports_no_statistics():
 
 def test_trend_recovers_planted_drift():
     effect = Trend("hrv_ms", START, START + timedelta(59), -12)
-    evidence = trend(generate(START, 60, (effect,), seed=4).frame, "hrv_ms", window(0, 59))
-    assert evidence.sufficient
-    assert evidence.stats["change_over_window"] == pytest.approx(-12, abs=4)
-    assert evidence.stats["slope_low"] <= -12 / 59 <= evidence.stats["slope_high"]
-    assert evidence.stats["p_value"] < 0.001
+    results = [
+        trend(generate(START, 60, (effect,), seed=seed).frame, "hrv_ms", window(0, 59))
+        for seed in range(200)
+    ]
+    assert all(evidence.sufficient for evidence in results)
+    changes = [evidence.stats["change_over_window"] for evidence in results]
+    assert np.mean(changes) == pytest.approx(-12, abs=1)  # unbiased
+    covered = [e.stats["slope_low"] <= -12 / 59 <= e.stats["slope_high"] for e in results]
+    assert 0.9 <= np.mean(covered) <= 0.99  # the 95% interval holds the true slope ~95% of the time
+    assert np.mean([e.stats["p_value"] < 0.05 for e in results]) > 0.85  # power
 
 
 def test_trend_false_positive_rate_stays_near_alpha():
@@ -139,13 +144,21 @@ def test_trend_flags_short_windows_and_handles_constants():
 
 def test_correlate_finds_planted_lag():
     effect = Coupling("bedtime_hour", "sleep_efficiency", lag_days=1, strength=-0.8)
-    frame = generate(START, 90, (effect,), seed=5).frame
-    evidence = correlate(frame, "bedtime_hour", "sleep_efficiency", window(0, 89), max_lag=3)
-    assert evidence.sufficient
-    assert evidence.stats["best_lag"] == 1
-    assert evidence.stats["rho"] < -0.5
-    assert evidence.stats["p_value_adjusted"] < 0.001
-    assert evidence.stats["lags_tested"] == 4
+    results = [
+        correlate(
+            generate(START, 90, (effect,), seed=seed).frame,
+            "bedtime_hour",
+            "sleep_efficiency",
+            window(0, 89),
+            max_lag=3,
+        )
+        for seed in range(100)
+    ]
+    assert all(evidence.sufficient for evidence in results)
+    assert all(evidence.stats["lags_tested"] == 4 for evidence in results)
+    assert np.mean([e.stats["best_lag"] == 1 for e in results]) > 0.95
+    assert np.median([e.stats["rho"] for e in results]) < -0.5
+    assert np.mean([e.stats["p_value_adjusted"] < 0.05 for e in results]) > 0.95
 
 
 def test_correlate_adjusts_p_value_for_lags_tried():
