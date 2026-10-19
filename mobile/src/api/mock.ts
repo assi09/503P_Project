@@ -9,6 +9,7 @@ import type {
   Evidence,
   Finding,
   ISODate,
+  NotificationSettings,
   Point,
   Reminder,
   Report,
@@ -155,6 +156,11 @@ let reminders: Reminder[] = [
 
 let chat: ChatMessage[] = [];
 
+let notificationSettings: NotificationSettings = {
+  quietHours: { start: '22:00', end: '07:00' },
+  maxPerDay: 2,
+};
+
 const MEDICAL = /\b(diagnos|disease|illness|sick|medic|medication|doctor|symptom|treat|apnea|afib|heart attack)/i;
 
 function reply(text: string, findingId?: string): Omit<ChatMessage, 'id' | 'createdAt'> {
@@ -234,6 +240,16 @@ export const mockClient: ApiClient = {
     reminders = reminders.map((r) => (r.id === id ? { ...r, status } : r));
     const updated = reminders.find((r) => r.id === id);
     return updated ? delay(updated) : Promise.reject(new Error('Unknown reminder'));
+  },
+
+  getNotificationSettings: () => delay(notificationSettings),
+
+  updateNotificationSettings: (settings) => {
+    if (!Number.isInteger(settings.maxPerDay) || settings.maxPerDay < 1 || settings.maxPerDay > 5) {
+      return Promise.reject(new Error('maxPerDay must be between 1 and 5'));
+    }
+    notificationSettings = settings;
+    return delay(notificationSettings);
   },
 
   getDataStatus: () =>

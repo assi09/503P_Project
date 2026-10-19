@@ -13,6 +13,8 @@ export function httpClient(baseUrl: string): ApiClient {
     sendMessage: notYet('POST /chat'),
     getReminders: notYet('GET /reminders'),
     setReminderStatus: notYet('PATCH /reminders/{id}'),
+    getNotificationSettings: notYet('GET /settings/notifications'),
+    updateNotificationSettings: notYet('PUT /settings/notifications'),
     getDataStatus: notYet('GET /data/status'),
   };
 }

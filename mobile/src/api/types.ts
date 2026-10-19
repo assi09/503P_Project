@@ -81,6 +81,11 @@ export interface Reminder {
   status: ReminderStatus;
 }
 
+export interface NotificationSettings {
+  quietHours: { start: string; end: string } | null; // "22:00".."07:00", local time; null = off
+  maxPerDay: number;
+}
+
 export interface MetricCoverage {
   metric: string;
   label: string;
@@ -103,5 +108,7 @@ export interface ApiClient {
   sendMessage(text: string, findingId?: string): Promise<ChatMessage[]>; // returns the new messages
   getReminders(): Promise<Reminder[]>;
   setReminderStatus(id: string, status: ReminderStatus): Promise<Reminder>;
+  getNotificationSettings(): Promise<NotificationSettings>;
+  updateNotificationSettings(settings: NotificationSettings): Promise<NotificationSettings>;
   getDataStatus(): Promise<DataStatus>;
 }

@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './index';
-import type { ChatMessage, ReminderStatus } from './types';
+import type { ChatMessage, NotificationSettings, ReminderStatus } from './types';
 
 export const keys = {
   report: ['report', 'latest'] as const,
   chat: ['chat'] as const,
   reminders: ['reminders'] as const,
   dataStatus: ['data-status'] as const,
+  notificationSettings: ['settings', 'notifications'] as const,
 };
 
 export function useReport() {
@@ -51,6 +52,18 @@ export function useSetReminderStatus() {
     mutationFn: ({ id, status }: { id: string; status: ReminderStatus }) =>
       api.setReminderStatus(id, status),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.reminders }),
+  });
+}
+
+export function useNotificationSettings() {
+  return useQuery({ queryKey: keys.notificationSettings, queryFn: api.getNotificationSettings });
+}
+
+export function useUpdateNotificationSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: NotificationSettings) => api.updateNotificationSettings(settings),
+    onSuccess: (saved) => client.setQueryData(keys.notificationSettings, saved),
   });
 }
 
