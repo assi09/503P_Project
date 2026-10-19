@@ -4,14 +4,16 @@ on:
   push:
     branches: [main]
     paths: ["mobile/**", ".github/workflows/mobile.yml"]
+  # Every PR runs this job, whatever it changes: it is a required check on main, and a
+  # required check that never starts would block the merge.
   pull_request:
-    paths: ["mobile/**", ".github/workflows/mobile.yml"]
 
 permissions:
   contents: read
 
 jobs:
   check:
+    name: mobile
     runs-on: ubuntu-latest
     defaults:
       run:
