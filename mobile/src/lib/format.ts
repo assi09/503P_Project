@@ -8,6 +8,17 @@ export function shortDate(date: ISODate): string {
   return `${MONTHS[month - 1]} ${day}`;
 }
 
+/** "2 hours ago" style, relative to `now`. */
+export function timeAgo(iso: string, now: Date = new Date()): string {
+  const minutes = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 export function windowLabel(window: Window): string {
   return `${shortDate(window.start)} – ${shortDate(window.end)}`;
 }

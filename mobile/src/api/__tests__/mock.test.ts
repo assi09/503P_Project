@@ -58,6 +58,15 @@ describe('mock API', () => {
     expect(reminders.find((r) => r.id === 'r_wind')?.status).toBe('active');
   });
 
+  it('saves notification settings and rejects invalid limits', async () => {
+    const saved = await mockClient.updateNotificationSettings({ quietHours: null, maxPerDay: 3 });
+    expect(saved).toEqual({ quietHours: null, maxPerDay: 3 });
+    expect(await mockClient.getNotificationSettings()).toEqual(saved);
+    await expect(
+      mockClient.updateNotificationSettings({ quietHours: null, maxPerDay: 0 }),
+    ).rejects.toThrow('between 1 and 5');
+  });
+
   it('remembers answers to context questions', async () => {
     await mockClient.answerQuestion('q_shift', 'Exams');
     const report = await mockClient.getLatestReport();
