@@ -58,6 +58,20 @@ def export(tmp_path: Path) -> Path:
     )
     write(
         tmp_path,
+        f"{ACTIVITY}/Distance/distance_2026-07-01.csv",
+        "timestamp,distance,data source\n"
+        "2026-07-01T10:00:00Z,750.5,Device\n"
+        "2026-07-01T10:01:00Z,249.5,Device\n",
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Cardio Load/cardio_load_2026-07-01.csv",
+        "timestamp,workout,background,total,data source\n"
+        "2026-07-01T10:00:00Z,2.0,0.5,2.5,Device\n"
+        "2026-07-01T10:01:00Z,0.0,0.5,0.5,Device\n",
+    )
+    write(
+        tmp_path,
         f"{ACTIVITY}/Daily Resting Heart Rate/daily_resting_heart_rate.csv",
         "timestamp,beats per minute,data source\n"
         "2026-07-01T00:00:00Z,60.5,App\n"
@@ -97,6 +111,14 @@ def test_intraday_values_are_bucketed_by_local_day(export):
     frame = load_daily(export, TZ).frame
     assert day(frame, "2026-07-01")["steps"] == 150
     assert day(frame, "2026-07-02")["steps"] == 7
+
+
+def test_distance_is_converted_to_kilometers(export):
+    assert day(load_daily(export, TZ).frame, "2026-07-01")["distance_km"] == 1.0
+
+
+def test_cardio_load_sums_workout_and_background_load(export):
+    assert day(load_daily(export, TZ).frame, "2026-07-01")["cardio_load"] == 3.0
 
 
 def test_daily_values_keep_their_calendar_date(export):

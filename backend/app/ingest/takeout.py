@@ -32,12 +32,16 @@ class Metric:
     folder: str
     column: str
     intraday: bool  # intraday values are summed per local day; daily values are taken as-is
+    scale: float = 1.0  # unit conversion applied after aggregation
 
 
 METRICS = (
     Metric("steps", "Steps", "steps", intraday=True),
     Metric("calories", "Calories", "calories", intraday=True),
+    Metric("distance_km", "Distance", "distance", intraday=True, scale=0.001),  # meters in export
+    # Fitbit counts cardio and peak minutes double; the export already stores them as 2.
     Metric("active_zone_minutes", "Active Zone Minutes", "total minutes", intraday=True),
+    Metric("cardio_load", "Cardio Load", "total", intraday=True),
     Metric("resting_hr", "Daily Resting Heart Rate", "beats per minute", intraday=False),
     Metric(
         "hrv_ms",
@@ -120,10 +124,10 @@ def _read_metric(root: Path, metric: Metric, tz: str) -> pd.Series | None:
         return None
     values = pd.to_numeric(frame[metric.column], errors="coerce")
     if metric.intraday:
-        dates = _local_dates(frame["timestamp"], tz)
-        return values.groupby(dates).sum(min_count=1)
-    dates = _calendar_dates(frame["timestamp"])
-    return values.groupby(dates).mean()
+        daily = values.groupby(_local_dates(frame["timestamp"], tz)).sum(min_count=1)
+    else:
+        daily = values.groupby(_calendar_dates(frame["timestamp"])).mean()
+    return daily * metric.scale
 
 
 def _read_json_list(file: Path) -> list:
