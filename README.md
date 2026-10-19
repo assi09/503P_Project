@@ -15,7 +15,7 @@ with every insight backed by a computed statistic the user can inspect.
 | `backend/` | FastAPI service: data ingestion, analysis tools, agent, API |
 | `mobile/` | Expo (React Native) app for iOS, Android and web |
 | `eval/` | Evaluation suite: synthetic data, baselines, adversarial tests |
-| `docs/` | Architecture, API, failure matrix, threat model |
+| `docs/` | Architecture, metrics, [roadmap](docs/roadmap.md); later API, failure matrix, threat model |
 
 ## Contributing
 
