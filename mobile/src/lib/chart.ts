@@ -2,6 +2,7 @@ import type { Point, Window } from '@/api/types';
 
 export interface ChartGeometry {
   paths: string[]; // one SVG path per run of consecutive days with data
+  areas: string[]; // the same runs closed down to the bottom edge, for a filled area
   highlight: { x: number; width: number } | null;
   min: number;
   max: number;
@@ -20,7 +21,7 @@ export function chartGeometry(
 ): ChartGeometry {
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
   if (points.length === 0 || values.length === 0 || width <= 0 || height <= 0) {
-    return { paths: [], highlight: null, min: 0, max: 0 };
+    return { paths: [], areas: [], highlight: null, min: 0, max: 0 };
   }
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -31,17 +32,24 @@ export function chartGeometry(
     max === min ? height / 2 : padding + (1 - (v - min) / span) * (height - 2 * padding);
 
   const paths: string[] = [];
+  const areas: string[] = [];
   let current = '';
+  let runStart = 0;
+  const close = (end: number) => {
+    paths.push(current);
+    areas.push(`${current} L${round(x(end))},${height} L${round(x(runStart))},${height} Z`);
+  };
   points.forEach((point, i) => {
     if (point.value === null) {
-      if (current) paths.push(current);
+      if (current) close(i - 1);
       current = '';
       return;
     }
     const coords = `${round(x(i))},${round(y(point.value))}`;
+    if (!current) runStart = i;
     current = current ? `${current} L${coords}` : `M${coords}`;
   });
-  if (current) paths.push(current);
+  if (current) close(points.length - 1);
 
   let band: ChartGeometry['highlight'] = null;
   if (highlight) {
@@ -53,7 +61,7 @@ export function chartGeometry(
       band = { x: round(left), width: round(right - left) };
     }
   }
-  return { paths, highlight: band, min, max };
+  return { paths, areas, highlight: band, min, max };
 }
 
 function round(value: number): number {

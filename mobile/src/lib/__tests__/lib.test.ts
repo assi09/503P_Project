@@ -14,8 +14,15 @@ describe('chartGeometry', () => {
   });
 
   it('breaks the line at missing days instead of interpolating', () => {
-    const { paths } = chartGeometry(points([1, 2, null, 3, 4]), 100, 50);
+    const { paths, areas } = chartGeometry(points([1, 2, null, 3, 4]), 100, 50);
     expect(paths).toHaveLength(2);
+    expect(areas).toHaveLength(2);
+  });
+
+  it('closes each filled area down to the bottom edge under its own run', () => {
+    const { areas } = chartGeometry(points([1, 3, null, 2]), 90, 50, undefined, 0);
+    expect(areas[0]).toBe('M0,50 L30,0 L30,50 L0,50 Z');
+    expect(areas[1]).toBe('M90,25 L90,50 L90,50 Z');
   });
 
   it('draws a flat series through the middle', () => {
