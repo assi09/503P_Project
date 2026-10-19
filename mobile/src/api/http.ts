@@ -1,20 +1,57 @@
-// Client for the real backend API. Endpoints are filled in as the backend implements them.
-import type { ApiClient } from './types';
+// Client for the real backend API. Endpoints the backend does not serve yet fall back to
+// `fallback` (the mock), so the app can move to the real API one endpoint at a time.
+import type { ApiClient, DataStatus } from './types';
 
-export function httpClient(baseUrl: string): ApiClient {
-  const notYet = (endpoint: string) => () =>
-    Promise.reject(new Error(`${endpoint} is not implemented by the backend yet (${baseUrl})`));
+const TIMEOUT_MS = 15_000;
 
+/** An error the screens can show as is. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'AbortError';
+    throw new ApiError(
+      timedOut ? 'The server took too long to answer.' : 'Could not reach the server.',
+      timedOut ? 'timeout' : 'network',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    // The backend answers errors as {"error": {"code", "message"}}.
+    const error = body?.error;
+    throw new ApiError(
+      typeof error?.message === 'string' ? error.message : `Request failed (${response.status}).`,
+      typeof error?.code === 'string' ? error.code : 'http_error',
+      response.status,
+    );
+  }
+  return body as T;
+}
+
+export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
   return {
-    getLatestReport: notYet('GET /reports/latest'),
-    getEvidence: notYet('GET /evidence/{id}'),
-    answerQuestion: notYet('POST /questions/{id}/answer'),
-    getChat: notYet('GET /chat'),
-    sendMessage: notYet('POST /chat'),
-    getReminders: notYet('GET /reminders'),
-    setReminderStatus: notYet('PATCH /reminders/{id}'),
-    getNotificationSettings: notYet('GET /settings/notifications'),
-    updateNotificationSettings: notYet('PUT /settings/notifications'),
-    getDataStatus: notYet('GET /data/status'),
+    ...fallback,
+    getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
   };
 }

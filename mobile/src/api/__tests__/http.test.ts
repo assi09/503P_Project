@@ -1,0 +1,92 @@
+import { ApiError, httpClient, request } from '../http';
+import { mockClient } from '../mock';
+
+const BASE = 'http://api.test';
+
+function respond(status: number, body: unknown) {
+  return jest.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  });
+}
+
+const realFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  jest.useRealTimers();
+});
+
+describe('request', () => {
+  it('returns the parsed body and calls the right URL', async () => {
+    const fetchMock = respond(200, { status: 'ok' });
+    globalThis.fetch = fetchMock;
+    await expect(request(`${BASE}/`, '/health')).resolves.toEqual({ status: 'ok' });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/health');
+  });
+
+  it("surfaces the server's error message and code", async () => {
+    globalThis.fetch = respond(503, {
+      error: { code: 'data_unavailable', message: 'Your Fitbit data could not be loaded.' },
+    });
+    const error = (await request(BASE, '/data/status').catch((e: unknown) => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.message).toBe('Your Fitbit data could not be loaded.');
+    expect(error.code).toBe('data_unavailable');
+    expect(error.status).toBe(503);
+  });
+
+  it('copes with error responses that are not JSON', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+    });
+    await expect(request(BASE, '/data/status')).rejects.toThrow('Request failed (502).');
+  });
+
+  it('reports an unreachable server plainly', async () => {
+    globalThis.fetch = jest.fn().mockRejectedValue(new TypeError('Network request failed'));
+    await expect(request(BASE, '/health')).rejects.toMatchObject({
+      code: 'network',
+      message: 'Could not reach the server.',
+    });
+  });
+
+  it('gives up after the timeout', async () => {
+    jest.useFakeTimers();
+    globalThis.fetch = jest.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          );
+        }),
+    ) as jest.Mock;
+    const pending = request(BASE, '/health');
+    jest.advanceTimersByTime(15_000);
+    await expect(pending).rejects.toMatchObject({ code: 'timeout' });
+  });
+});
+
+describe('httpClient', () => {
+  it('uses the backend for served endpoints and the fallback for the rest', async () => {
+    const status = {
+      source: 'takeout',
+      lastSync: null,
+      range: null,
+      coverage: [],
+      lowWearDays: [],
+    };
+    const fetchMock = respond(200, status);
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+
+    await expect(client.getDataStatus()).resolves.toEqual(status);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await client.getReminders();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // still the mock
+  });
+});

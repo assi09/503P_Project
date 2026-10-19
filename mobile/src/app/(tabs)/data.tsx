@@ -88,7 +88,7 @@ export default function DataScreen() {
               <DisabledAction
                 icon="cloud-upload-outline"
                 title="Upload a new Takeout export"
-                detail="Available once the app is connected to the server."
+                detail="Uploading from the app is coming next."
               />
               <DisabledAction
                 icon="sync-outline"
