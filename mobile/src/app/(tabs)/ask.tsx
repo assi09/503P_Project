@@ -20,6 +20,9 @@ import { radius, spacing, useColors } from '@/theme';
 
 const MAX_LENGTH = 500;
 
+// Questions offered while a finding is attached.
+const FINDING_SUGGESTIONS = ['Why did this happen?', 'What else changed around then?'];
+
 const SUGGESTIONS = [
   'Why is my sleep worse lately?',
   'How are my steps trending?',
@@ -36,6 +39,9 @@ export default function AskScreen() {
   const scroll = useRef<ScrollView>(null);
 
   const finding = report.data?.findings.find((f) => f.id === findingId);
+  const findingTitles = Object.fromEntries(
+    (report.data?.findings ?? []).map((f) => [f.id, f.title]),
+  );
   const messages = chat.data ?? [];
   const pendingText = send.isPending ? send.variables?.text : undefined;
   const canSend = draft.trim().length > 0 && !send.isPending;
@@ -91,7 +97,7 @@ export default function AskScreen() {
                   it is based on. I describe patterns; I don&apos;t give medical advice.
                 </Text>
                 <View style={styles.suggestions}>
-                  {(finding ? [`Why did this happen?`, ...SUGGESTIONS] : SUGGESTIONS).map((text) => (
+                  {(finding ? [...FINDING_SUGGESTIONS, ...SUGGESTIONS] : SUGGESTIONS).map((text) => (
                     <Chip key={text} label={text} onPress={() => submit(text)} />
                   ))}
                 </View>
@@ -103,6 +109,7 @@ export default function AskScreen() {
                     key={message.id}
                     message={message}
                     knownEvidence={report.data?.evidence ?? {}}
+                    findingTitles={findingTitles}
                   />
                 ))}
                 {pendingText && (
@@ -123,6 +130,19 @@ export default function AskScreen() {
           </Text>
         )}
       </ScrollView>
+
+      {finding && messages.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.quickReplies}
+        >
+          {FINDING_SUGGESTIONS.map((text) => (
+            <Chip key={text} label={text} disabled={send.isPending} onPress={() => submit(text)} />
+          ))}
+        </ScrollView>
+      )}
 
       <View style={[styles.inputBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TextInput
@@ -180,6 +200,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   error: { fontSize: 13, textAlign: 'center' },
+  quickReplies: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',

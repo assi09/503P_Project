@@ -16,9 +16,11 @@ function chipLabel(id: string, known: Record<string, Evidence>): string {
 export function MessageBubble({
   message,
   knownEvidence,
+  findingTitles,
 }: {
   message: ChatMessage;
   knownEvidence: Record<string, Evidence>;
+  findingTitles: Record<string, string>;
 }) {
   const colors = useColors();
   const mine = message.role === 'user';
@@ -26,6 +28,11 @@ export function MessageBubble({
   if (mine) {
     return (
       <View style={[styles.bubble, styles.mine, { backgroundColor: colors.accent }]}>
+        {message.findingId && (
+          <Text style={[styles.about, { color: colors.onAccent }]}>
+            About: {findingTitles[message.findingId] ?? 'a finding'}
+          </Text>
+        )}
         <Text style={[styles.text, { color: colors.onAccent }]}>{message.text}</Text>
       </View>
     );
@@ -86,6 +93,7 @@ const styles = StyleSheet.create({
   theirs: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderBottomLeftRadius: 4 },
   theirsColumn: { gap: 6, alignItems: 'flex-start' },
   text: { fontSize: 15, lineHeight: 21 },
+  about: { fontSize: 12, fontWeight: '600', opacity: 0.85, marginBottom: 2 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, maxWidth: '90%' },
   refusedHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   refusedLabel: { fontSize: 12, fontWeight: '600' },
