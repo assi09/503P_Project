@@ -1,6 +1,6 @@
 // Client for the real backend API. Endpoints the backend does not serve yet fall back to
 // `fallback` (the mock), so the app can move to the real API one endpoint at a time.
-import type { ApiClient, DataStatus } from './types';
+import type { ApiClient, DataStatus, Evidence, Report } from './types';
 
 const TIMEOUT_MS = 15_000;
 
@@ -53,5 +53,12 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
   return {
     ...fallback,
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
+    getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
+    getEvidence: (id) =>
+      request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`).catch((error: unknown) => {
+        // While the chat still runs on mock data, its answers cite mock evidence ids.
+        if (error instanceof ApiError && error.status === 404) return fallback.getEvidence(id);
+        throw error;
+      }),
   };
 }

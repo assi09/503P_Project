@@ -29,8 +29,9 @@ export default function InsightsScreen() {
 
               <SectionTitle>What changed</SectionTitle>
               {data.findings.length === 0 ? (
-                <Text style={{ color: colors.muted }}>
-                  Nothing changed enough to report in this period.
+                <Text style={{ color: colors.muted, lineHeight: 20 }}>
+                  No metric differed clearly from the weeks before. You can still ask about any
+                  metric in the Ask tab.
                 </Text>
               ) : (
                 data.findings.map((finding) => <FindingCard key={finding.id} finding={finding} />)

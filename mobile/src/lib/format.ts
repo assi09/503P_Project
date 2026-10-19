@@ -124,8 +124,12 @@ export function keyStats(evidence: Evidence): StatLine[] {
     if (lag !== null) lines.push({ label: 'Delay', value: lag === 0 ? 'same day' : `${lag} day${lag > 1 ? 's' : ''}` });
   }
 
-  const p = num('p_value_adjusted') ?? num('p_value');
-  if (p !== null) lines.push({ label: 'p-value', value: formatP(p) });
+  // Show the adjusted p-value when there is one: it is the one the finding was judged on.
+  const adjusted = num('p_value_adjusted');
+  const p = adjusted ?? num('p_value');
+  if (p !== null) {
+    lines.push({ label: adjusted !== null ? 'p-value (adjusted)' : 'p-value', value: formatP(p) });
+  }
   lines.push({ label: 'Days of data', value: String(evidence.n) });
   return lines;
 }

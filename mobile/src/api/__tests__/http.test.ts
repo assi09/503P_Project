@@ -90,3 +90,24 @@ describe('httpClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // still the mock
   });
 });
+
+describe('evidence', () => {
+  it('fetches evidence from the backend', async () => {
+    const evidence = { id: 'abc', tool: 'trend', metrics: [], windows: [], n: 1, sufficient: true, stats: {} };
+    const fetchMock = respond(200, evidence);
+    globalThis.fetch = fetchMock;
+    await expect(httpClient(BASE, mockClient).getEvidence('a b')).resolves.toEqual(evidence);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/evidence/a%20b');
+  });
+
+  it('falls back to the mock only when the backend does not know the id', async () => {
+    globalThis.fetch = respond(404, { error: { code: 'not_found', message: 'nope' } });
+    const evidence = await httpClient(BASE, mockClient).getEvidence('ev_steps');
+    expect(evidence.tool).toBe('trend');
+  });
+
+  it('does not hide other failures behind the mock', async () => {
+    globalThis.fetch = respond(503, { error: { code: 'data_unavailable', message: 'down' } });
+    await expect(httpClient(BASE, mockClient).getEvidence('ev_steps')).rejects.toThrow('down');
+  });
+});

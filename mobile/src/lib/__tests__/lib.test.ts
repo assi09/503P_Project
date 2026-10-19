@@ -101,7 +101,7 @@ describe('keyStats', () => {
       tool: 'correlate',
       stats: { rho: -0.58, best_lag: 1, p_value: 0.0015, p_value_adjusted: 0.0045 },
     };
-    expect(keyStats(evidence)).toContainEqual({ label: 'p-value', value: '0.004' });
+    expect(keyStats(evidence)).toContainEqual({ label: 'p-value (adjusted)', value: '0.004' });
     expect(keyStats(evidence)).toContainEqual({ label: 'Delay', value: '1 day' });
   });
 
