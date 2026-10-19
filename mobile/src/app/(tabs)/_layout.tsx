@@ -1,40 +1,69 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
+import { StyleSheet } from 'react-native';
 
-import { useColors } from '@/theme';
+import { select } from '@/lib/haptics';
+import { floatingTabBar as glass } from '@/lib/platform';
+import { fonts, useColors, useScheme } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-const TABS: { name: string; title: string; icon: IconName }[] = [
-  { name: 'index', title: 'Insights', icon: 'analytics-outline' },
-  { name: 'ask', title: 'Ask', icon: 'chatbubble-ellipses-outline' },
-  { name: 'reminders', title: 'Reminders', icon: 'notifications-outline' },
-  { name: 'data', title: 'Data', icon: 'cloud-upload-outline' },
+const TABS: { name: string; title: string; icon: IconName; iconActive: IconName }[] = [
+  { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse' },
+  { name: 'ask', title: 'Ask', icon: 'chatbubble-outline', iconActive: 'chatbubble' },
+  {
+    name: 'reminders',
+    title: 'Reminders',
+    icon: 'notifications-outline',
+    iconActive: 'notifications',
+  },
+  { name: 'data', title: 'Data', icon: 'server-outline', iconActive: 'server' },
 ];
 
 export default function TabLayout() {
   const colors = useColors();
+  const scheme = useScheme();
   return (
     <Tabs
+      screenListeners={{ tabPress: () => select() }}
       screenOptions={{
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        headerStyle: { backgroundColor: colors.surface },
-        headerShadowVisible: false,
-        headerTintColor: colors.text,
+        headerShown: false,
+        tabBarActiveTintColor: colors.text,
+        tabBarInactiveTintColor: colors.faint,
+        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 15, flexShrink: 0 },
+        tabBarStyle: {
+          backgroundColor: glass ? 'transparent' : colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          // iOS adds the home-indicator inset below the bar; elsewhere give the labels room.
+          ...(glass ? { position: 'absolute' } : { height: 62, paddingTop: 6, paddingBottom: 8 }),
+        },
+        tabBarBackground: glass
+          ? () => (
+              <BlurView
+                tint={scheme === 'dark' ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
+                intensity={90}
+                style={StyleSheet.absoluteFill}
+              />
+            )
+          : undefined,
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      {TABS.map(({ name, title, icon }) => (
+      {TABS.map(({ name, title, icon, iconActive }) => (
         <Tabs.Screen
           key={name}
           name={name}
           options={{
             title,
             tabBarIcon: ({ focused, size }) => (
-              <Ionicons name={icon} size={size} color={focused ? colors.accent : colors.muted} />
+              <Ionicons
+                name={focused ? iconActive : icon}
+                size={size - 2}
+                color={focused ? colors.text : colors.faint}
+              />
             ),
           }}
         />

@@ -1,27 +1,37 @@
-import type { ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+import { useContext, type ReactNode } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { spacing, useColors } from '@/theme';
+import { PressableScale } from '@/components/PressableScale';
+import { floatingTabBar } from '@/lib/platform';
+import { Skeleton } from '@/components/Skeleton';
+import { Text } from '@/components/Text';
+import { radius, spacing, useColors } from '@/theme';
 
 interface ScreenProps {
   children: ReactNode;
+  title?: string; // a large page title; tab screens use it instead of a header bar
+  subtitle?: string;
   refreshing?: boolean;
   onRefresh?: () => unknown; // enables pull to refresh
 }
 
-export function Screen({ children, refreshing = false, onRefresh }: ScreenProps) {
+export function Screen({ children, title, subtitle, refreshing = false, onRefresh }: ScreenProps) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  // On iOS the tab bar floats over the content, so leave room for it.
+  const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
+  const tabBarHeight = floatingTabBar ? barHeight : 0;
+
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: title ? insets.top + spacing.md : spacing.lg },
+        { paddingBottom: tabBarHeight + spacing.xl },
+      ]}
+      scrollIndicatorInsets={{ bottom: tabBarHeight }}
       keyboardShouldPersistTaps="handled"
       refreshControl={
         onRefresh && (
@@ -29,6 +39,18 @@ export function Screen({ children, refreshing = false, onRefresh }: ScreenProps)
         )
       }
     >
+      {title && (
+        <View style={styles.header}>
+          {subtitle && (
+            <Text variant="label" color="muted">
+              {subtitle}
+            </Text>
+          )}
+          <Text variant="display" accessibilityRole="header">
+            {title}
+          </Text>
+        </View>
+      )}
       {children}
     </ScrollView>
   );
@@ -40,24 +62,43 @@ interface QueryLike {
   refetch: () => unknown;
 }
 
-/** Shows a spinner while loading and a retryable message on error; renders children otherwise. */
-export function QueryState({ query, children }: { query: QueryLike; children: () => ReactNode }) {
+/** Shows placeholders while loading and a retryable message on error; renders children otherwise. */
+export function QueryState({
+  query,
+  children,
+  loading,
+}: {
+  query: QueryLike;
+  children: () => ReactNode;
+  loading?: ReactNode; // placeholder shaped like the content
+}) {
   const colors = useColors();
   if (query.isPending) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
+      loading ?? (
+        <View style={{ gap: spacing.md }}>
+          <Skeleton height={120} radius={radius.lg} />
+          <Skeleton height={120} radius={radius.lg} />
+        </View>
+      )
     );
   }
   if (query.error) {
     return (
-      <View style={styles.center}>
-        <Text style={[styles.message, { color: colors.text }]}>Could not load this.</Text>
-        <Text style={[styles.detail, { color: colors.muted }]}>{query.error.message}</Text>
-        <Pressable accessibilityRole="button" onPress={() => query.refetch()}>
-          <Text style={[styles.retry, { color: colors.accent }]}>Try again</Text>
-        </Pressable>
+      <View style={[styles.error, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text variant="headline">Could not load this</Text>
+        <Text variant="caption" color="muted" style={{ textAlign: 'center' }}>
+          {query.error.message}
+        </Text>
+        <PressableScale
+          accessibilityRole="button"
+          onPress={() => query.refetch()}
+          style={[styles.retry, { backgroundColor: colors.accentSoft }]}
+        >
+          <Text variant="bodyStrong" color="accent">
+            Try again
+          </Text>
+        </PressableScale>
       </View>
     );
   }
@@ -65,9 +106,25 @@ export function QueryState({ query, children }: { query: QueryLike; children: ()
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.md, maxWidth: 720, width: '100%', alignSelf: 'center' },
-  center: { padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
-  message: { fontSize: 16, fontWeight: '600' },
-  detail: { fontSize: 13, textAlign: 'center' },
-  retry: { fontSize: 15, fontWeight: '600', padding: spacing.sm },
+  content: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  header: { gap: 2, marginBottom: spacing.sm },
+  error: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  retry: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+  },
 });
