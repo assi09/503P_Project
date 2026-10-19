@@ -39,10 +39,21 @@ pip install -e "backend[dev]"
 pytest backend
 ```
 
+Run the API on a local export (from the repository root; settings can also go in `.env`, see
+`.env.example`):
+
+```bash
+FA_EXPORT_DIR=Takeout FA_TIMEZONE=Asia/Beirut uvicorn app.api.main:app --app-dir backend --reload
+```
+
+It listens on `http://127.0.0.1:8000` only, since there is no login yet. Interactive API docs
+are at `/docs`.
+
 ### Mobile app
 
-Requires Node 22. The app runs on mock data until the backend API exists; set
-`EXPO_PUBLIC_API_URL` to point it at a running backend.
+Requires Node 22. The app runs on mock data by default. Set `EXPO_PUBLIC_API_URL` (e.g.
+`http://localhost:8000`) to use a running backend: endpoints the backend serves come from it, the
+rest stay on mock data.
 
 ```bash
 cd mobile
