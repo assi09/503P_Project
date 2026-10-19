@@ -1,11 +1,34 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { spacing, useColors } from '@/theme';
 
-export function Screen({ children }: { children: ReactNode }) {
+interface ScreenProps {
+  children: ReactNode;
+  refreshing?: boolean;
+  onRefresh?: () => unknown; // enables pull to refresh
+}
+
+export function Screen({ children, refreshing = false, onRefresh }: ScreenProps) {
+  const colors = useColors();
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={
+        onRefresh && (
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />
+        )
+      }
+    >
       {children}
     </ScrollView>
   );
