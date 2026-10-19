@@ -22,6 +22,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="finding/[id]" options={{ title: 'Finding' }} />
+        <Stack.Screen name="evidence/[id]" options={{ title: 'Evidence', presentation: 'modal' }} />
       </Stack>
     </QueryClientProvider>
   );
