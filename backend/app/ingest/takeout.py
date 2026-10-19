@@ -16,6 +16,8 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 ACTIVITY_DIR = "Physical Activity_GoogleData"
+SLEEP_SCORE_DIR = "Sleep Score"
+TEMPERATURE_FOLDER = "Daily Sleep Temperature Derivations"
 LEGACY_DIR = "Global Export Data"  # Fitbit's own export format: sleep logs and daily totals
 
 
@@ -167,7 +169,7 @@ def _read_wear_minutes(root: Path, tz: str) -> pd.DataFrame | None:
     return frame.groupby(dates).size().rename("wear_minutes").to_frame()
 
 
-def _sleep_row(log: dict) -> dict:
+def _sleep_row(log: dict, scores: dict[int, float]) -> dict:
     start = pd.Timestamp(log["startTime"])  # already local time, no offset
     # Bedtime as hours relative to midnight: 23:30 -> -0.5, 01:00 -> 1.0
     bedtime = start.hour + start.minute / 60
@@ -178,12 +180,25 @@ def _sleep_row(log: dict) -> dict:
         "time_in_bed": log["timeInBed"],
         "sleep_efficiency": log["efficiency"],
         "bedtime_hour": round(bedtime, 2),
+        "sleep_score": scores.get(log.get("logId")),
     }
     # Only "stages" logs have deep/light/rem; "classic" logs (short or low-signal nights) do not.
     summary = log.get("levels", {}).get("summary", {}) if log["type"] == "stages" else {}
     for stage, column in SLEEP_STAGES.items():
         row[column] = summary.get(stage, {}).get("minutes")
     return row
+
+
+def _read_sleep_scores(root: Path) -> dict[int, float]:
+    columns = {"sleep_log_entry_id", "overall_score"}
+    frame = _read_csvs(root / SLEEP_SCORE_DIR, columns)
+    if frame is None:
+        logger.warning("No sleep scores in export")
+        return {}
+    frame = frame.dropna(subset=list(columns))
+    return dict(
+        zip(frame["sleep_log_entry_id"].astype("int64"), frame["overall_score"], strict=True)
+    )
 
 
 def _read_sleep(root: Path) -> pd.DataFrame | None:
@@ -208,8 +223,22 @@ def _read_sleep(root: Path) -> pd.DataFrame | None:
 
     if not best:
         return None
-    rows = {pd.Timestamp(date).date(): _sleep_row(log) for date, log in best.items()}
+    scores = _read_sleep_scores(root)
+    rows = {pd.Timestamp(date).date(): _sleep_row(log, scores) for date, log in best.items()}
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def _read_skin_temperature(root: Path) -> pd.Series | None:
+    nightly, baseline = "nightly temperature celsius", "baseline temperature celsius"
+    frame = _read_csvs(root / ACTIVITY_DIR / TEMPERATURE_FOLDER, {"timestamp", nightly, baseline})
+    if frame is None:
+        return None
+    # The Fitbit app shows nightly skin temperature relative to the user's personal baseline.
+    variation = pd.to_numeric(frame[nightly], errors="coerce") - pd.to_numeric(
+        frame[baseline], errors="coerce"
+    )
+    daily = variation.groupby(_calendar_dates(frame["timestamp"])).mean().round(3)
+    return daily.rename("skin_temp_variation_c")
 
 
 def load_daily(path: Path, tz: str) -> DailyData:
@@ -229,6 +258,7 @@ def load_daily(path: Path, tz: str) -> DailyData:
         ("activity_minutes", lambda: _read_activity_minutes(root)),
         ("wear_minutes", lambda: _read_wear_minutes(root, tz)),
         ("sleep", lambda: _read_sleep(root)),
+        ("skin_temp_variation_c", lambda: _read_skin_temperature(root)),
     )
     for name, read in grouped_readers:
         frame = read()

@@ -25,8 +25,9 @@ def daily_totals(values: dict[str, float]) -> str:
     )
 
 
-def sleep_log(date, minutes, start, main=True, kind="stages", deep=80):
+def sleep_log(date, minutes, start, main=True, kind="stages", deep=80, log_id=None):
     log = {
+        "logId": log_id,
         "dateOfSleep": date,
         "startTime": start,
         "minutesAsleep": minutes,
@@ -102,12 +103,26 @@ def export(tmp_path: Path) -> Path:
     for name, values in totals.items():
         write(tmp_path, f"Global Export Data/{name}-2026-06-30.json", daily_totals(values))
     logs = [
-        sleep_log("2026-07-02", 420, "2026-07-01T23:30:00.000"),
+        sleep_log("2026-07-02", 420, "2026-07-01T23:30:00.000", log_id=101),
         sleep_log("2026-07-02", 60, "2026-07-02T15:00:00.000", main=False),  # nap
         sleep_log("2026-07-03", 200, "2026-07-03T01:00:00.000", deep=40),
         sleep_log("2026-07-03", 300, "2026-07-03T05:00:00.000", kind="classic"),
     ]
     write(tmp_path, "Global Export Data/sleep-2026-07-01.json", json.dumps(logs))
+    write(
+        tmp_path,
+        "Sleep Score/sleep_score.csv",
+        "sleep_log_entry_id,timestamp,overall_score,composition_score\n"
+        "101,2026-07-02T06:30:00Z,82,\n"
+        "999,2026-07-03T06:30:00Z,50,\n",  # belongs to no exported sleep log
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Daily Sleep Temperature Derivations/daily_sleep_temperature_derivations.csv",
+        "timestamp,nightly temperature celsius,baseline temperature celsius,data source\n"
+        "2026-07-01T00:00:00Z,32.5,NaN,App\n"  # no baseline yet in the first weeks
+        "2026-07-02T00:00:00Z,33.0,32.6,App\n",
+    )
     return tmp_path
 
 
@@ -178,6 +193,18 @@ def test_longest_main_sleep_wins_and_classic_logs_have_no_stages(export):
     assert row["sleep_minutes"] == 300
     assert row["bedtime_hour"] == 5.0
     assert pd.isna(row["deep_sleep_minutes"])
+
+
+def test_sleep_score_is_matched_to_its_sleep_log(export):
+    frame = load_daily(export, TZ).frame
+    assert day(frame, "2026-07-02")["sleep_score"] == 82
+    assert pd.isna(day(frame, "2026-07-03")["sleep_score"])
+
+
+def test_skin_temperature_is_relative_to_personal_baseline(export):
+    frame = load_daily(export, TZ).frame
+    assert day(frame, "2026-07-02")["skin_temp_variation_c"] == 0.4
+    assert pd.isna(day(frame, "2026-07-01")["skin_temp_variation_c"])
 
 
 def test_missing_metrics_are_reported(export):
