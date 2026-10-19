@@ -1,4 +1,6 @@
 // In-memory stand-in for the backend, used until the API exists. All values are made up.
+import { shortDate } from '@/lib/format';
+
 import type {
   ApiClient,
   ChatMessage,
@@ -123,7 +125,7 @@ const findings: Finding[] = [
 let questions: ContextQuestion[] = [
   {
     id: 'q_shift',
-    prompt: `Your bedtime shifted around ${isoDate(14)}. Did something change?`,
+    prompt: `Your bedtime shifted around ${shortDate(isoDate(14))}. Did something change?`,
     date: isoDate(14),
     options: ['Travel', 'Work schedule', 'Exams', 'Training', 'Nothing'],
     answer: null,
