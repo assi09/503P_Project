@@ -243,6 +243,10 @@ def load_daily(path: Path, tz: str) -> DailyData:
         logger.warning("Metrics missing from export: %s", ", ".join(missing))
 
     frame = pd.concat(columns, axis=1).sort_index()
+    if {"active_zone_minutes", "wear_minutes"} <= set(frame.columns):
+        # Zone minutes are only exported for minutes spent in a zone: none on a worn day means 0.
+        no_zones = frame["active_zone_minutes"].isna() & (frame["wear_minutes"] > 0)
+        frame.loc[no_zones, "active_zone_minutes"] = 0
     frame.index = pd.DatetimeIndex(frame.index, name="date")
     full_range = pd.date_range(frame.index.min(), frame.index.max(), freq="D", name="date")
     return DailyData(frame=frame.reindex(full_range), missing=missing)

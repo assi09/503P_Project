@@ -83,7 +83,15 @@ def export(tmp_path: Path) -> Path:
         "timestamp,level,data source\n"
         "2026-07-01T10:00:00Z,SEDENTARY,App\n"
         "2026-07-01T10:01:00Z,SEDENTARY,App\n"
-        "2026-07-01T10:02:00Z,VERY_ACTIVE,App\n",
+        "2026-07-01T10:02:00Z,VERY_ACTIVE,App\n"
+        "2026-07-01T22:30:00Z,SEDENTARY,App\n",  # 01:30 local on Jul 2
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Active Zone Minutes/active_zone_minutes_2026-07-01.csv",
+        "timestamp,heart rate zone,total minutes,data source\n"
+        "2026-07-01T10:00:00Z,FAT_BURN,1,Device\n"
+        "2026-07-01T10:01:00Z,PEAK,2,Device\n",
     )
     totals = {
         "sedentary_minutes": {"2026-06-30": 1440, "2026-07-01": 600},
@@ -119,6 +127,13 @@ def test_distance_is_converted_to_kilometers(export):
 
 def test_cardio_load_sums_workout_and_background_load(export):
     assert day(load_daily(export, TZ).frame, "2026-07-01")["cardio_load"] == 3.0
+
+
+def test_zone_minutes_are_zero_on_worn_days_without_zones(export):
+    frame = load_daily(export, TZ).frame
+    assert day(frame, "2026-07-01")["active_zone_minutes"] == 3
+    assert day(frame, "2026-07-02")["active_zone_minutes"] == 0
+    assert pd.isna(day(frame, "2026-07-03")["active_zone_minutes"])  # not worn
 
 
 def test_daily_values_keep_their_calendar_date(export):
