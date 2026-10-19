@@ -21,6 +21,14 @@ describe('mock API', () => {
     }
   });
 
+  it('serves every cited evidence by id', async () => {
+    const report = await mockClient.getLatestReport();
+    for (const id of Object.keys(report.evidence)) {
+      expect(await mockClient.getEvidence(id)).toEqual(report.evidence[id]);
+    }
+    await expect(mockClient.getEvidence('missing')).rejects.toThrow();
+  });
+
   it('refuses medical questions without citing evidence', async () => {
     const [, answer] = await mockClient.sendMessage('Do I have sleep apnea?');
     expect(answer.refused).toBe(true);

@@ -7,6 +7,7 @@ export function httpClient(baseUrl: string): ApiClient {
 
   return {
     getLatestReport: notYet('GET /reports/latest'),
+    getEvidence: notYet('GET /evidence/{id}'),
     answerQuestion: notYet('POST /questions/{id}/answer'),
     getChat: notYet('GET /chat'),
     sendMessage: notYet('POST /chat'),

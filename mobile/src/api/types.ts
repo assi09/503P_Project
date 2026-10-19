@@ -96,6 +96,7 @@ export interface DataStatus {
 
 export interface ApiClient {
   getLatestReport(): Promise<Report>;
+  getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;
   getChat(): Promise<ChatMessage[]>;
   sendMessage(text: string, findingId?: string): Promise<ChatMessage[]>; // returns the new messages

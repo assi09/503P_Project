@@ -72,8 +72,8 @@ export function Button({ label, icon, onPress }: { label: string; icon?: keyof t
       onPress={onPress}
       style={({ pressed }) => [styles.button, { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }]}
     >
-      {icon && <Ionicons name={icon} size={18} color="#FFFFFF" />}
-      <Text style={styles.buttonText}>{label}</Text>
+      {icon && <Ionicons name={icon} size={18} color={colors.onAccent} />}
+      <Text style={[styles.buttonText, { color: colors.onAccent }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -92,5 +92,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: radius.md,
   },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  buttonText: { fontSize: 16, fontWeight: '600' },
 });

@@ -5,6 +5,9 @@ import { useState } from 'react';
 
 import { useColors } from '@/theme';
 
+// A screen that crashes shows an error with a retry button instead of taking down the app.
+export { ErrorBoundary } from 'expo-router';
+
 export default function RootLayout() {
   const colors = useColors();
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1 } } }));
@@ -22,6 +25,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="finding/[id]" options={{ title: 'Finding' }} />
+        <Stack.Screen name="evidence/[id]" options={{ title: 'Evidence', presentation: 'modal' }} />
       </Stack>
     </QueryClientProvider>
   );

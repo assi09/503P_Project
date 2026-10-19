@@ -7,6 +7,7 @@ const light = {
   muted: '#5F6675',
   border: '#E3E6EB',
   accent: '#2A6FDB',
+  onAccent: '#FFFFFF', // text and icons on accent backgrounds
   accentSoft: '#E5EEFC',
   up: '#1E8E5A',
   down: '#C2410C',
@@ -22,6 +23,7 @@ const dark: typeof light = {
   muted: '#9AA1AF',
   border: '#2A2F3A',
   accent: '#6EA2F5',
+  onAccent: '#0E1015',
   accentSoft: '#1D2A40',
   up: '#4CC38A',
   down: '#F0884D',
