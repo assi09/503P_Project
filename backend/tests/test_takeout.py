@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +10,9 @@ from app.synthetic import BASELINES
 
 TZ = "Asia/Beirut"  # UTC+3 in summer
 ACTIVITY = "Physical Activity_GoogleData"
+# Headers, file names and data source labels below are copied from a real export.
+DEVICE = "Google Fitbit Air"
+APP = "Google Health App"
 
 
 def write(root: Path, relpath: str, content: str) -> None:
@@ -26,26 +30,40 @@ def daily_totals(values: dict[str, float]) -> str:
     )
 
 
-def sleep_log(date, minutes, start, main=True, kind="stages", deep=80, log_id=None):
-    log = {
+def sleep_log(date, minutes, start, main=True, kind="stages", deep=80, log_id=0):
+    """A sleep log with every field of a real export, in the same order."""
+    if kind == "stages":
+        summary = {
+            stage: {"count": 4, "minutes": value, "thirtyDayAvgMinutes": value}
+            for stage, value in (("deep", deep), ("wake", 30), ("light", 200), ("rem", 100))
+        }
+    else:  # "classic" logs have no sleep stages
+        summary = {
+            level: {"count": 2, "minutes": value}
+            for level, value in (("restless", 10), ("awake", 20), ("asleep", minutes))
+        }
+    return {
         "logId": log_id,
         "dateOfSleep": date,
         "startTime": start,
+        "endTime": start,  # not read
+        "duration": (minutes + 30) * 60_000,
+        "minutesToFallAsleep": 0,
         "minutesAsleep": minutes,
+        "minutesAwake": 30,
+        "minutesAfterWakeup": 0,
         "timeInBed": minutes + 30,
         "efficiency": 95,
-        "mainSleep": main,
         "type": kind,
-        "levels": {"summary": {}},
+        "infoCode": 0,
+        "logType": "auto_detected",
+        "levels": {
+            "summary": summary,
+            "data": [{"dateTime": start, "level": "light", "seconds": 1800}],
+            "shortData": [],
+        },
+        "mainSleep": main,
     }
-    if kind == "stages":
-        log["levels"]["summary"] = {
-            "deep": {"minutes": deep},
-            "light": {"minutes": 200},
-            "rem": {"minutes": 100},
-            "wake": {"minutes": 30},
-        }
-    return log
 
 
 @pytest.fixture
@@ -54,46 +72,72 @@ def export(tmp_path: Path) -> Path:
         tmp_path,
         f"{ACTIVITY}/Steps/steps_2026-07-01.csv",
         "timestamp,steps,data source\n"
-        "2026-07-01T10:00:00Z,100,Device\n"
-        "2026-07-01T20:59:00Z,50,Device\n"  # 23:59 local, still Jul 1
-        "2026-07-01T22:30:00Z,7,Device\n",  # 01:30 local on Jul 2
+        f"2026-07-01T10:00:00Z,100,{DEVICE}\n"
+        f"2026-07-01T20:59:00Z,50,{DEVICE}\n"  # 23:59 local, still Jul 1
+        f"2026-07-01T22:30:00Z,7,{DEVICE}\n",  # 01:30 local on Jul 2
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Calories/calories_2026-07-01.csv",
+        "timestamp,calories,data source\n"
+        f"2026-07-01T10:00:00Z,1.1,{APP}\n"
+        f"2026-07-01T10:01:00Z,4.9,{APP}\n",
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Distance/distance_2026-07-01.csv",
         "timestamp,distance,data source\n"
-        "2026-07-01T10:00:00Z,750.5,Device\n"
-        "2026-07-01T10:01:00Z,249.5,Device\n",
+        f"2026-07-01T10:00:00Z,750.5,{DEVICE}\n"
+        f"2026-07-01T10:01:00Z,249.5,{DEVICE}\n",
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Cardio Load/cardio_load_2026-07-01.csv",
         "timestamp,workout,background,total,data source\n"
-        "2026-07-01T10:00:00Z,2.0,0.5,2.5,Device\n"
-        "2026-07-01T10:01:00Z,0.0,0.5,0.5,Device\n",
+        f"2026-07-01T10:00:00Z,2.0,0.5,2.5,{DEVICE}\n"
+        f"2026-07-01T10:01:00Z,0.0,0.5,0.5,{DEVICE}\n",
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Daily Resting Heart Rate/daily_resting_heart_rate.csv",
         "timestamp,beats per minute,data source\n"
-        "2026-07-01T00:00:00Z,60.5,App\n"
-        "2026-07-03T00:00:00Z,62.0,App\n",
+        f"2026-07-01T00:00:00Z,60.5,{APP}\n"
+        f"2026-07-03T00:00:00Z,62.0,{APP}\n",
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Daily Heart Rate Variability/daily_heart_rate_variability.csv",
+        "timestamp,average heart rate variability milliseconds,non rem heart rate beats per minute,"
+        "entropy,deep sleep root mean square of successive differences milliseconds,data source\n"
+        f"2026-07-02T00:00:00Z,52.3,58.0,3.1,48.2,{APP}\n",
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Daily Respiratory Rate/daily_respiratory_rate.csv",
+        f"timestamp,breaths per minute,data source\n2026-07-02T00:00:00Z,14.6,{APP}\n",
+    )
+    write(
+        tmp_path,
+        f"{ACTIVITY}/Daily Readiness/daily_readiness.csv",
+        "timestamp,score,type,readiness level,sleep readiness,heart rate variability readiness,"
+        "resting heart rate readiness,data source\n"
+        f"2026-07-03,72,MEDIUM,TYPE_UNSPECIFIED,HIGH,MEDIUM,LOW,{APP}\n",  # date only
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Activity Level/activity_level_2026-07-01.csv",
         "timestamp,level,data source\n"
-        "2026-07-01T10:00:00Z,SEDENTARY,App\n"
-        "2026-07-01T10:01:00Z,SEDENTARY,App\n"
-        "2026-07-01T10:02:00Z,VERY_ACTIVE,App\n"
-        "2026-07-01T22:30:00Z,SEDENTARY,App\n",  # 01:30 local on Jul 2
+        f"2026-07-01T10:00:00Z,SEDENTARY,{APP}\n"
+        f"2026-07-01T10:01:00Z,SEDENTARY,{APP}\n"
+        f"2026-07-01T10:02:00Z,VERY_ACTIVE,{APP}\n"
+        f"2026-07-01T22:30:00Z,SEDENTARY,{APP}\n",  # 01:30 local on Jul 2
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Active Zone Minutes/active_zone_minutes_2026-07-01.csv",
         "timestamp,heart rate zone,total minutes,data source\n"
-        "2026-07-01T10:00:00Z,FAT_BURN,1,Device\n"
-        "2026-07-01T10:01:00Z,PEAK,2,Device\n",
+        f"2026-07-01T10:00:00Z,FAT_BURN,1,{DEVICE}\n"
+        f"2026-07-01T10:01:00Z,PEAK,2,{DEVICE}\n",
     )
     totals = {
         "sedentary_minutes": {"2026-06-30": 1440, "2026-07-01": 600},
@@ -113,16 +157,18 @@ def export(tmp_path: Path) -> Path:
     write(
         tmp_path,
         "Sleep Score/sleep_score.csv",
-        "sleep_log_entry_id,timestamp,overall_score,composition_score\n"
-        "101,2026-07-02T06:30:00Z,82,\n"
-        "999,2026-07-03T06:30:00Z,50,\n",  # belongs to no exported sleep log
+        "sleep_log_entry_id,timestamp,overall_score,composition_score,revitalization_score,"
+        "duration_score,deep_sleep_in_minutes,resting_heart_rate,restlessness\n"
+        "101,2026-07-02T06:30:00Z,82,,82,,80,60,0.081\n"
+        "999,2026-07-03T06:30:00Z,50,,50,,40,61,0.093\n",  # belongs to no exported sleep log
     )
     write(
         tmp_path,
         f"{ACTIVITY}/Daily Sleep Temperature Derivations/daily_sleep_temperature_derivations.csv",
-        "timestamp,nightly temperature celsius,baseline temperature celsius,data source\n"
-        "2026-07-01T00:00:00Z,32.5,NaN,App\n"  # no baseline yet in the first weeks
-        "2026-07-02T00:00:00Z,33.0,32.6,App\n",
+        "timestamp,nightly temperature celsius,baseline temperature celsius,"
+        "relative nightly stddev 30d celsius,data source\n"
+        f"2026-07-01T00:00:00Z,32.5,NaN,NaN,{APP}\n"  # no baseline yet in the first nights
+        f"2026-07-02T00:00:00Z,33.0,32.6,0.5,{APP}\n",
     )
     return tmp_path
 
@@ -135,6 +181,22 @@ def test_intraday_values_are_bucketed_by_local_day(export):
     frame = load_daily(export, TZ).frame
     assert day(frame, "2026-07-01")["steps"] == 150
     assert day(frame, "2026-07-02")["steps"] == 7
+
+
+def test_calories_are_summed_per_local_day(export):
+    assert day(load_daily(export, TZ).frame, "2026-07-01")["calories"] == pytest.approx(6.0)
+
+
+def test_sleep_time_daily_metrics_are_read(export):
+    row = day(load_daily(export, TZ).frame, "2026-07-02")
+    assert row["hrv_ms"] == 52.3
+    assert row["respiratory_rate"] == 14.6
+
+
+def test_readiness_with_date_only_timestamps(export):
+    frame = load_daily(export, TZ).frame
+    assert day(frame, "2026-07-03")["readiness"] == 72
+    assert pd.isna(day(frame, "2026-07-02")["readiness"])
 
 
 def test_distance_is_converted_to_kilometers(export):
@@ -213,11 +275,15 @@ def test_synthetic_data_covers_every_ingested_column(export):
     assert [name for name in BASELINES if name in columns] == columns
 
 
+def test_full_export_reports_nothing_missing(export):
+    assert load_daily(export, TZ).missing == []
+
+
 def test_missing_metrics_are_reported(export):
-    missing = load_daily(export, TZ).missing
-    assert "hrv_ms" in missing
-    assert "steps" not in missing
-    assert "sleep" not in missing
+    shutil.rmtree(export / "Takeout" / "Google Health" / ACTIVITY / "Daily Heart Rate Variability")
+    data = load_daily(export, TZ)
+    assert data.missing == ["hrv_ms"]
+    assert "hrv_ms" not in data.frame.columns
 
 
 def test_export_root_can_be_given_at_any_level(export):
