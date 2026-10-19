@@ -1,7 +1,7 @@
 import type { Evidence, Point } from '@/api/types';
 
 import { chartGeometry } from '../chart';
-import { formatP, formatValue, keyStats, shortDate, strength } from '../format';
+import { formatP, formatValue, keyStats, shortDate, strength, timeAgo } from '../format';
 
 const points = (values: (number | null)[]): Point[] =>
   values.map((value, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, value }));
@@ -55,6 +55,14 @@ describe('formatting', () => {
   it('rounds large values and keeps one decimal for small ones', () => {
     expect(formatValue('steps', 8234.6)).toBe('8,235');
     expect(formatValue('sleep_efficiency', 86.14)).toBe('86.1');
+  });
+
+  it('describes how long ago something happened', () => {
+    const now = new Date('2026-10-19T12:00:00Z');
+    expect(timeAgo('2026-10-19T11:59:40Z', now)).toBe('just now');
+    expect(timeAgo('2026-10-19T11:15:00Z', now)).toBe('45 min ago');
+    expect(timeAgo('2026-10-19T11:00:00Z', now)).toBe('1 hour ago');
+    expect(timeAgo('2026-10-16T12:00:00Z', now)).toBe('3 days ago');
   });
 
   it('never shows a p-value of zero', () => {
