@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.analysis.evidence import ToolError, Window
-from app.analysis.tools import compare_windows, coverage, describe
-from app.synthetic import LowWear, Step, generate
+from app.analysis.tools import compare_windows, correlate, coverage, describe, trend
+from app.synthetic import Coupling, LowWear, Step, Trend, generate
 
 START = date(2026, 1, 1)
 
@@ -109,3 +109,87 @@ def test_compare_with_empty_window_reports_no_statistics():
     assert evidence.stats["p_value"] is None
     assert evidence.stats["pct_change"] is None
     assert not evidence.sufficient
+
+
+def test_trend_recovers_planted_drift():
+    effect = Trend("hrv_ms", START, START + timedelta(59), -12)
+    evidence = trend(generate(START, 60, (effect,), seed=4).frame, "hrv_ms", window(0, 59))
+    assert evidence.sufficient
+    assert evidence.stats["change_over_window"] == pytest.approx(-12, abs=4)
+    assert evidence.stats["slope_low"] <= -12 / 59 <= evidence.stats["slope_high"]
+    assert evidence.stats["p_value"] < 0.001
+
+
+def test_trend_false_positive_rate_stays_near_alpha():
+    p_values = [
+        trend(generate(START, 60, seed=seed).frame, "hrv_ms", window(0, 59)).stats["p_value"]
+        for seed in range(200)
+    ]
+    assert np.mean(np.array(p_values) < 0.05) < 0.08
+
+
+def test_trend_flags_short_windows_and_handles_constants():
+    frame = generate(START, 30).frame
+    frame["readiness"] = 70.0
+    assert not trend(frame, "steps", window(0, 9)).sufficient
+    flat = trend(frame, "readiness", window(0, 29))
+    assert flat.stats["slope_per_day"] == 0.0
+    assert flat.stats["p_value"] == 1.0
+
+
+def test_correlate_finds_planted_lag():
+    effect = Coupling("bedtime_hour", "sleep_efficiency", lag_days=1, strength=-0.8)
+    frame = generate(START, 90, (effect,), seed=5).frame
+    evidence = correlate(frame, "bedtime_hour", "sleep_efficiency", window(0, 89), max_lag=3)
+    assert evidence.sufficient
+    assert evidence.stats["best_lag"] == 1
+    assert evidence.stats["rho"] < -0.5
+    assert evidence.stats["p_value_adjusted"] < 0.001
+    assert evidence.stats["lags_tested"] == 4
+
+
+def test_correlate_adjusts_p_value_for_lags_tried():
+    frame = generate(START, 60, seed=6).frame
+    evidence = correlate(frame, "steps", "resting_hr", window(0, 59), max_lag=4)
+    raw, adjusted = evidence.stats["p_value"], evidence.stats["p_value_adjusted"]
+    assert adjusted == pytest.approx(min(1.0, raw * 5), abs=1e-5)
+
+
+def test_correlate_false_positive_rate_stays_near_alpha():
+    adjusted = [
+        correlate(
+            generate(START, 60, seed=seed).frame, "steps", "resting_hr", window(0, 59), max_lag=7
+        ).stats["p_value_adjusted"]
+        for seed in range(200)
+    ]
+    assert np.mean(np.array(adjusted) < 0.05) < 0.08
+
+
+def test_correlate_uses_driver_values_from_before_the_window():
+    frame = generate(START, 30, seed=7).frame
+    evidence = correlate(frame, "steps", "calories", window(10, 29), max_lag=2)
+    assert all(lag in evidence.stats["rho_by_lag"] for lag in (0, 1, 2))
+    assert evidence.n == 20
+
+
+def test_correlate_with_no_data_reports_nothing():
+    frame = generate(START, 30).frame
+    frame["hrv_ms"] = np.nan
+    evidence = correlate(frame, "steps", "hrv_ms", window(0, 29))
+    assert evidence.stats["rho"] is None
+    assert evidence.n == 0
+    assert not evidence.sufficient
+
+
+@pytest.mark.parametrize(
+    ("driver", "target", "max_lag", "message"),
+    [
+        ("steps", "steps", 0, "must be different"),
+        ("steps", "calories", 15, "max_lag"),
+        ("steps", "calories", -1, "max_lag"),
+        ("vo2max", "calories", 0, "Unknown metric"),
+    ],
+)
+def test_correlate_rejects_bad_arguments(driver, target, max_lag, message):
+    with pytest.raises(ToolError, match=message):
+        correlate(generate(START, 30).frame, driver, target, window(0, 29), max_lag)
