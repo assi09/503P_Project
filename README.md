@@ -17,6 +17,12 @@ with every insight backed by a computed statistic the user can inspect.
 | `eval/` | Evaluation suite: synthetic data, baselines, adversarial tests |
 | `docs/` | Architecture, API, failure matrix, threat model |
 
+## Contributing
+
+Work goes through short-lived branches and pull requests into a protected `main`. See
+[AGENTS.md](AGENTS.md) for the workflow, the verification checklist and the project's rules; AI
+coding agents read it automatically (`CLAUDE.md` points to it).
+
 ## Data and privacy
 
 Personal Fitbit exports (Google Takeout) are **never committed**. Place an export under `data/raw/`
