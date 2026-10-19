@@ -166,14 +166,16 @@ function reply(text: string, findingId?: string): Omit<ChatMessage, 'id' | 'crea
       refused: true,
     };
   }
-  if (findingId === 'f_eff' || /sleep|efficien|why/i.test(text)) {
+  // The attached finding decides the topic; otherwise fall back to keywords in the question.
+  const topic = findingId === 'f_steps' ? 'steps' : findingId ? 'sleep' : undefined;
+  if (topic === 'sleep' || (!topic && /sleep|efficien|bed|why/i.test(text))) {
     return {
       role: 'assistant',
       text: 'Sleep efficiency fell from 92% to 86% between the two halves of the last four weeks. Over the same period your bedtime moved about 50 minutes later, and nights with later bedtimes had lower efficiency. That is a correlation in your data, not proof that bedtime is the cause.',
       evidenceIds: ['ev_eff', 'ev_bed', 'ev_corr'],
     };
   }
-  if (/step|walk|activ/i.test(text)) {
+  if (topic === 'steps' || /step|walk|activ/i.test(text)) {
     return {
       role: 'assistant',
       text: 'Your steps have been rising steadily, by about 60 a day over four weeks, which adds up to around 1,650 more steps per day.',
@@ -219,7 +221,7 @@ export const mockClient: ApiClient = {
   getChat: () => delay(chat),
 
   sendMessage: (text, findingId) => {
-    const added = [message({ role: 'user', text, evidenceIds: [] })];
+    const added = [message({ role: 'user', text, evidenceIds: [], ...(findingId && { findingId }) })];
     chat = [...chat, ...added];
     const answer = message(reply(text, findingId));
     chat = [...chat, answer];

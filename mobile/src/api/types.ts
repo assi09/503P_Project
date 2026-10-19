@@ -64,6 +64,7 @@ export interface ChatMessage {
   role: ChatRole;
   text: string;
   evidenceIds: string[]; // what the assistant's statements are based on
+  findingId?: string; // the finding a user message asked about, if any
   refused?: boolean; // the request was out of scope, e.g. medical advice
   createdAt: ISODateTime;
 }
