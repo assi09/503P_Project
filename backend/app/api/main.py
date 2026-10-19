@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from app.api import data
+from app.api import data, reports
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.config import settings
 from app.ingest.takeout import IngestError
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(data.router)
+    app.include_router(reports.router)
     return app
 
 
