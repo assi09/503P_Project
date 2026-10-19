@@ -39,10 +39,12 @@ pip install -e "backend[dev]"
 pytest backend
 ```
 
-Run the API on a local export (from the repository root; settings can also go in `.env`, see
-`.env.example`):
+Run the API on a local export. Run it **from the repository root** with the virtual environment
+active; the export path is relative to where you run it. Settings can also go in `.env` (see
+`.env.example`).
 
 ```bash
+source .venv/bin/activate
 FA_EXPORT_DIR=Takeout FA_TIMEZONE=Asia/Beirut uvicorn app.api.main:app --app-dir backend --reload
 ```
 

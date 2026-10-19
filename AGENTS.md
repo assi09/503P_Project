@@ -107,6 +107,10 @@ npx expo export --platform web     # the web build must still build
   `navigate` stack a second copy of the tabs.
 - TypeScript 6 does not load global types by default; test globals come from `"types": ["jest"]`
   in `mobile/tsconfig.json`.
+- `CI=1 npx expo start` disables reloading: after changing app code, restart it (with `--clear`)
+  before re-checking, or you will be looking at the old bundle.
+- Run the API from the repository root with `.venv` active (`--app-dir backend`); from another
+  folder or with the system Python it fails with `No module named 'app'`.
 - Expo Go needs the phone and computer on the same network (or `npx expo start --tunnel`), and an
   Expo login on both.
 - In the Takeout export, the legacy `Global Export Data` steps file is in UTC but its calories file

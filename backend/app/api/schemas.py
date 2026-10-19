@@ -1,7 +1,7 @@
 """Response models. Field names are camelCase on the wire to match mobile/src/api/types.ts."""
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
@@ -37,3 +37,49 @@ class ErrorBody(ApiModel):
 
 class ErrorResponse(ApiModel):
     error: ErrorBody
+
+
+class Evidence(ApiModel):
+    id: str
+    tool: str
+    metrics: list[str]
+    windows: list[Window]
+    n: int
+    sufficient: bool
+    stats: dict[str, Any]  # keys stay snake_case: they are statistic names, not fields
+
+
+class Point(ApiModel):
+    date: date
+    value: float | None
+
+
+class Finding(ApiModel):
+    id: str
+    title: str
+    summary: str
+    metric: str
+    unit: str
+    direction: Literal["up", "down", "none"]
+    change: str
+    series: list[Point]
+    highlight: Window | None
+    evidence_ids: list[str]
+
+
+class ContextQuestion(ApiModel):
+    id: str
+    prompt: str
+    date: date
+    options: list[str]
+    answer: str | None
+
+
+class Report(ApiModel):
+    id: str
+    period: Window
+    created_at: datetime
+    headline: str
+    findings: list[Finding]
+    questions: list[ContextQuestion]
+    evidence: dict[str, Evidence]
