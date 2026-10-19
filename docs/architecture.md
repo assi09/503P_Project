@@ -28,9 +28,10 @@ verifier rejects statements it cannot match to one.
 |---|---|---|
 | Takeout ingestion | `backend/app/ingest/takeout.py` | done |
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
+| Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
 | Agent, verifier, memory | `backend/app/agent/` | planned |
-| API and auth | `backend/app/api/` | planned |
+| API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | planned |
 | Evaluation suite | `eval/` | planned |
 
@@ -54,6 +55,16 @@ computes on non-missing days only, and returns an `Evidence` record with:
 Methods are chosen for short, noisy personal data: Mann-Whitney U with Cliff's delta for window
 comparisons, Theil-Sen slopes with Kendall's tau for trends, and Spearman correlation across lags
 with a Bonferroni adjustment for the lags tried.
+
+### Screen and report
+
+The screen compares the last 14 days of every metric with the 28 days before (Mann-Whitney U,
+Cliff's delta), leaving low-wear days out of activity totals. Because about twenty metrics are
+tested at once, p-values are adjusted with Benjamini-Hochberg (FDR 5%), and only changes with at
+least a medium effect are reported. The adjusted p-value is stored in the evidence, so the app
+shows the value the decision was made on. The report turns each change into templated text whose
+numbers all come from its evidence. It is what the app shows until the agent exists, and the
+"statistics only" baseline the agent is evaluated against.
 
 ### Agent (planned)
 
