@@ -16,6 +16,15 @@ def write(root: Path, relpath: str, content: str) -> None:
     path.write_text(content)
 
 
+def daily_totals(values: dict[str, float]) -> str:
+    return json.dumps(
+        [
+            {"dateTime": f"{d[5:7]}/{d[8:10]}/{d[2:4]} 00:00:00", "value": str(v)}
+            for d, v in values.items()
+        ]
+    )
+
+
 def sleep_log(date, minutes, start, main=True, kind="stages", deep=80):
     log = {
         "dateOfSleep": date,
@@ -62,6 +71,14 @@ def export(tmp_path: Path) -> Path:
         "2026-07-01T10:01:00Z,SEDENTARY,App\n"
         "2026-07-01T10:02:00Z,VERY_ACTIVE,App\n",
     )
+    totals = {
+        "sedentary_minutes": {"2026-06-30": 1440, "2026-07-01": 600},
+        "lightly_active_minutes": {"2026-06-30": 0, "2026-07-01": 200},
+        "moderately_active_minutes": {"2026-06-30": 0, "2026-07-01": 30},
+        "very_active_minutes": {"2026-06-30": 0, "2026-07-01": 15},
+    }
+    for name, values in totals.items():
+        write(tmp_path, f"Global Export Data/{name}-2026-06-30.json", daily_totals(values))
     logs = [
         sleep_log("2026-07-02", 420, "2026-07-01T23:30:00.000"),
         sleep_log("2026-07-02", 60, "2026-07-02T15:00:00.000", main=False),  # nap
@@ -94,11 +111,21 @@ def test_gaps_are_filled_with_missing_rows(export):
     assert pd.isna(day(frame, "2026-07-02")["resting_hr"])
 
 
-def test_activity_levels_and_wear_time(export):
+def test_activity_minutes_come_from_fitbit_daily_totals(export):
     row = day(load_daily(export, TZ).frame, "2026-07-01")
-    assert row["sedentary_minutes"] == 2
-    assert row["very_active_minutes"] == 1
-    assert row["lightly_active_minutes"] == 0
+    assert row["sedentary_minutes"] == 600
+    assert row["lightly_active_minutes"] == 200
+    assert row["moderately_active_minutes"] == 30
+    assert row["very_active_minutes"] == 15
+
+
+def test_days_without_device_data_are_dropped_not_counted_as_sedentary(export):
+    frame = load_daily(export, TZ).frame
+    assert frame.index[0] == pd.Timestamp("2026-07-01")
+
+
+def test_wear_time_counts_recorded_activity_level_minutes(export):
+    row = day(load_daily(export, TZ).frame, "2026-07-01")
     assert row["wear_minutes"] == 3
 
 
@@ -150,6 +177,13 @@ def test_csv_with_missing_columns_is_rejected(tmp_path):
 def test_unparseable_timestamps_are_rejected(tmp_path):
     write(tmp_path, f"{ACTIVITY}/Steps/steps.csv", "timestamp,steps\nyesterday,5\n")
     with pytest.raises(IngestError, match="unparseable timestamps"):
+        load_daily(tmp_path, TZ)
+
+
+def test_malformed_daily_total_is_rejected(tmp_path):
+    entry = json.dumps([{"dateTime": "yesterday", "value": "5"}])
+    write(tmp_path, "Global Export Data/sedentary_minutes-2026-07-01.json", entry)
+    with pytest.raises(IngestError, match="Malformed entry"):
         load_daily(tmp_path, TZ)
 
 
