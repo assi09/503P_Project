@@ -207,6 +207,9 @@ export const mockClient: ApiClient = {
       evidence,
     }),
 
+  getEvidence: (id) =>
+    evidence[id] ? delay(evidence[id]) : Promise.reject(new Error('This evidence no longer exists.')),
+
   answerQuestion: (questionId, answer) => {
     questions = questions.map((q) => (q.id === questionId ? { ...q, answer } : q));
     const updated = questions.find((q) => q.id === questionId);
