@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './index';
-import type { ReminderStatus } from './types';
+import type { ChatMessage, ReminderStatus } from './types';
 
 export const keys = {
   report: ['report', 'latest'] as const,
@@ -12,6 +12,10 @@ export const keys = {
 
 export function useReport() {
   return useQuery({ queryKey: keys.report, queryFn: api.getLatestReport });
+}
+
+export function useEvidence(id: string) {
+  return useQuery({ queryKey: ['evidence', id], queryFn: () => api.getEvidence(id) });
 }
 
 export function useAnswerQuestion() {
@@ -31,7 +35,9 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: ({ text, findingId }: { text: string; findingId?: string }) =>
       api.sendMessage(text, findingId),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.chat }),
+    // Append directly so the conversation never flickers while it refetches.
+    onSuccess: (added) =>
+      client.setQueryData<ChatMessage[]>(keys.chat, (old = []) => [...old, ...added]),
   });
 }
 
