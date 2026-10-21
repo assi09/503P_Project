@@ -194,3 +194,51 @@ def test_verify_separates_accepted_and_rejected_claims(evidence):
     verdict = verify([good, bad], by_id(evidence))
     assert verdict.accepted == (good,)
     assert verdict.rejected[0].claim == bad and verdict.rejected[0].reasons
+
+
+def test_durations_in_hours_and_minutes_are_checked(evidence):
+    from app.agent.present import duration
+
+    stats = evidence["sleep"].stats
+    recent, drop = duration(stats["mean_recent"]), duration(stats["difference"])
+    good = f"You slept {recent} on average, down {drop}."
+    assert reasons(evidence, good) == []
+    assert "durations not found" in " ".join(
+        reasons(evidence, "You slept 3 h 5 min on average, down.")
+    )
+
+
+@pytest.fixture(scope="module")
+def bedtime():
+    frame = generate(START, 60, (Step("bedtime_hour", CHANGE_DAY, 1.0),), seed=3).frame
+    return compare_windows(frame, "bedtime_hour", window(30, 59), window(0, 29))
+
+
+def test_clock_times_must_match_the_evidence(bedtime):
+    from app.agent.present import clock
+
+    stats = bedtime.stats
+    ok = Claim(
+        text=f"Your bedtime moved later, from about {clock(stats['mean_baseline'])} to "
+        f"{clock(stats['mean_recent'])}.",
+        kind="change",
+        evidence_ids=[bedtime.id],
+        metric="bedtime_hour",
+        direction="up",
+    )
+    assert check_claim(ok, {bedtime.id: bedtime}) == []
+    invented = ok.model_copy(update={"text": "Your bedtime moved later, to about 3:15 am."})
+    assert "times of day" in " ".join(check_claim(invented, {bedtime.id: bedtime}))
+
+
+def test_internal_metric_names_are_rejected(evidence):
+    found = reasons(evidence, "Your sleep_minutes went down.")
+    assert "internal metric names (sleep_minutes)" in " ".join(found)
+
+
+def test_text_problems_check_any_text_against_evidence(evidence):
+    from app.agent.verifier import text_problems
+
+    cited = list(evidence.values())
+    assert text_problems("Your sleep got shorter while bedtime moved later.", cited) == []
+    assert text_problems("You slept 2 h less, due to stress.", cited)
