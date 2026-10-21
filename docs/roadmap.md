@@ -1,22 +1,29 @@
 # Roadmap
 
 The plan from here to the demo (around the end of November 2026). Each item ships as its own pull
-request. **Status: saved, not started**: the current focus is the app's UI redesign. Work on these
-milestones starts only when the team decides to.
+request. Current state and decisions: [status.md](status.md). Last updated 2026-10-21.
 
-The agent is built behind an LLM interface and tested with a scripted fake LLM; a real OpenAI key
-is only needed for real runs and the full evaluation. No cloud deployment for now: everything
-runs locally with Docker Compose.
+**Priority: the agent (M2) and its evaluation (M4).** They carry most of the grade. The agent is
+built behind an LLM interface and tested with a scripted fake LLM; a real OpenAI key is only needed
+for real runs and the full evaluation. The instructor requires full deployment: it follows once the
+agent's core loop works (M5), not at the very end.
 
 ## M1: data and accounts
 
+- **Done:** live Google Health sign-in, API client and mapping to the daily table, verified against
+  Takeout; Postgres with the first migration; `python -m app.sync pull` stores live days.
+- **Serve live data:** the API reads the daily table from the database instead of Takeout; "Sync
+  now" and sync status in the Data tab.
+- **Nutrition columns:** daily energy, macros and key nutrients from the API, deduplicated between
+  Cronometer's daily total and its per-entry copies.
 - **Synthetic Fitbit Air exports:** write synthetic people out as complete Google Health Takeout
   folders in the real Fitbit Air layout, with a manifest of the changes planted in each, so the
   whole pipeline is tested against known answers.
-- **Database:** Postgres with Alembic migrations (SQLite in tests) for users, imports, daily
-  metrics, evidence, reports, chat, context answers, reminders and agent runs.
+- **Database, continued:** tables for evidence, reports, chat, check-ins, context answers,
+  reminders and agent runs, each added by migration with the feature that needs it.
 - **Accounts:** email and password with short-lived tokens; every endpoint only sees the signed-in
-  user's data.
+  user's data. Google sign-in per user (token encrypted in `google_connections`) once the backend
+  has a public HTTPS address.
 - **Takeout upload:** safe zip handling (size limits, zip-bomb and path-traversal checks, only
   health folders read) and ingestion into the user's account.
 
@@ -39,7 +46,7 @@ runs locally with Docker Compose.
 - Reminder proposals, approvals and settings stored on the server; approved reminders delivered as
   local notifications respecting quiet hours and the daily limit.
 - Tracing of every run and tool call (latency, tokens, cost, retries, failures, verifier
-  rejections), metrics endpoint, cost per successful task.
+  rejections) in Langfuse; API metrics in Prometheus and Grafana; cost per successful task.
 
 ## M4: evaluation
 
@@ -53,8 +60,10 @@ runs locally with Docker Compose.
   model failures), each failure turned into a regression test; a deterministic eval gate in CI.
 - Audit on real exports.
 
-## M5: hardening and documentation
+## M5: deployment, hardening and documentation
 
+- Deployment: backend and Postgres on Railway, the web app on Vercel, Android builds with EAS
+  (iOS TestFlight if an Apple Developer account is set up), deploys from `main` after CI passes.
 - Rate limits, CodeQL and Dependabot, an end-to-end browser test in CI.
 - Failure matrix, threat model, API documentation, evaluation results, reproduction guide.
 
@@ -64,10 +73,9 @@ runs locally with Docker Compose.
 
 ## After the demo
 
-- Google sign-in and live Google Health sync.
-- Cloud deployment.
+- Publishing the Google OAuth app (verification and security assessment) so anyone can sign in.
 
 ## Inputs needed
 
 - An OpenAI API key in a local `.env` before the full evaluation (around November 10).
-- Whether friends' Fitbit Air exports will be collected for the real-data audit.
+- Whether friends' Fitbit data will be collected (as Google test users) for the real-data audit.

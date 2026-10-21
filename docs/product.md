@@ -17,7 +17,7 @@ to a computed statistic.
 
 | Screen | What the user does |
 |---|---|
-| **Today** | Sees today's recovery score with its breakdown, Fitbit's sleep score, activity compared with their usual, and the morning check-in. |
+| **Today** | Sees today's recovery score with its breakdown, last night's sleep, activity compared with their usual, and the morning check-in. |
 | **Findings** | Reads what changed recently and why, each finding with its evidence. Answers the agent's context questions. |
 | **Ask** | Asks questions about their data; answers come from the expert that owns the topic and cite evidence. |
 | **Reminders** | Approves, mutes or declines reminders the agent proposes. Nothing is sent without approval. |
@@ -46,7 +46,9 @@ Fitbit's metrics are used as measured, with two exceptions:
 - **Readiness** is not used as the recovery signal. We compute our own recovery score and show
   Fitbit's readiness next to it for comparison.
 
-Fitbit's sleep score is used as-is.
+Fitbit's sleep score and readiness exist only in Takeout exports: the live Google Health API has
+neither, so nothing in the app depends on them. Readiness stays useful as the comparison in the
+recovery evaluation.
 
 ## Recovery score
 
@@ -63,7 +65,7 @@ A deterministic score from 0 to 100, modeled on the inputs Bevel uses for its re
    | Resting heart rate | lower |
    | Respiratory rate | lower |
    | Skin temperature variation | closer to baseline, in either direction |
-   | Sleep score | higher |
+   | Sleep: minutes asleep and efficiency | higher |
 
 3. **Combination.** A weighted sum, with HRV and resting heart rate weighted most, mapped to 0 to
    100. Weights are fixed in code and versioned (`recovery_v1`, ...). They are not fitted to the
@@ -81,10 +83,10 @@ about a metric**; any expert may read other experts' metrics to explain somethin
 
 | Expert | Owns | Reads |
 |---|---|---|
-| **Sleep** | sleep duration, time in bed, efficiency, Fitbit sleep score, sleep stages, bedtime | activity, check-in tags |
-| **Recovery** | recovery score and breakdown, HRV, resting heart rate, respiratory rate, skin temperature, Fitbit readiness and its sub-scores | sleep score, training load, check-ins |
-| **Activity** | steps, distance, active zone minutes, cardio load and acute:chronic ratio, activity minutes, calories burned (low-confidence) | recovery, sleep |
-| **Nutrition** (*open*) | intake from Cronometer via Google Health | sleep, activity |
+| **Sleep** | sleep duration, time in bed, efficiency, sleep stages, bedtime | activity, check-in tags |
+| **Recovery** | recovery score and breakdown, HRV, resting heart rate, respiratory rate, skin temperature, Fitbit readiness (Takeout only, for comparison) | sleep, training load, check-ins |
+| **Activity** | steps, distance, active zone minutes, activity minutes, calories burned (low-confidence); cardio load from Takeout only | recovery, sleep |
+| **Nutrition** (*to build*) | intake logged in Cronometer and synced through Google Health: energy, macros and 34 nutrients | sleep, activity |
 
 Wear time and data coverage are shared: every expert must account for low-wear days.
 
@@ -142,6 +144,8 @@ which experts it consulted.
 
 ## Open
 
-- **Nutrition:** the format and completeness of Cronometer data in a Google Health export.
+- **Nutrition:** which daily nutrient columns to keep, and how to avoid counting Cronometer's daily
+  total and its per-entry Apple Health copies twice (both arrive through the API). Takeout exports
+  carry no nutrient values at all.
 - **When the agent runs:** after each upload, on a schedule, or on demand.
 - **History:** whether past reports and findings are browsable, or only the latest.
