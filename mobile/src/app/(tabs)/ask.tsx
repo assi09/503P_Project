@@ -10,7 +10,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useChat, useReport, useSendMessage } from '@/api/hooks';
@@ -23,13 +23,14 @@ import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { metricLabel } from '@/lib/format';
+import { DURATION, EASE_OUT } from '@/lib/motion';
 import { floatingTabBar } from '@/lib/platform';
 import { column, radius, spacing, useColors } from '@/theme';
 
 const MAX_LENGTH = 500;
 
-// The composer springs from the middle of the empty page down to the bottom of the conversation.
-const MOVE = LinearTransition.springify().damping(18).stiffness(160);
+// The composer moves from the middle of the empty page down to the bottom of the conversation.
+const MOVE = LinearTransition.duration(DURATION.normal).easing(EASE_OUT);
 
 // Questions offered while a finding is attached.
 const FINDING_SUGGESTIONS = ['Why did this happen?', 'What else changed around then?'];
@@ -201,7 +202,7 @@ export default function AskScreen() {
         <Animated.View exiting={FadeOut.duration(150)} style={styles.below}>
           <View style={styles.suggestions}>
             {suggestions.map((text, i) => (
-              <Animated.View key={`${expert}-${text}`} entering={FadeInDown.delay(i * 40).duration(240)}>
+              <Animated.View key={`${expert}-${text}`} entering={FadeIn.delay(i * 40).duration(DURATION.fast)}>
                 <Chip label={text} onPress={() => submit(text)} />
               </Animated.View>
             ))}

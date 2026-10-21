@@ -9,6 +9,7 @@ import { Text } from '@/components/Text';
 import { Chip, SectionTitle } from '@/components/ui';
 import { EXPERTS, expertForMetric } from '@/lib/experts';
 import { metricLabel } from '@/lib/format';
+import { DURATION, EASE_OUT } from '@/lib/motion';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
 
 // Metrics worth asking about directly, grouped below by the expert that owns them.
@@ -48,7 +49,7 @@ export function AttachSheet({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
       <Animated.View
-        entering={SlideInDown.springify().damping(19).stiffness(200)}
+        entering={SlideInDown.duration(DURATION.normal).easing(EASE_OUT)}
         style={[
           styles.sheet,
           {

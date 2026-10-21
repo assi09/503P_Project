@@ -14,12 +14,10 @@ import {
 } from 'react-native';
 import Animated, {
   FadeIn,
-  FadeInDown,
   LinearTransition,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Rect } from 'react-native-svg';
@@ -29,11 +27,10 @@ import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { EXPERTS, expertInfo, useExpertColor, type ExpertInfo } from '@/lib/experts';
 import { select, tap } from '@/lib/haptics';
+import { DURATION, EASE_OUT, TIMING } from '@/lib/motion';
 import { fonts, radius, spacing, type, useColors } from '@/theme';
 
-// A little overshoot when the input opens and closes, like a physical spring.
-const SPRING = { damping: 14, stiffness: 170, mass: 0.9 };
-const LABEL_LAYOUT = LinearTransition.springify().damping(16).stiffness(220);
+const LABEL_LAYOUT = LinearTransition.duration(DURATION.fast).easing(EASE_OUT);
 
 const PILL_HEIGHT = 48;
 const PILL_WIDTH = 320;
@@ -61,7 +58,7 @@ interface ComposerProps {
   maxLength: number;
 }
 
-/** The chat input: a pill that springs open into a card with the expert, depth and attach controls. */
+/** The chat input: a pill that opens into a card with the expert, depth and attach controls. */
 export function Composer({
   value,
   onChangeText,
@@ -95,10 +92,10 @@ export function Composer({
   const tab = useSharedValue(attachmentLabel && open ? 1 : 0);
 
   useEffect(() => {
-    progress.set(withSpring(open ? 1 : 0, SPRING));
+    progress.set(withTiming(open ? 1 : 0, TIMING));
   }, [open, progress]);
   useEffect(() => {
-    tab.set(withSpring(attachmentLabel && open ? 1 : 0, SPRING));
+    tab.set(withTiming(attachmentLabel && open ? 1 : 0, TIMING));
   }, [attachmentLabel, open, tab]);
   useEffect(() => {
     // The web reports a text box's content as at least its current height, so it never shrinks
@@ -110,8 +107,7 @@ export function Composer({
     const height = interpolate(progress.value, [0, 1], [PILL_HEIGHT, textHeight.value + CONTROLS_HEIGHT]);
     if (!available.value) return { height };
     const pill = Math.min(PILL_WIDTH, available.value);
-    // Overshoot past the full width would push the card off screen, so the width stops there.
-    const width = Math.min(available.value, interpolate(progress.value, [0, 1], [pill, available.value]));
+    const width = interpolate(progress.value, [0, 1], [pill, available.value]);
     return { height, width };
   });
   const openStyle = useAnimatedStyle(() => ({
@@ -296,13 +292,13 @@ export function Composer({
   );
 }
 
-/** A label that springs to its new width and fades the new text in when it changes. */
+/** A label that eases to its new width and fades the new text in when it changes. */
 function MorphLabel({ text, color }: { text: string; color: string }) {
   return (
     <Animated.View layout={LABEL_LAYOUT} style={styles.morph}>
       <Animated.Text
         key={text}
-        entering={FadeInDown.duration(220)}
+        entering={FadeIn.duration(DURATION.fast)}
         numberOfLines={1}
         style={[type.caption, styles.controlText, { color }]}
       >
@@ -372,7 +368,7 @@ function ExpertPicker({
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
         {anchor && (
           <Animated.View
-            entering={FadeInDown.springify().damping(17).stiffness(240)}
+            entering={FadeIn.duration(DURATION.fast)}
             style={[
               styles.menu,
               {

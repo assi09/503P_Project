@@ -4,7 +4,8 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 
 import { tap } from '@/lib/haptics';
 
-const SPRING = { damping: 18, stiffness: 320, mass: 0.6 };
+// No overshoot: the press returns to full size without bouncing past it.
+const SPRING = { damping: 18, stiffness: 320, mass: 0.6, overshootClamping: true };
 
 interface Props extends Omit<PressableProps, 'style' | 'children'> {
   children: ReactNode;
