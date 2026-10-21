@@ -15,7 +15,7 @@ and bonus credit needs *evidence of use*, so process matters as much as code.
 |---|---|
 | `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), deterministic analysis tools returning `Evidence` (`app/analysis`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 57) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `architecture.md` (settled design), `metrics.md` (every daily metric and its Fitbit source) |
+| `docs/` | `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric and its Fitbit source) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
 
 The app talks to the backend only through the contract in `mobile/src/api/types.ts`. Until an
