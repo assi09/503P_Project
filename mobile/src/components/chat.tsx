@@ -11,9 +11,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import type { ChatMessage, Evidence } from '@/api/types';
+import type { ChatMessage, Evidence, ExpertChoice } from '@/api/types';
 import { EvidenceChip } from '@/components/evidence';
 import { Text } from '@/components/Text';
+import { expertInfo, useExpertColor } from '@/lib/experts';
 import { metricLabel, toolLabel } from '@/lib/format';
 import { radius, spacing, useColors } from '@/theme';
 
@@ -43,9 +44,12 @@ export const MessageBubble = memo(function MessageBubble({
         entering={ENTER}
         style={[styles.mine, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
       >
-        {message.findingId && (
+        {message.attachment && (
           <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
-            About: {findingTitles[message.findingId] ?? 'a finding'}
+            About:{' '}
+            {message.attachment.kind === 'finding'
+              ? (findingTitles[message.attachment.id] ?? 'a finding')
+              : metricLabel(message.attachment.metric)}
           </Text>
         )}
         <Text>{message.text}</Text>
@@ -55,8 +59,9 @@ export const MessageBubble = memo(function MessageBubble({
 
   return (
     <Animated.View entering={ENTER} style={styles.theirs}>
-      <Avatar />
+      <Avatar expert={message.refused ? undefined : (message.answeredBy ?? 'general')} />
       <View style={styles.theirsBody}>
+        {message.answeredBy && !message.refused && <AnswerHeader message={message} />}
         {message.refused ? (
           <View
             style={[
@@ -92,12 +97,36 @@ export const MessageBubble = memo(function MessageBubble({
   );
 });
 
-function Avatar() {
+/** The answering expert's icon; a shield for refusals. */
+function Avatar({ expert }: { expert?: ExpertChoice | 'general' }) {
   const colors = useColors();
+  const expertColor = useExpertColor(expert ?? 'general');
+  const color = expert ? expertColor : colors.warning;
   return (
-    <View style={[styles.avatar, { backgroundColor: colors.accentSoft }]}>
-      <Ionicons name="sparkles" size={13} color={colors.accent} />
+    <View style={[styles.avatar, { backgroundColor: `${color}22` }]}>
+      <Ionicons name={expert ? expertInfo(expert).icon : 'shield-checkmark'} size={13} color={color} />
     </View>
+  );
+}
+
+/** "Recovery · auto · asked Sleep": who answered, whether the router chose them, whom they asked. */
+function AnswerHeader({ message }: { message: ChatMessage }) {
+  const answeredBy = message.answeredBy ?? 'general';
+  const color = useExpertColor(answeredBy);
+  const label = answeredBy === 'general' ? 'General' : expertInfo(answeredBy).label;
+  const details = [
+    message.routed ? 'auto' : 'chosen',
+    ...(message.consulted?.length
+      ? [`asked ${message.consulted.map((e) => expertInfo(e).label).join(', ')}`]
+      : []),
+  ];
+  return (
+    <Text variant="caption" color="faint" style={{ fontSize: 12 }}>
+      <Text variant="caption" color={color} style={{ fontSize: 12 }}>
+        {label}
+      </Text>
+      {details.map((detail) => ` · ${detail}`).join('')}
+    </Text>
   );
 }
 
@@ -116,17 +145,19 @@ function Dot({ delay }: { delay: number }) {
   return <Animated.View style={[styles.dot, { backgroundColor: colors.muted }, style]} />;
 }
 
-/** Shown while an answer is being worked on. */
-export function Thinking() {
+/** Shown while an answer is being worked on, by the chosen expert or the router. */
+export function Thinking({ expert }: { expert: ExpertChoice }) {
+  const label =
+    expert === 'auto' ? 'Finding the right expert' : `${expertInfo(expert).label} is looking at your data`;
   return (
-    <Animated.View entering={ENTER} style={styles.theirs} accessibilityLabel="Working on an answer">
-      <Avatar />
+    <Animated.View entering={ENTER} style={styles.theirs} accessibilityLabel={label}>
+      <Avatar expert={expert} />
       <View style={styles.dots}>
         <Dot delay={0} />
         <Dot delay={150} />
         <Dot delay={300} />
         <Text variant="caption" color="muted" style={{ marginLeft: spacing.sm }}>
-          Looking at your data
+          {label}
         </Text>
       </View>
     </Animated.View>
@@ -144,7 +175,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   theirs: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', maxWidth: '94%' },
-  theirsBody: { flex: 1, gap: spacing.sm, paddingTop: 2 },
+  theirsBody: { flex: 1, gap: 6, paddingTop: 4 },
   avatar: {
     width: 26,
     height: 26,

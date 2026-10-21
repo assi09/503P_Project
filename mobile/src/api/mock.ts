@@ -1,18 +1,23 @@
 // In-memory stand-in for the backend, used until the API exists. All values are made up.
+import { expertForMetric } from '@/lib/experts';
 import { shortDate } from '@/lib/format';
 
 import type {
   ApiClient,
+  Attachment,
   ChatMessage,
   ContextQuestion,
   DataStatus,
+  Depth,
   Evidence,
+  Expert,
   Finding,
   ISODate,
   NotificationSettings,
   Point,
   Reminder,
   Report,
+  SendOptions,
 } from './types';
 
 const DAYS = 28;
@@ -81,6 +86,15 @@ const evidence: Record<string, Evidence> = {
     n: 28,
     sufficient: true,
     stats: { slope_per_day: 61.2, slope_low: 22.5, slope_high: 98.0, change_over_window: 1652, kendall_tau: 0.33, p_value: 0.013 },
+  },
+  ev_hrv: {
+    id: 'ev_hrv',
+    tool: 'compare_windows',
+    metrics: ['hrv_ms'],
+    windows: [recent, baseline],
+    n: 26,
+    sufficient: true,
+    stats: { mean_recent: 48.2, mean_baseline: 55.9, difference: -7.7, pct_change: -13.8, cliffs_delta: -0.52, p_value: 0.011 },
   },
 };
 
@@ -163,7 +177,74 @@ let notificationSettings: NotificationSettings = {
 
 const MEDICAL = /\b(diagnos|disease|illness|sick|medic|medication|doctor|symptom|treat|apnea|afib|heart attack)/i;
 
-function reply(text: string, findingId?: string): Omit<ChatMessage, 'id' | 'createdAt'> {
+// Stand-in for the router: keywords per expert. Ties go to the earlier expert in this list.
+const TOPICS: [Expert, RegExp][] = [
+  ['recovery', /recover|hrv|heart|resting|readiness|breath|respirat|temperature|tired/i],
+  ['sleep', /sleep|bed|nap|\brem\b|deep|awake|efficien|night/i],
+  ['activity', /step|walk|activ|exercise|workout|train|cardio|\brun|zone/i],
+  ['nutrition', /\beat|food|meal|protein|carb|macro|nutri|diet/i],
+];
+
+/** Experts a question is about, most likely first. */
+export function routeQuestion(text: string): Expert[] {
+  return TOPICS.map(([expert, pattern]) => ({
+    expert,
+    hits: text.match(new RegExp(pattern.source, 'gi'))?.length ?? 0,
+  }))
+    .filter(({ hits }) => hits > 0)
+    .sort((a, b) => b.hits - a.hits)
+    .map(({ expert }) => expert);
+}
+
+function attachmentExpert(attachment: Attachment | undefined): Expert | undefined {
+  if (!attachment) return undefined;
+  const metric =
+    attachment.kind === 'metric'
+      ? attachment.metric
+      : findings.find((f) => f.id === attachment.id)?.metric;
+  return metric ? expertForMetric(metric) : undefined;
+}
+
+type Answer = Pick<ChatMessage, 'text' | 'evidenceIds'>;
+
+function answerAbout(topic: Expert, depth: Depth, consulted: Expert[]): Answer {
+  if (topic === 'sleep') {
+    return depth === 'deep'
+      ? {
+          text: 'Sleep efficiency fell from 92% to 86% between the two halves of the last four weeks. Over the same period your bedtime moved about 50 minutes later, and nights with later bedtimes had lower efficiency. That is a correlation in your data, not proof that bedtime is the cause.',
+          evidenceIds: ['ev_eff', 'ev_bed', 'ev_corr'],
+        }
+      : {
+          text: 'Sleep efficiency fell from 92% to 86% over the last two weeks, while your bedtime moved about 50 minutes later.',
+          evidenceIds: ['ev_eff', 'ev_bed'],
+        };
+  }
+  if (topic === 'recovery') {
+    const answer = {
+      text: 'Your HRV averaged 48 ms over the last two weeks, down from 56 ms in the two weeks before.',
+      evidenceIds: ['ev_hrv'],
+    };
+    if (consulted.includes('sleep')) {
+      answer.text +=
+        ' Over the same weeks your bedtime moved about 50 minutes later. Both changed together; the data does not show which caused which.';
+      answer.evidenceIds.push('ev_bed');
+    }
+    return answer;
+  }
+  if (topic === 'activity') {
+    return {
+      text: 'Your steps have been rising steadily, by about 60 a day over four weeks, which adds up to around 1,650 more steps per day.',
+      evidenceIds: ['ev_steps'],
+    };
+  }
+  return {
+    text: "I can't see any nutrition data yet. Once nutrition from Cronometer is imported, I can look at it alongside your sleep and activity.",
+    evidenceIds: [],
+  };
+}
+
+function reply(text: string, options: SendOptions): Omit<ChatMessage, 'id' | 'createdAt'> {
+  // The scope check runs whatever expert was chosen, so choosing one cannot skip it.
   if (MEDICAL.test(text)) {
     return {
       role: 'assistant',
@@ -172,26 +253,33 @@ function reply(text: string, findingId?: string): Omit<ChatMessage, 'id' | 'crea
       refused: true,
     };
   }
-  // The attached finding decides the topic; otherwise fall back to keywords in the question.
-  const topic = findingId === 'f_steps' ? 'steps' : findingId ? 'sleep' : undefined;
-  if (topic === 'sleep' || (!topic && /sleep|efficien|bed|why/i.test(text))) {
+  // An attachment decides the topic; otherwise the question's keywords do.
+  const fromAttachment = attachmentExpert(options.attachment);
+  const topics = fromAttachment ? [fromAttachment] : routeQuestion(text);
+  const chosen = options.expert === 'auto' ? undefined : options.expert;
+  const lead = chosen ?? topics[0];
+
+  if (!lead) {
     return {
       role: 'assistant',
-      text: 'Sleep efficiency fell from 92% to 86% between the two halves of the last four weeks. Over the same period your bedtime moved about 50 minutes later, and nights with later bedtimes had lower efficiency. That is a correlation in your data, not proof that bedtime is the cause.',
-      evidenceIds: ['ev_eff', 'ev_bed', 'ev_corr'],
+      text: 'I can look into trends, changes between periods, and how your metrics relate, for example sleep, activity, heart rate or recovery. What would you like to know?',
+      evidenceIds: [],
+      answeredBy: 'general',
+      routed: true,
     };
   }
-  if (topic === 'steps' || /step|walk|activ/i.test(text)) {
-    return {
-      role: 'assistant',
-      text: 'Your steps have been rising steadily, by about 60 a day over four weeks, which adds up to around 1,650 more steps per day.',
-      evidenceIds: ['ev_steps'],
-    };
-  }
+  // The lead consults the other experts the question touches; a quick answer consults none.
+  const consulted = options.depth === 'deep' ? topics.filter((t) => t !== lead) : [];
+  // A chosen expert asked about another expert's metrics answers with what it consulted.
+  const topic = chosen && topics.length > 0 && !topics.includes(chosen) ? topics[0] : lead;
+  if (topic !== lead && !consulted.includes(topic)) consulted.push(topic);
+  const unavailable = lead === 'nutrition';
   return {
     role: 'assistant',
-    text: 'I can look into trends, changes between periods, and how your metrics relate, for example sleep, activity, heart rate or recovery. What would you like to know?',
-    evidenceIds: [],
+    ...answerAbout(topic, options.depth, consulted),
+    answeredBy: unavailable ? 'general' : lead,
+    routed: !chosen,
+    ...(consulted.length > 0 && { consulted }),
   };
 }
 
@@ -226,10 +314,14 @@ export const mockClient: ApiClient = {
 
   getChat: () => delay(chat),
 
-  sendMessage: (text, findingId) => {
-    const added = [message({ role: 'user', text, evidenceIds: [], ...(findingId && { findingId }) })];
+  sendMessage: (text, options) => {
+    if (options.expert === 'nutrition') {
+      return Promise.reject(new Error('The nutrition expert is not available yet.'));
+    }
+    const { attachment } = options;
+    const added = [message({ role: 'user', text, evidenceIds: [], ...(attachment && { attachment }) })];
     chat = [...chat, ...added];
-    const answer = message(reply(text, findingId));
+    const answer = message(reply(text, options));
     chat = [...chat, answer];
     return delay([...added, answer]);
   },

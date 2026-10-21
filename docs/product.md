@@ -105,6 +105,24 @@ decides what to do with them:
 Only the question text is sent to the classifier, never the user's data. If it fails or times out,
 a keyword rule over metric names routes the question instead.
 
+## Asking a question
+
+The Ask screen opens as an empty page with a compact input; the conversation takes over once the
+first message is sent. The input has three controls:
+
+- **Expert:** *Auto* by default, which routes as above. A user who already knows the topic can pick
+  an expert, and the question goes straight to it. The scope check still runs on every message,
+  so picking an expert cannot get around the refusal of medical questions. An expert asked about
+  another expert's metrics consults that expert instead of guessing. Nutrition is listed but
+  disabled until nutrition data exists.
+- **Depth:** *Quick* (the default) gives the expert a small tool budget and no consultations;
+  *Deep* lets it test more windows and consult other experts. This is the latency and cost
+  trade-off made visible, and both settings are measured in the evaluation.
+- **Attach:** a recent finding or a metric, shown above the input, which decides the topic.
+
+Every answer says which expert gave it, whether the router or the user chose that expert, and
+which experts it consulted.
+
 ## Rules for every answer
 
 - Numbers come from deterministic tools; the model only chooses what to compute and writes text
