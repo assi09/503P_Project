@@ -6,34 +6,39 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useChat, useReport, useSendMessage } from '@/api/hooks';
+import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
+import { AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
-import { PressableScale } from '@/components/PressableScale';
+import { Composer } from '@/components/composer';
 import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
+import { expertInfo, useExpertColor } from '@/lib/experts';
+import { metricLabel } from '@/lib/format';
 import { floatingTabBar } from '@/lib/platform';
-import { column, fonts, radius, spacing, useColors } from '@/theme';
+import { column, radius, spacing, useColors } from '@/theme';
 
 const MAX_LENGTH = 500;
+
+// The composer springs from the middle of the empty page down to the bottom of the conversation.
+const MOVE = LinearTransition.springify().damping(18).stiffness(160);
 
 // Questions offered while a finding is attached.
 const FINDING_SUGGESTIONS = ['Why did this happen?', 'What else changed around then?'];
 
-const SUGGESTIONS = [
-  'Why is my sleep worse lately?',
-  'How are my steps trending?',
-  'What changed most this month?',
-];
+function attachmentLabel(attachment: Attachment | undefined, findings: Finding[]): string | undefined {
+  if (!attachment) return undefined;
+  if (attachment.kind === 'metric') return metricLabel(attachment.metric);
+  return findings.find((f) => f.id === attachment.id)?.title ?? 'A finding';
+}
 
 export default function AskScreen() {
   const colors = useColors();
@@ -42,20 +47,36 @@ export default function AskScreen() {
   const report = useReport();
   const send = useSendMessage();
   const [draft, setDraft] = useState('');
+  const [expert, setExpert] = useState<ExpertChoice>('auto');
+  const [depth, setDepth] = useState<Depth>('quick');
+  const [attachment, setAttachment] = useState<Attachment>();
+  const [attaching, setAttaching] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const tabBarHeight = floatingTabBar ? barHeight : 0;
   const keyboardOpen = useKeyboardOpen();
 
-  const finding = report.data?.findings.find((f) => f.id === findingId);
+  // "Ask about this" on a finding opens this tab with the finding attached. The parameter is then
+  // cleared, so asking about the same finding again attaches it again.
+  const [seenFindingId, setSeenFindingId] = useState<string>();
+  if (findingId !== seenFindingId) {
+    setSeenFindingId(findingId);
+    if (findingId) setAttachment({ kind: 'finding', id: findingId });
+  }
+  useEffect(() => {
+    if (findingId) router.setParams({ findingId: undefined });
+  }, [findingId]);
+
+  const findings = useMemo(() => report.data?.findings ?? [], [report.data]);
   const findingTitles = useMemo(
-    () => Object.fromEntries((report.data?.findings ?? []).map((f) => [f.id, f.title])),
-    [report.data],
+    () => Object.fromEntries(findings.map((f) => [f.id, f.title])),
+    [findings],
   );
   const messages = chat.data ?? [];
   const pendingText = send.isPending ? send.variables?.text : undefined;
-  const canSend = draft.trim().length > 0 && !send.isPending;
+  const pendingExpert = send.variables?.options.expert ?? expert;
+  const started = messages.length > 0 || pendingText !== undefined;
 
   useEffect(() => {
     scroll.current?.scrollToEnd({ animated: true });
@@ -65,17 +86,21 @@ export default function AskScreen() {
     const trimmed = text.trim();
     if (!trimmed || send.isPending) return;
     send.mutate(
+      { text: trimmed, options: { expert, depth, ...(attachment && { attachment }) } },
       {
-        text: trimmed,
-        options: {
-          expert: 'auto',
-          depth: 'quick',
-          ...(finding && { attachment: { kind: 'finding', id: finding.id } }),
+        // Keep the text if sending fails, so it can be retried.
+        onSuccess: () => {
+          setDraft('');
+          setAttachment(undefined);
         },
       },
-      { onSuccess: () => setDraft('') }, // keep the text if sending fails, so it can be retried
     );
   }
+
+  const suggestions =
+    attachment?.kind === 'finding'
+      ? FINDING_SUGGESTIONS
+      : expertInfo(expert).suggestions;
 
   return (
     <KeyboardAvoidingView
@@ -83,88 +108,56 @@ export default function AskScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text variant="display" accessibilityRole="header">
+        <Text variant={started ? 'headline' : 'display'} accessibilityRole="header">
           Ask
         </Text>
       </View>
-      {finding && (
-        <Animated.View
-          entering={FadeIn}
-          style={[styles.context, { backgroundColor: colors.accentSoft }]}
-        >
-          <Ionicons name="pricetag" size={13} color={colors.accent} />
-          <Text variant="caption" color="accent" style={{ flex: 1 }} numberOfLines={1}>
-            Asking about: {finding.title}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Stop asking about this finding"
-            hitSlop={8}
-            onPress={() => router.setParams({ findingId: undefined })}
-          >
-            <Ionicons name="close" size={16} color={colors.accent} />
-          </Pressable>
-        </Animated.View>
-      )}
 
-      <ScrollView
-        ref={scroll}
-        contentContainerStyle={styles.messages}
-        keyboardShouldPersistTaps="handled"
-      >
-        <QueryState query={chat}>
-          {() =>
-            messages.length === 0 && !pendingText ? (
-              <View style={styles.empty}>
-                <View style={[styles.emptyIcon, { backgroundColor: colors.accentSoft }]}>
-                  <Ionicons name="sparkles" size={22} color={colors.accent} />
-                </View>
-                <Text variant="title">Ask about your data</Text>
-                <Text color="muted">
-                  Answers come from computations on your own Fitbit data, and each one shows what
-                  it is based on. I describe patterns; I don&apos;t give medical advice.
+      <QueryState query={chat}>
+        {() =>
+          started ? (
+            <ScrollView
+              ref={scroll}
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.messages}
+              keyboardShouldPersistTaps="handled"
+            >
+              {messages.map((message) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  knownEvidence={report.data?.evidence ?? {}}
+                  findingTitles={findingTitles}
+                />
+              ))}
+              {pendingText !== undefined && (
+                <>
+                  <View
+                    style={[
+                      styles.pendingMine,
+                      { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                    ]}
+                  >
+                    <Text>{pendingText}</Text>
+                  </View>
+                  <Thinking expert={pendingExpert} />
+                </>
+              )}
+              {send.error && (
+                <Text variant="caption" color="danger" style={{ textAlign: 'center' }}>
+                  {send.error.message || 'Could not send your message.'} Try again.
                 </Text>
-                <View style={styles.suggestions}>
-                  {(finding ? [...FINDING_SUGGESTIONS, ...SUGGESTIONS] : SUGGESTIONS).map((text) => (
-                    <Chip key={text} label={text} onPress={() => submit(text)} />
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    knownEvidence={report.data?.evidence ?? {}}
-                    findingTitles={findingTitles}
-                  />
-                ))}
-                {pendingText && (
-                  <>
-                    <View
-                      style={[
-                        styles.pendingMine,
-                        { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-                      ]}
-                    >
-                      <Text>{pendingText}</Text>
-                    </View>
-                    <Thinking />
-                  </>
-                )}
-              </>
-            )
-          }
-        </QueryState>
-        {send.error && (
-          <Text variant="caption" color="danger" style={{ textAlign: 'center' }}>
-            Could not send your message. Check your connection and try again.
-          </Text>
-        )}
-      </ScrollView>
+              )}
+            </ScrollView>
+          ) : (
+            <Animated.View exiting={FadeOut.duration(150)} style={styles.greeting}>
+              <Greeting expert={expert} />
+            </Animated.View>
+          )
+        }
+      </QueryState>
 
-      {finding && messages.length > 0 && (
+      {started && attachment?.kind === 'finding' && (
         <ScrollView
           horizontal
           style={styles.quickRail}
@@ -178,38 +171,78 @@ export default function AskScreen() {
         </ScrollView>
       )}
 
-      <View
+      <Animated.View
+        layout={MOVE}
         style={[
-          styles.inputBar,
+          styles.composer,
           // Above the floating tab bar, except while the keyboard covers it.
-          { paddingBottom: (keyboardOpen ? 0 : tabBarHeight) + spacing.sm },
+          { paddingBottom: started ? (keyboardOpen ? 0 : tabBarHeight) + spacing.sm : spacing.md },
         ]}
       >
-        <TextInput
+        <Composer
           value={draft}
           onChangeText={setDraft}
-          placeholder="Ask about your sleep, activity, heart…"
-          placeholderTextColor={colors.faint}
+          onSubmit={() => submit(draft)}
+          expert={expert}
+          onExpertChange={setExpert}
+          depth={depth}
+          onDepthChange={setDepth}
+          attachmentLabel={attachmentLabel(attachment, findings)}
+          onAttach={() => setAttaching(true)}
+          onClearAttachment={() => setAttachment(undefined)}
+          busy={send.isPending}
+          collapsible={!started}
+          placeholder={started ? 'Ask a follow-up' : 'Ask about your sleep, recovery, activity…'}
           maxLength={MAX_LENGTH}
-          multiline
-          numberOfLines={1}
-          style={[
-            styles.input,
-            { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-          accessibilityLabel="Message"
         />
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-          disabled={!canSend}
-          onPress={() => submit(draft)}
-          style={[styles.send, { backgroundColor: canSend ? colors.text : colors.surfaceRaised }]}
-        >
-          <Ionicons name="arrow-up" size={20} color={canSend ? colors.background : colors.faint} />
-        </PressableScale>
-      </View>
+      </Animated.View>
+
+      {!started && (
+        <Animated.View exiting={FadeOut.duration(150)} style={styles.below}>
+          <View style={styles.suggestions}>
+            {suggestions.map((text, i) => (
+              <Animated.View key={`${expert}-${text}`} entering={FadeInDown.delay(i * 40).duration(240)}>
+                <Chip label={text} onPress={() => submit(text)} />
+              </Animated.View>
+            ))}
+          </View>
+        </Animated.View>
+      )}
+
+      <AttachSheet
+        visible={attaching}
+        findings={findings}
+        onClose={() => setAttaching(false)}
+        onPick={(picked) => {
+          setAttachment(picked);
+          setAttaching(false);
+        }}
+      />
     </KeyboardAvoidingView>
+  );
+}
+
+/** The empty page: the selected expert's icon, a question, and what the answers are based on. */
+function Greeting({ expert }: { expert: ExpertChoice }) {
+  const color = useExpertColor(expert);
+  const info = expertInfo(expert);
+  return (
+    <>
+      <Animated.View
+        key={expert}
+        entering={FadeIn.duration(250)}
+        style={[styles.greetingIcon, { backgroundColor: `${color}22`, borderColor: `${color}44` }]}
+      >
+        <Ionicons name={info.icon} size={24} color={color} />
+      </Animated.View>
+      <Text variant="title" style={{ textAlign: 'center' }}>
+        {expert === 'auto' ? 'What do you want to know?' : `Ask the ${info.label} expert`}
+      </Text>
+      <Text color="muted" style={styles.disclaimer}>
+        Answers come from your own Fitbit data and show what they are based on. Patterns, not
+        medical advice.
+      </Text>
+    </>
   );
 }
 
@@ -227,27 +260,33 @@ function useKeyboardOpen(): boolean {
 
 const styles = StyleSheet.create({
   header: { ...column, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  context: {
+  greeting: {
     ...column,
-    maxWidth: column.maxWidth - 2 * spacing.lg,
-    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
   },
-  messages: { ...column, padding: spacing.lg, gap: spacing.md, flexGrow: 1 },
-  empty: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  greetingIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
-  suggestions: { gap: spacing.sm, alignItems: 'flex-start' },
+  disclaimer: { textAlign: 'center', maxWidth: 340 },
+  below: { ...column, flex: 1, paddingHorizontal: spacing.lg },
+  suggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  messages: { ...column, padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
   pendingMine: {
     alignSelf: 'flex-end',
     maxWidth: '82%',
@@ -260,24 +299,5 @@ const styles = StyleSheet.create({
   },
   quickRail: { ...column, flexGrow: 0 },
   quickReplies: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  inputBar: { ...column,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    maxHeight: 120,
-    minHeight: 44,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 12,
-    paddingBottom: 12,
-    fontSize: 15,
-    fontFamily: fonts.regular,
-  },
-  send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  composer: { ...column, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
 });
