@@ -1,0 +1,317 @@
+"""The investigation loop: hypotheses, tool calls, a verified submission.
+
+The model proposes what might explain a change, tests each idea with the analysis tools, and hands
+in claims that cite the evidence. The verifier checks every claim; rejected claims go back to the
+model once with the reasons, and whatever still fails is dropped. The run stops on submission, when
+its budget is spent, or on a model error, and always returns what it has, with a full trace.
+
+This is the general agent (all metrics, no routing). The experts reuse `run_agent` with their own
+prompt and metrics.
+"""
+
+import json
+import uuid
+from dataclasses import dataclass, field
+from datetime import date
+
+import pandas as pd
+from pydantic import BaseModel, Field, ValidationError
+
+from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
+from app.agent.tools import Toolbox, evidence_payload
+from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, verify
+from app.analysis.evidence import Evidence
+from app.analysis.screen import screen
+
+SUBMIT = "submit_findings"
+HYPOTHESES = "record_hypotheses"
+REPAIR_ROUNDS = 1
+NUDGES = 1  # times a reply without a tool call is answered with a reminder to submit
+
+
+class HypothesesArguments(BaseModel):
+    hypotheses: list[str] = Field(min_length=1, max_length=8)
+
+
+SYSTEM_PROMPT = """You analyze one person's own Fitbit data and explain what changed and why.
+
+How to work:
+1. Read the task. Before testing anything, call record_hypotheses with the explanations worth
+   checking, for example a bedtime shift, more or less training, low wear time or missing data,
+   a weekday/weekend pattern, or a change in another metric that tracks this one.
+2. Test each hypothesis with the analysis tools. Date a change with change_point, size it with
+   compare_windows, check data quality with coverage, and look for metrics that move with it with
+   correlate. Every tool returns evidence with an evidence_id.
+3. Call submit_findings once, with a short summary, your claims and each hypothesis's status.
+
+Rules for claims:
+- Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
+  an association says whether it goes up or down.
+- Quote only numbers and dates that appear in the cited evidence; round them the way people talk
+  ("about 45 minutes", "7.2 hours").
+- Only claim a change or an association when the evidence is significant. Say "no clear change"
+  otherwise.
+- The tools show change and association, not cause: write "went with" or "coincided with", never
+  "caused", "because of" or "due to".
+- Describe patterns in the person's data. Never diagnose or give medical advice, and never reason
+  about calorie balance: calories burned is only an estimate.
+"""
+
+
+@dataclass
+class AgentResult:
+    run_id: str
+    stop_reason: str  # submitted, budget, model_error, no_submission
+    summary: str = ""
+    claims: list[Claim] = field(default_factory=list)
+    rejected: list[Rejection] = field(default_factory=list)
+    hypotheses: list[Hypothesis] = field(default_factory=list)
+    recorded_hypotheses: list[str] = field(default_factory=list)
+    evidence: dict[str, Evidence] = field(default_factory=dict)
+    trace: list[dict] = field(default_factory=list)
+    budget: Budget = field(default_factory=Budget)
+    error: str | None = None
+
+    @property
+    def cited_evidence(self) -> dict[str, Evidence]:
+        ids = {i for claim in self.claims for i in claim.evidence_ids}
+        return {i: e for i, e in self.evidence.items() if i in ids}
+
+
+def _control_tools() -> list[dict]:
+    submission = Submission.model_json_schema()
+    submission.pop("title", None)
+    hypotheses = HypothesesArguments.model_json_schema()
+    hypotheses.pop("title", None)
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": HYPOTHESES,
+                "description": "Record the explanations you will test, before testing them.",
+                "parameters": hypotheses,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": SUBMIT,
+                "description": "Hand in the summary, the claims with their evidence_ids, and the "
+                "status of each hypothesis. Claims are verified against the evidence.",
+                "parameters": submission,
+            },
+        },
+    ]
+
+
+def _rejections_message(rejected: list[Rejection], accepted: int) -> str:
+    return json.dumps(
+        {
+            "accepted_claims": accepted,
+            "rejected_claims": [
+                {"text": r.claim.text, "reasons": list(r.reasons)} for r in rejected
+            ],
+            "instruction": "Fix or drop the rejected claims and call submit_findings again with "
+            "the complete list of claims.",
+        }
+    )
+
+
+def run_agent(
+    llm: LLM,
+    toolbox: Toolbox,
+    task: str,
+    *,
+    system_prompt: str = SYSTEM_PROMPT,
+    budget: Budget | None = None,
+    role: Role = Role.SMALL,
+) -> AgentResult:
+    budget = budget or Budget()
+    result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
+    result.evidence = toolbox.evidence  # shared: tools add to it as they run
+    tools = toolbox.schemas() + _control_tools()
+    messages: list[dict] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": task},
+    ]
+    repairs_left, nudges_left = REPAIR_ROUNDS, NUDGES
+
+    while True:
+        if budget.max_calls - budget.calls == 1:
+            messages.append(
+                {"role": "user", "content": f"This is your last turn: call {SUBMIT} now."}
+            )
+        try:
+            completion = llm.complete(messages, role=role, tools=tools, budget=budget)
+        except BudgetExceeded as exc:
+            result.stop_reason, result.error = "budget", str(exc)
+            break
+        except LLMError as exc:
+            result.stop_reason, result.error = "model_error", str(exc)
+            break
+        messages.append(completion.as_message())
+        result.trace.append(
+            {
+                "type": "llm",
+                "model": completion.model,
+                "latency_s": round(completion.latency_s, 3),
+                "cost_usd": completion.cost_usd,
+                "input_tokens": completion.usage.input_tokens,
+                "output_tokens": completion.usage.output_tokens,
+                "text": (completion.text or "")[:500],
+                "tool_calls": [call.name for call in completion.tool_calls],
+            }
+        )
+
+        if not completion.tool_calls:
+            if nudges_left:
+                nudges_left -= 1
+                messages.append({"role": "user", "content": f"Use the tools, then call {SUBMIT}."})
+                continue
+            break
+
+        submitted = False
+        for call in completion.tool_calls:
+            content, done = _handle(call, toolbox, result, budget, repairs_left)
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
+            if call.name == SUBMIT and not done and result.rejected:
+                repairs_left -= 1
+            submitted = submitted or done
+        if submitted:
+            result.stop_reason = "submitted"
+            break
+    return result
+
+
+def _handle(
+    call: ToolCall, toolbox: Toolbox, result: AgentResult, budget: Budget, repairs_left: int
+) -> tuple[str, bool]:
+    """Runs one tool call; returns what the model reads and whether the run is finished."""
+    if call.name == HYPOTHESES:
+        try:
+            args = HypothesesArguments.model_validate(call.arguments or {})
+        except ValidationError:
+            return json.dumps({"error": "Give 1 to 8 hypotheses as a list of strings."}), False
+        result.recorded_hypotheses = args.hypotheses
+        result.trace.append({"type": "hypotheses", "items": args.hypotheses})
+        return json.dumps({"recorded": len(args.hypotheses)}), False
+
+    if call.name == SUBMIT:
+        try:
+            submission = Submission.model_validate(call.arguments or {})
+        except ValidationError as exc:
+            message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+            result.trace.append({"type": "submit", "error": message})
+            return json.dumps({"error": f"Invalid submission: {message}"}), False
+        verdict = verify(submission.claims, toolbox.evidence)
+        result.summary = submission.summary
+        result.hypotheses = submission.hypotheses
+        result.claims = list(verdict.accepted)
+        result.rejected = list(verdict.rejected)
+        result.trace.append(
+            {
+                "type": "verify",
+                "accepted": len(verdict.accepted),
+                "rejected": [
+                    {"text": r.claim.text, "reasons": list(r.reasons)} for r in verdict.rejected
+                ],
+            }
+        )
+        if verdict.rejected and repairs_left > 0:
+            return _rejections_message(list(verdict.rejected), len(verdict.accepted)), False
+        return json.dumps({"accepted_claims": len(verdict.accepted)}), True
+
+    if budget.tool_calls > budget.max_tool_calls:
+        message = f"The tool budget is spent; call {SUBMIT} now with what you have."
+        result.trace.append({"type": "tool", "name": call.name, "error": message})
+        return json.dumps({"error": message}), False
+
+    outcome = toolbox.run(call)
+    step = {"type": "tool", "name": call.name, "arguments": call.arguments}
+    if outcome.evidence:
+        step["evidence_id"] = outcome.evidence.id
+    else:
+        step["error"] = outcome.error
+    result.trace.append(step)
+    return outcome.content, False
+
+
+def _describe_range(toolbox: Toolbox) -> str:
+    return (
+        f"Data covers {toolbox.first_day} to {toolbox.last_day}. "
+        f"Metrics you can use: {', '.join(toolbox.metrics)}."
+    )
+
+
+def investigate(
+    llm: LLM,
+    frame: pd.DataFrame,
+    metrics: list[str] | None = None,
+    *,
+    budget: Budget | None = None,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> AgentResult:
+    """Screens the metrics for recent changes and has the agent explain them.
+
+    The screen is deterministic and corrects for testing many metrics at once. When it finds no
+    change, the model is not called at all.
+    """
+    toolbox = Toolbox(frame, metrics or list(frame.columns))
+    found = screen(toolbox.frame)
+    changes = [c for c in found.changes if c.metric in toolbox.metrics]
+    for evidence in found.tested:
+        toolbox.evidence[evidence.id] = evidence
+    if not changes:
+        return AgentResult(
+            run_id=uuid.uuid4().hex[:12],
+            stop_reason="nothing_to_explain",
+            summary="No metric changed enough in the last two weeks to report.",
+            evidence=toolbox.evidence,
+            budget=budget or Budget(),
+        )
+    listed = "\n".join(f"- {c.metric}: {json.dumps(evidence_payload(c.evidence))}" for c in changes)
+    task = (
+        f"{_describe_range(toolbox)}\n\nThe screen compared the last two weeks with the four "
+        f"weeks before ({found.recent.start} to {found.recent.end} against {found.baseline.start} "
+        f"to {found.baseline.end}) and found these changes, already corrected for testing many "
+        f"metrics:\n{listed}\n\nExplain what changed and what in the data went with it."
+    )
+    return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt)
+
+
+def answer(
+    llm: LLM,
+    frame: pd.DataFrame,
+    question: str,
+    metrics: list[str] | None = None,
+    *,
+    today: date | None = None,
+    budget: Budget | None = None,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> AgentResult:
+    """Answers a person's question about their data, with verified claims."""
+    toolbox = Toolbox(frame, metrics or list(frame.columns))
+    when = f"Today is {today}. " if today else ""
+    task = f"{when}{_describe_range(toolbox)}\n\nThe person asks: {question}"
+    return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt)
+
+
+def trace_json(result: AgentResult) -> str:
+    """The run as JSON, for storing and for showing how an answer was reached."""
+    return json.dumps(
+        {
+            "run_id": result.run_id,
+            "stop_reason": result.stop_reason,
+            "error": result.error,
+            "cost_usd": result.budget.cost_usd,
+            "model_calls": result.budget.calls,
+            "tool_calls": result.budget.tool_calls,
+            "hypotheses": result.recorded_hypotheses,
+            "claims": [c.model_dump() for c in result.claims],
+            "rejected": [
+                {"claim": r.claim.model_dump(), "reasons": list(r.reasons)} for r in result.rejected
+            ],
+            "steps": result.trace,
+        },
+        default=str,
+    )
