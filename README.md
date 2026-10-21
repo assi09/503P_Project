@@ -70,6 +70,7 @@ Then, from the repository root:
 source .venv/bin/activate
 python -m app.sync connect      # signs in through the browser
 python -m app.sync check        # confirms each kind of data can be read
+python -m app.sync compare --export Takeout   # how closely the API matches a Takeout export
 ```
 
 The sign-in is stored in `data/google_token.json` (git-ignored, readable only by you). These

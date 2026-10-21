@@ -76,3 +76,47 @@ use a different classification and overstated moderate minutes by about 80%.
 | Weight | too few readings to analyze |
 | `Biometrics/` (glucose) | medical data, outside the project's scope |
 | Profile, account, social and notification files | personal data, never read |
+
+## From the Google Health API
+
+Live data (`backend/app/sync/daily.py`) fills the same columns, so the analysis does not depend on
+the source. Days are the device's local calendar days.
+
+| Column | API data type | How it is built |
+|---|---|---|
+| `steps`, `distance_km`, `calories` | `steps`, `distance`, `total-calories` | daily roll-up (`countSum`, `millimetersSum` / 10⁶, `kcalSum`) |
+| `active_zone_minutes` | `active-zone-minutes` | daily roll-up, fat-burn + cardio + peak; the cardio and peak sums already count double |
+| `lightly_`, `moderately_`, `very_active_minutes` | `active-minutes` | daily roll-up by level `LIGHT`, `MODERATE`, `VIGOROUS`; an absent level is 0 |
+| `wear_minutes` | `activity-level` | minutes of activity-level intervals per day, as in Takeout |
+| `resting_hr`, `hrv_ms`, `respiratory_rate` | `daily-resting-heart-rate`, `daily-heart-rate-variability`, `daily-respiratory-rate` | daily value |
+| `skin_temp_variation_c` | `daily-sleep-temperature-derivations` | nightly minus baseline temperature |
+| `sleep_minutes`, stage minutes | `sleep` | longest main sleep, dated by the local day it ended; stages from the summary, none on `CLASSIC` nights |
+| `time_in_bed` | `sleep` | length of the sleep session |
+| `sleep_efficiency` | `sleep` | **our definition**: minutes asleep / time in bed; the API has no efficiency |
+| `bedtime_hour` | `sleep` | session start in local time |
+
+**Not available from the API:** `cardio_load`, `readiness` and `sleep_score` (no such data types),
+and `sedentary_minutes`: the API's `sedentary-period` counts bouts of sitting, which no formula
+turned into Fitbit's daily sedentary total (26% off), so it is left out rather than passed off as
+the same metric.
+
+### Verification against Takeout
+
+`python -m app.sync compare --export <dir>` compares the two sources column by column. On the
+real export (111 days):
+
+| Column | Result |
+|---|---|
+| `steps`, `distance_km` | within 1% on 99% of days |
+| `active_zone_minutes`, `resting_hr`, `hrv_ms`, `respiratory_rate`, `skin_temp_variation_c` | within 1% on every day |
+| activity minutes, `wear_minutes` | within 5% on 95% or more of days |
+| `calories` | within 5% on 99% of days |
+
+**Sleep uses a newer algorithm.** The API returns Google's current sleep sessions; the legacy Fitbit
+file in Takeout (`GED/sleep-*.json`) holds the old ones, which count about 38 more minutes asleep a
+night and split the stages differently. Against the current sessions, which newer Takeout exports
+also contain (`UserSleeps`, `algorithm_version` `sleep_session_v2`), over 114 nights: time in bed
+matches exactly on every night, minutes asleep within 2 minutes on 82% (median difference 0), and
+each stage within a median of 1 to 2 minutes; the rest are nights rescored after the export.
+**A history must come from one source**: stitching legacy and current sleep would show the switch
+as a change in the person's sleep.
