@@ -125,6 +125,25 @@ first message is sent. The input has three controls:
 Every answer says which expert gave it, whether the router or the user chose that expert, and
 which experts it consulted.
 
+## What the agent may do, and what it asks first
+
+- **Explain:** findings and answers, every number from a tool, every claim verified.
+- **Ask, when it is worth it:** only about a change that is large, lasting and still unexplained
+  after the agent tested its hypotheses. Questions are short and multiple choice, always with
+  "rather not say" and a skip; never about feelings or personal difficulties. A dismissed
+  question is not asked again, and the agent backs off after dismissals.
+- **Remember, leanly:** context answers, past findings, check-ins and preferences, stored as short
+  structured facts; only facts relevant to the current question are loaded, and facts that never
+  matter fade out. New facts the agent wants to keep are confirmed by the user first.
+- **Propose reminders** and **N-of-1 experiments** (for example "bedtime before midnight for 10
+  days"): the agent tracks an accepted experiment and reports whether the metric changed,
+  comparing the experiment window with the user's baseline.
+
+Any user must approve before a reminder is scheduled, an experiment starts, a new fact is saved
+to memory, or data is deleted.
+
+All four experts (sleep, recovery, activity, nutrition) are part of the demo.
+
 ## Rules for every answer
 
 - Numbers come from deterministic tools; the model only chooses what to compute and writes text
