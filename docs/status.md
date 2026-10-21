@@ -91,6 +91,9 @@ four experts with consult and the router, memory, live data and the agent served
 and experiments, tracing, accounts, deployment and the first evaluation; November after that is
 buffer and hardening.
 
-Sprint 1 so far: LLM layer, agent tools, general agent and verifier are merged. Next, in order:
-human-readable findings (wording only; the data pipeline is unchanged), the four experts with
-consult and the Jev router, then live data and the agent served through the API to the app.
+Sprint 1 so far: LLM layer, agent tools, general agent, verifier and human-readable findings are
+merged. The memory and context design (kinds, scope, lifetime, retrieval, write path, injection
+defenses, evaluation) is in [architecture.md](architecture.md#memory-and-context-designed-not-built).
+Next, in order: the four experts with consult, the Jev router and the context builder (chat
+history and attachments); then the memory tables and write path; then live data and the agent
+served through the API to the app.
