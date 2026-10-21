@@ -6,7 +6,15 @@ import pytest
 from pydantic import ValidationError
 
 from app.analysis.evidence import ToolError, Window
-from app.analysis.tools import compare_windows, correlate, coverage, describe, trend
+from app.analysis.tools import (
+    change_point,
+    compare_windows,
+    correlate,
+    coverage,
+    describe,
+    trend,
+    weekday_split,
+)
 from app.synthetic import Coupling, LowWear, Step, Trend, generate
 
 START = date(2026, 1, 1)
@@ -206,3 +214,81 @@ def test_correlate_with_no_data_reports_nothing():
 def test_correlate_rejects_bad_arguments(driver, target, max_lag, message):
     with pytest.raises(ToolError, match=message):
         correlate(generate(START, 30).frame, driver, target, window(0, 29), max_lag)
+
+
+def test_change_point_finds_the_day_of_a_planted_step():
+    hits = []
+    for seed in range(100):
+        frame = generate(
+            START, 60, (Step("resting_hr", START + timedelta(35), 3),), seed=seed
+        ).frame
+        evidence = change_point(frame, "resting_hr", window(0, 59))
+        found = date.fromisoformat(evidence.stats["change_date"])
+        hits.append(
+            abs((found - (START + timedelta(35))).days) <= 3 and evidence.stats["p_value"] < 0.05
+        )
+    assert np.mean(hits) > 0.85  # a 1.5 SD step is found within 3 days nearly every time
+
+
+def test_change_point_reports_the_levels_on_each_side():
+    frame = generate(START, 60, (Step("resting_hr", START + timedelta(30), 6),), seed=4).frame
+    stats = change_point(frame, "resting_hr", window(0, 59)).stats
+    assert stats["difference"] == pytest.approx(6, abs=1.5)
+    assert stats["n_before"] + stats["n_after"] == 60
+
+
+def test_change_point_false_positive_rate_stays_near_alpha():
+    # Searching every split would make a plain test far too optimistic; the permutation test
+    # over the whole search must not be.
+    p_values = [
+        change_point(generate(START, 60, seed=seed).frame, "resting_hr", window(0, 59)).stats[
+            "p_value"
+        ]
+        for seed in range(200)
+    ]
+    assert np.mean(np.array(p_values) < 0.05) < 0.08
+
+
+def test_change_point_needs_a_week_on_each_side():
+    frame = generate(START, 60, seed=1).frame
+    short = change_point(frame, "resting_hr", window(0, 12))
+    assert not short.sufficient and short.stats["change_date"] is None
+
+
+def test_change_point_skips_missing_days_and_handles_constants():
+    frame = generate(START, 40, (Step("resting_hr", START + timedelta(20), 8),), seed=3).frame
+    frame.loc[frame.index[18:23], "resting_hr"] = np.nan
+    evidence = change_point(frame, "resting_hr", window(0, 39))
+    assert evidence.n == 35
+    assert pd.Timestamp(evidence.stats["change_date"]) in frame["resting_hr"].dropna().index
+
+    frame["resting_hr"] = 60.0
+    flat = change_point(frame, "resting_hr", window(0, 39))
+    assert flat.stats["p_value"] == 1.0 and flat.stats["difference"] == 0
+
+
+def with_weekend_effect(frame: pd.DataFrame, metric: str, delta: float) -> pd.DataFrame:
+    frame = frame.copy()
+    frame.loc[frame.index.dayofweek >= 5, metric] += delta
+    return frame
+
+
+def test_weekday_split_finds_a_weekend_difference():
+    frame = with_weekend_effect(generate(START, 56, seed=5).frame, "steps", -4000)
+    evidence = weekday_split(frame, "steps", window(0, 55))
+    assert evidence.sufficient
+    assert evidence.stats["n_weekend"] == 16 and evidence.stats["n_weekday"] == 40
+    assert evidence.stats["mean_weekend"] < evidence.stats["mean_weekday"]
+    assert evidence.stats["p_value"] < 0.01
+
+
+def test_weekday_split_false_positive_rate_stays_near_alpha():
+    p_values = [
+        weekday_split(generate(START, 56, seed=seed).frame, "steps", window(0, 55)).stats["p_value"]
+        for seed in range(200)
+    ]
+    assert np.mean(np.array(p_values) < 0.05) < 0.08
+
+
+def test_weekday_split_needs_enough_weekend_days():
+    assert not weekday_split(generate(START, 14, seed=1).frame, "steps", window(0, 13)).sufficient
