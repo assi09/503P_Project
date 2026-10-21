@@ -3,7 +3,7 @@ import type { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 
 import type { Expert, ExpertChoice } from '@/api/types';
-import { metricFamily, type MetricFamily } from '@/theme';
+import { METRIC_COLORS, metricFamily, useColors, useScheme, type MetricFamily } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -83,6 +83,14 @@ export const EXPERTS: readonly ExpertInfo[] = [
 
 export function expertInfo(id: ExpertChoice | 'general'): ExpertInfo {
   return EXPERTS.find((expert) => expert.id === id) ?? EXPERTS[0];
+}
+
+/** The expert's color in the current scheme; Auto and general answers use the app accent. */
+export function useExpertColor(id: ExpertChoice | 'general'): string {
+  const scheme = useScheme();
+  const colors = useColors();
+  const { family } = expertInfo(id);
+  return family ? METRIC_COLORS[family][scheme] : colors.accent;
 }
 
 /** The expert that owns a metric, e.g. `hrv_ms` -> recovery. */
