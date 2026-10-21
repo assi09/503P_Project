@@ -51,6 +51,18 @@ FA_EXPORT_DIR=Takeout FA_TIMEZONE=Asia/Beirut uvicorn app.api.main:app --app-dir
 It listens on `http://127.0.0.1:8000` only, since there is no login yet. Interactive API docs
 are at `/docs`.
 
+### Database
+
+Postgres runs in Docker for local development (port 5433, so it does not clash with a Postgres
+already on 5432). Schema changes are Alembic migrations in `backend/migrations/`.
+
+```bash
+docker compose up -d db                       # start Postgres
+alembic -c backend/alembic.ini upgrade head   # create or update the tables
+```
+
+Tests do not need Postgres: they build a SQLite database by running the same migrations.
+
 ### Google Health sign-in (live data)
 
 Live data comes from the Google Health API. It needs a Google Cloud project of your own:
@@ -71,6 +83,7 @@ source .venv/bin/activate
 python -m app.sync connect      # signs in through the browser
 python -m app.sync check        # confirms each kind of data can be read
 python -m app.sync compare --export Takeout   # how closely the API matches a Takeout export
+python -m app.sync pull --email you@example.com  # store the last 120 days in the database
 ```
 
 The sign-in is stored in `data/google_token.json` (git-ignored, readable only by you). These
