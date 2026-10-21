@@ -12,29 +12,35 @@ verifier rejects statements it cannot match to one.
 ## Components
 
 ```
- Mobile app (planned) ── HTTPS + auth ──► API (planned)
-                                            │
-          ┌─────────────────────────────────┼──────────────────────────────┐
-          ▼                                 ▼                              ▼
-   Ingestion                         Agent (planned)                  Storage (planned)
-   Takeout export ─► daily table     investigation loop               per-user daily metrics,
-          │                          over analysis tools              evidence, reports, memory
-          ▼                                 │
-   Analysis tools ◄──── tool calls ─────────┘
-   (deterministic) ──► Evidence ──► Verifier (planned) ──► report / answer
+ Mobile app (Expo) ──── HTTPS (+ auth, planned) ────► API (FastAPI)
+                                                       │
+     ┌──────────────────────┬──────────────────────────┼─────────────────────────┐
+     ▼                      ▼                          ▼                         ▼
+ Google Health API     Takeout export          Agent (planned)             Postgres
+ (live sync) ──┐       (offline import) ─┐     router → experts            users, daily metrics,
+               ▼                         ▼     over analysis tools         sync runs; later reports,
+          daily table (same columns from either source)                    chat, memory, traces
+               │                                   │
+               ▼                                   ▼
+        Analysis tools (deterministic) ──► Evidence ──► Verifier (planned) ──► report / answer
 ```
 
 | Component | Location | Status |
 |---|---|---|
-| Takeout ingestion | `backend/app/ingest/takeout.py` | done |
+| Takeout ingestion | `backend/app/ingest/takeout.py` | done (legacy layout; newer exports lack `Global Export Data`) |
+| Google Health sign-in | `backend/app/sync/google_auth.py` | done: loopback OAuth, token file `0600`, one local user |
+| Google Health API client | `backend/app/sync/client.py` | done: paging, roll-up windows, retries |
+| API data → daily table | `backend/app/sync/daily.py` | done, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
+| Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs |
+| Live data → database | `backend/app/sync/pull.py` | `python -m app.sync pull`; the API service still reads Takeout |
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
-| Agent, verifier, memory | `backend/app/agent/` | planned |
+| Agent, verifier, memory | `backend/app/agent/` | planned: **the next major piece** |
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
 | Router and experts | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
-| Mobile app | `mobile/` | planned |
+| Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
 | Evaluation suite | `eval/` | planned |
 
 ### Ingestion
@@ -43,6 +49,29 @@ Reads a Google Takeout ("Google Health") export into one row per local calendar 
 per metric (see [metrics.md](metrics.md) for every column and its Fitbit source). Intraday data is
 bucketed by the user's timezone; profile and account files are never opened. Malformed exports
 raise `IngestError` instead of producing partial data silently.
+
+### Live sync (Google Health API)
+
+The Fitbit data comes live from the Google Health API (v4). Sign-in is Google's loopback OAuth
+flow for desktop apps, with four read-only scopes (activity and fitness, health metrics, sleep,
+nutrition); the refresh token is stored in `data/google_token.json`, readable only by its owner.
+The Google Cloud project's OAuth app stays in **Testing** mode, because health scopes are
+restricted: only listed test users can sign in, and Google expires the sign-in after 7 days, which
+surfaces as `ReconnectNeeded`. Per-user sign-in from the phone needs the backend on a public HTTPS
+address and arrives with accounts and deployment.
+
+The client lists data points across pages and fetches daily roll-ups in the windows the API
+accepts; rate limits, server errors and network failures are retried with backoff. The mapping
+fills the same columns as Takeout, so everything downstream is source-independent, with one rule:
+**a history comes from one source**. The API's sleep is Google's current algorithm, the legacy
+export's is the old one (about 38 minutes a night apart), so mixing them would fake a change.
+
+### Storage
+
+Postgres (Docker locally, managed when deployed), schema changes as Alembic migrations, SQLite in
+tests. Daily metrics are stored one row per user, source, day and metric, so new metrics (such as
+nutrition) need no migration. Every table holding a person's data has a `user_id`, and every query
+filters on it. Tables for later features are added by migration when the feature is built.
 
 ### Analysis tools
 
@@ -94,5 +123,6 @@ The agent describes patterns in the user's own data. It does not give medical di
 ## Data and privacy
 
 The repository is public. Personal exports live under `data/` or `Takeout/`, both git-ignored, and
-are never committed. Tests and evaluation use the synthetic generator, whose baselines are generic
+are never committed; so are `.env` (the OAuth client ID and secret) and the Google sign-in token
+in `data/`. The LLM will only ever receive aggregated statistics, never raw rows or account data. Tests and evaluation use the synthetic generator, whose baselines are generic
 values, not taken from any real export.
