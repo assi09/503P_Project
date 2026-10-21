@@ -43,9 +43,12 @@ export const MessageBubble = memo(function MessageBubble({
         entering={ENTER}
         style={[styles.mine, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
       >
-        {message.findingId && (
+        {message.attachment && (
           <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
-            About: {findingTitles[message.findingId] ?? 'a finding'}
+            About:{' '}
+            {message.attachment.kind === 'finding'
+              ? (findingTitles[message.attachment.id] ?? 'a finding')
+              : metricLabel(message.attachment.metric)}
           </Text>
         )}
         <Text>{message.text}</Text>

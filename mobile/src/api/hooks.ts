@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './index';
-import type { ChatMessage, NotificationSettings, ReminderStatus } from './types';
+import type { ChatMessage, NotificationSettings, ReminderStatus, SendOptions } from './types';
 
 export const keys = {
   report: ['report', 'latest'] as const,
@@ -34,8 +34,8 @@ export function useChat() {
 export function useSendMessage() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ text, findingId }: { text: string; findingId?: string }) =>
-      api.sendMessage(text, findingId),
+    mutationFn: ({ text, options }: { text: string; options: SendOptions }) =>
+      api.sendMessage(text, options),
     // Append directly so the conversation never flickers while it refetches.
     onSuccess: (added) =>
       client.setQueryData<ChatMessage[]>(keys.chat, (old = []) => [...old, ...added]),

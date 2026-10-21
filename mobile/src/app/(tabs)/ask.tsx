@@ -65,7 +65,14 @@ export default function AskScreen() {
     const trimmed = text.trim();
     if (!trimmed || send.isPending) return;
     send.mutate(
-      { text: trimmed, findingId: finding?.id },
+      {
+        text: trimmed,
+        options: {
+          expert: 'auto',
+          depth: 'quick',
+          ...(finding && { attachment: { kind: 'finding', id: finding.id } }),
+        },
+      },
       { onSuccess: () => setDraft('') }, // keep the text if sending fails, so it can be retried
     );
   }

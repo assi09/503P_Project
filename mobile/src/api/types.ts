@@ -59,12 +59,33 @@ export interface Report {
 
 export type ChatRole = 'user' | 'assistant';
 
+/** The specialists that answer questions; each owns a set of metrics (docs/product.md). */
+export type Expert = 'sleep' | 'recovery' | 'activity' | 'nutrition';
+
+/** Who a question goes to: `auto` lets the router pick the expert. */
+export type ExpertChoice = 'auto' | Expert;
+
+/** How much work the expert may do: `deep` allows more tool calls and consulting other experts. */
+export type Depth = 'quick' | 'deep';
+
+/** Context the user attached to a question. */
+export type Attachment = { kind: 'finding'; id: string } | { kind: 'metric'; metric: string };
+
+export interface SendOptions {
+  expert: ExpertChoice;
+  depth: Depth;
+  attachment?: Attachment;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
   evidenceIds: string[]; // what the assistant's statements are based on
-  findingId?: string; // the finding a user message asked about, if any
+  attachment?: Attachment; // what a user message asked about, if anything
+  answeredBy?: Expert | 'general'; // assistant only; absent on refusals
+  routed?: boolean; // assistant only: true if the router chose the expert, false if the user did
+  consulted?: Expert[]; // other experts the answering expert asked
   refused?: boolean; // the request was out of scope, e.g. medical advice
   createdAt: ISODateTime;
 }
@@ -105,7 +126,7 @@ export interface ApiClient {
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;
   getChat(): Promise<ChatMessage[]>;
-  sendMessage(text: string, findingId?: string): Promise<ChatMessage[]>; // returns the new messages
+  sendMessage(text: string, options: SendOptions): Promise<ChatMessage[]>; // returns the new messages
   getReminders(): Promise<Reminder[]>;
   setReminderStatus(id: string, status: ReminderStatus): Promise<Reminder>;
   getNotificationSettings(): Promise<NotificationSettings>;

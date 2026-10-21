@@ -48,6 +48,7 @@ export const METRIC_COLORS = {
   heart: { dark: '#FF5C7A', light: '#E0284D', gradient: ['#FF3D6E', '#FF8FA0'] },
   recovery: { dark: '#3DDC97', light: '#14A86B', gradient: ['#18C487', '#8BEFC2'] },
   temperature: { dark: '#44CFE0', light: '#0E97AB', gradient: ['#1FB6CC', '#8CE9F4'] },
+  nutrition: { dark: '#F2C94C', light: '#B7860B', gradient: ['#F2A93B', '#F7DC6F'] },
 } as const;
 
 export type MetricFamily = keyof typeof METRIC_COLORS;

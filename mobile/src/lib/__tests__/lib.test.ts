@@ -1,6 +1,7 @@
 import type { Evidence, Point } from '@/api/types';
 
 import { chartGeometry } from '../chart';
+import { EXPERTS, expertForMetric, expertInfo } from '../experts';
 import { formatP, formatValue, keyStats, shortDate, strength, timeAgo } from '../format';
 
 const points = (values: (number | null)[]): Point[] =>
@@ -115,5 +116,24 @@ describe('keyStats', () => {
   it('skips statistics that are missing', () => {
     const evidence: Evidence = { ...base, tool: 'trend', stats: { slope_per_day: null, p_value: null } };
     expect(keyStats(evidence)).toEqual([{ label: 'Days of data', value: '27' }]);
+  });
+});
+
+describe('experts', () => {
+  it('maps every metric family to the expert that owns it', () => {
+    expect(expertForMetric('deep_sleep_minutes')).toBe('sleep');
+    expect(expertForMetric('steps')).toBe('activity');
+    expect(expertForMetric('hrv_ms')).toBe('recovery');
+    expect(expertForMetric('readiness')).toBe('recovery');
+    expect(expertForMetric('skin_temp_variation_c')).toBe('recovery');
+    expect(expertForMetric('unknown_metric')).toBeUndefined();
+  });
+
+  it('lists auto first and offers suggestions for every available expert', () => {
+    expect(EXPERTS[0].id).toBe('auto');
+    for (const expert of EXPERTS.filter((e) => e.available)) {
+      expect(expert.suggestions.length).toBeGreaterThan(0);
+    }
+    expect(expertInfo('general').id).toBe('auto');
   });
 });
