@@ -7,6 +7,7 @@ spend real money. `ScriptedLLM` replays canned turns, so tests and CI never need
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
@@ -247,9 +248,13 @@ class OpenAILLM:
 
 @dataclass
 class ScriptedLLM:
-    """Replays prepared turns in order and records what it was asked. For tests and CI."""
+    """Replays prepared turns in order and records what it was asked. For tests and CI.
 
-    turns: list[Completion] = field(default_factory=list)
+    A turn is a completion, or a function of the conversation so far that returns one (to cite
+    evidence ids that only exist once tools have run).
+    """
+
+    turns: list[Completion | Callable[[list[dict]], Completion]] = field(default_factory=list)
     requests: list[dict] = field(default_factory=list)
 
     @staticmethod
@@ -282,7 +287,8 @@ class ScriptedLLM:
         )
         if not self.turns:
             raise LLMError("The script has no more turns.")
-        completion = self.turns.pop(0)
+        turn = self.turns.pop(0)
+        completion = turn(messages) if callable(turn) else turn
         if budget:
             budget.charge(completion)
         return completion
