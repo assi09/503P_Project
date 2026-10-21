@@ -16,7 +16,11 @@ MIN_DAYS_DESCRIBE = 3
 MIN_DAYS_COMPARE = 7  # per window
 MIN_DAYS_TREND = 14
 MIN_DAYS_CORRELATE = 14
+MIN_DAYS_SEGMENT = 7  # each side of a change point
+MIN_DAYS_PER_GROUP = 6  # weekdays and weekend days each
 MAX_LAG_DAYS = 14
+PERMUTATIONS = 999  # for the change-point p-value; fixed seed so results are reproducible
+WEEKEND = (5, 6)  # Saturday and Sunday (Monday is 0)
 LOW_WEAR_MINUTES = 600  # under 10 hours of wear, activity totals are not representative
 
 
@@ -74,6 +78,26 @@ def coverage(frame: pd.DataFrame, window: Window) -> Evidence:
     )
 
 
+def _two_sample(a: pd.Series, b: pd.Series) -> dict:
+    """Difference between two groups of days: means, Mann-Whitney U p-value and Cliff's delta."""
+    summary = {
+        "difference": _round(a.mean() - b.mean()),
+        "pct_change": _round(100 * (a.mean() - b.mean()) / abs(b.mean()), 2)
+        if len(b) and b.mean() != 0
+        else None,
+        "cliffs_delta": None,
+        "p_value": None,
+    }
+    if len(a) and len(b):
+        if np.ptp(np.concatenate([a, b])) == 0:
+            summary["cliffs_delta"], summary["p_value"] = 0.0, 1.0
+        else:
+            u, p = stats.mannwhitneyu(a, b, alternative="two-sided")
+            summary["cliffs_delta"] = _round(2 * u / (len(a) * len(b)) - 1)
+            summary["p_value"] = _round(p, 6)
+    return summary
+
+
 def compare_windows(frame: pd.DataFrame, metric: str, recent: Window, baseline: Window) -> Evidence:
     """Whether a metric differs between two non-overlapping windows.
 
@@ -88,22 +112,10 @@ def compare_windows(frame: pd.DataFrame, metric: str, recent: Window, baseline: 
     summary = {
         "mean_recent": _round(a.mean()),
         "mean_baseline": _round(b.mean()),
-        "difference": _round(a.mean() - b.mean()),
-        "pct_change": _round(100 * (a.mean() - b.mean()) / abs(b.mean()), 2)
-        if len(b) and b.mean() != 0
-        else None,
         "n_recent": len(a),
         "n_baseline": len(b),
-        "cliffs_delta": None,
-        "p_value": None,
+        **_two_sample(a, b),
     }
-    if len(a) and len(b):
-        if np.ptp(np.concatenate([a, b])) == 0:
-            summary["cliffs_delta"], summary["p_value"] = 0.0, 1.0
-        else:
-            u, p = stats.mannwhitneyu(a, b, alternative="two-sided")
-            summary["cliffs_delta"] = _round(2 * u / (len(a) * len(b)) - 1)
-            summary["p_value"] = _round(p, 6)
     return Evidence(
         tool="compare_windows",
         metrics=(metric,),
@@ -206,4 +218,91 @@ def correlate(
         n=n,
         sufficient=n >= MIN_DAYS_CORRELATE,
         stats=summary,
+    )
+
+
+def _split_statistics(values: np.ndarray, min_segment: int) -> np.ndarray:
+    """For each series (row), the largest standardized mean shift over all allowed split points."""
+    n = values.shape[-1]
+    sums = np.cumsum(values, axis=-1)
+    k = np.arange(min_segment, n - min_segment + 1)  # size of the first segment
+    before = sums[..., k - 1] / k
+    after = (sums[..., -1:] - sums[..., k - 1]) / (n - k)
+    scale = np.sqrt(1 / k + 1 / (n - k))
+    return np.abs(after - before) / scale
+
+
+def change_point(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
+    """The day a metric most likely shifted to a new level within a window, if it did.
+
+    Every split leaving at least a week on each side is tried, and the one with the largest
+    standardized difference in means is reported. Trying many splits makes an ordinary test far
+    too optimistic, so the p-value comes from a permutation test of the whole search: the same
+    search on shuffled data, which keeps the false-positive rate at the stated level.
+    """
+    values = _values(frame, metric, window)
+    n = len(values)
+    summary: dict = {
+        "change_date": None,
+        "mean_before": None,
+        "mean_after": None,
+        "n_before": None,
+        "n_after": None,
+        "difference": None,
+        "pct_change": None,
+        "p_value": None,
+    }
+    if n >= 2 * MIN_DAYS_SEGMENT:
+        data = values.to_numpy(dtype=float)
+        observed = _split_statistics(data, MIN_DAYS_SEGMENT)
+        best = int(np.argmax(observed))
+        split = MIN_DAYS_SEGMENT + best
+        before, after = values.iloc[:split], values.iloc[split:]
+        if np.ptp(data) == 0:
+            p_value = 1.0
+        else:
+            rng = np.random.default_rng(0)
+            shuffled = rng.permuted(np.tile(data, (PERMUTATIONS, 1)), axis=1)
+            null = _split_statistics(shuffled, MIN_DAYS_SEGMENT).max(axis=1)
+            p_value = (1 + int((null >= observed[best] - 1e-12).sum())) / (PERMUTATIONS + 1)
+        summary.update(
+            change_date=values.index[split].date().isoformat(),
+            mean_before=_round(before.mean()),
+            mean_after=_round(after.mean()),
+            n_before=len(before),
+            n_after=len(after),
+            difference=_round(after.mean() - before.mean()),
+            pct_change=_round(100 * (after.mean() - before.mean()) / abs(before.mean()), 2)
+            if before.mean() != 0
+            else None,
+            p_value=_round(p_value, 6),
+        )
+    return Evidence(
+        tool="change_point",
+        metrics=(metric,),
+        windows=(window,),
+        n=n,
+        sufficient=n >= 2 * MIN_DAYS_SEGMENT,
+        stats=summary,
+    )
+
+
+def weekday_split(frame: pd.DataFrame, metric: str, window: Window) -> Evidence:
+    """Whether a metric differs on weekend days from weekdays (Mann-Whitney U, Cliff's delta)."""
+    values = _values(frame, metric, window)
+    weekend = values.index.dayofweek.isin(WEEKEND)
+    a, b = values[weekend], values[~weekend]
+    return Evidence(
+        tool="weekday_split",
+        metrics=(metric,),
+        windows=(window,),
+        n=len(values),
+        sufficient=min(len(a), len(b)) >= MIN_DAYS_PER_GROUP,
+        stats={
+            "mean_weekend": _round(a.mean()),
+            "mean_weekday": _round(b.mean()),
+            "n_weekend": len(a),
+            "n_weekday": len(b),
+            **_two_sample(a, b),
+        },
     )
