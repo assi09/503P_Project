@@ -16,6 +16,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agent.llm import ToolCall
+from app.agent.present import display, label
 from app.analysis import tools as analysis
 from app.analysis.evidence import Evidence, ToolError, Window
 
@@ -128,11 +129,14 @@ class ToolResult:
 
 
 def evidence_payload(evidence: Evidence) -> dict:
-    """The evidence as the model sees it: everything it may cite, keyed by id."""
+    """The evidence as the model sees it: everything it may cite, keyed by id, with the values as
+    a person reads them under `display` (the raw statistics are unchanged)."""
     return {
         "evidence_id": evidence.id,
         "tool": evidence.tool,
         "metrics": list(evidence.metrics),
+        "labels": {metric: label(metric) for metric in evidence.metrics},
+        "display": display(evidence),
         "windows": [
             {"start": w.start.isoformat(), "end": w.end.isoformat()} for w in evidence.windows
         ],

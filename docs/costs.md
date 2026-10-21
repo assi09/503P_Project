@@ -53,3 +53,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 |---|---|---|
 | 2026-10-21 | OpenAI and TypeSafe model lists (key checks) | $0 |
 | 2026-10-21 | First real investigation, synthetic person (sleep drop with later bedtime) | $0.024 |
+| 2026-10-21 | Readable findings check, same synthetic person (3 model calls, 10 tool calls) | $0.0096 |
