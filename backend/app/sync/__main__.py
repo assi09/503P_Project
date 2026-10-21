@@ -7,11 +7,12 @@ the API reproduces a Takeout export, in aggregate.
 
 import argparse
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 
 import httpx2
 
 from app.config import settings
+from app.db.session import session_scope
 from app.ingest.takeout import load_daily as takeout_daily
 from app.sync.client import HealthClient
 from app.sync.compare import agreement
@@ -25,6 +26,7 @@ from app.sync.google_auth import (
     missing_scopes,
     token_provider,
 )
+from app.sync.pull import pull
 
 API = "https://health.googleapis.com/v4/users/me/dataTypes"
 
@@ -89,6 +91,14 @@ def _compare(export: str) -> int:
     return 0
 
 
+def _pull(email: str, days: int) -> int:
+    end = date.today() + timedelta(days=1)  # through today
+    health = HealthClient(token_provider(settings.google_token_file))
+    run = pull(session_scope, health, email, end - timedelta(days=days), end)
+    print(f"Stored {run.days_written} days ({run.range_start} to {date.today()}) for {email}.")
+    return 0
+
+
 def _disconnect() -> int:
     removed = disconnect(settings.google_token_file)
     print("Signed out." if removed else "Was not connected.")
@@ -102,11 +112,16 @@ def main(argv: list[str] | None = None) -> int:
         commands.add_parser(name)
     compare = commands.add_parser("compare", help="check the API against a Takeout export")
     compare.add_argument("--export", required=True, help="an extracted Takeout export")
+    pulling = commands.add_parser("pull", help="store recent days in the database")
+    pulling.add_argument("--email", required=True, help="the account the data belongs to")
+    pulling.add_argument("--days", type=int, default=120)
     args = parser.parse_args(argv)
     simple = {"connect": _connect, "status": _status, "check": _check, "disconnect": _disconnect}
     try:
         if args.command == "compare":
             return _compare(args.export)
+        if args.command == "pull":
+            return _pull(args.email, args.days)
         return simple[args.command]()
     except SyncError as exc:
         print(exc, file=sys.stderr)
