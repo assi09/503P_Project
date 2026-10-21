@@ -16,13 +16,13 @@ verifier rejects statements it cannot match to one.
                                                        │
      ┌──────────────────────┬──────────────────────────┼─────────────────────────┐
      ▼                      ▼                          ▼                         ▼
- Google Health API     Takeout export          Agent (planned)             Postgres
+ Google Health API     Takeout export          Agent                       Postgres
  (live sync) ──┐       (offline import) ─┐     router → experts            users, daily metrics,
                ▼                         ▼     over analysis tools         sync runs; later reports,
           daily table (same columns from either source)                    chat, memory, traces
                │                                   │
                ▼                                   ▼
-        Analysis tools (deterministic) ──► Evidence ──► Verifier (planned) ──► report / answer
+        Analysis tools (deterministic) ──► Evidence ──► Verifier ──► report / answer
 ```
 
 | Component | Location | Status |
@@ -36,7 +36,7 @@ verifier rejects statements it cannot match to one.
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
-| Agent, verifier, memory | `backend/app/agent/` | planned: **the next major piece** |
+| General agent, verifier, readable findings | `backend/app/agent/` | done; experts, router and memory next |
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
 | Router and experts | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
@@ -97,20 +97,97 @@ shows the value the decision was made on. The report turns each change into temp
 numbers all come from its evidence. It is what the app shows until the agent exists, and the
 "statistics only" baseline the agent is evaluated against.
 
-### Agent (planned)
+### Agent
 
-A router and specialist experts (sleep, recovery, activity, later nutrition), each owning a set of
-metrics; see [product.md](product.md#experts) for the split and how cross-domain questions are
-handled. An expert screens its metrics for changes, forms hypotheses about *why* a metric changed
-(for example a bedtime shift, an activity change, or a data-quality problem such as low wear
-time), chooses which tools to run to test them, and stops when the hypotheses are resolved or its
-budget is spent. It never computes statistics itself. Whether the split beats a single general
-agent is measured, not assumed.
+`backend/app/agent/`. The general agent (`agent.py`) is built; the experts and router are next.
+A run starts either from the screen's changes (`investigate`; when nothing changed, no model is
+called) or from a question (`answer`). The model records hypotheses, tests them with the toolbox
+(`tools.py`: validated calls over the analysis tools, limited to the metrics in scope), and calls
+`submit_findings`. Text shown to people uses the names and formats in `present.py`; the data keeps
+its raw units. The LLM layer (`llm.py`) prices every call and enforces a per-run budget and a spending
+cap; `ScriptedLLM` stands in for the model in tests. Each run keeps a trace of every step.
 
-### Verifier (planned)
+Planned: a router and specialist experts (sleep, recovery, activity, nutrition), each owning a set
+of metrics ([product.md](product.md#experts)), compared against the general agent as a baseline.
 
-Deterministic. Each claim must reference evidence ids; directions and numbers in the claim are
-checked against the stored statistics, and claims built on insufficient evidence are rejected.
+### Verifier
+
+Deterministic (`verifier.py`). Each claim must cite existing, sufficient evidence; a change or an
+association must be significant and point the stated way; every number, duration, time of day and
+date in the text must come from the cited evidence; and the text must not use internal metric
+names, diagnose, state causation or reason about calorie balance. The summary is checked too.
+Failing text goes back to the model once with the reasons, then is dropped.
+
+## Memory and context (designed, not built)
+
+The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The
+principles: the context window is scarce, so a run gets a small, deterministic selection; memory
+is **written selectively** and **maintained**; and memory, like any text from outside, is **data,
+never instructions** (memory poisoning is OWASP's agentic risk ASI06).
+
+**Data itself is not memory.** The agent never reads rows: it fetches statistics on demand through
+tools, so its view of the data is always current and every number is computed.
+
+### Kinds of memory
+
+All memory is per user (`user_id` on every row, every query filtered) and is deleted with the
+user's data.
+
+| Kind | What it holds | Written by | Lifetime | Retrieved when |
+|---|---|---|---|---|
+| **Conversation** | the chat turns: questions, verified answers, attachments | the system, per turn | the thread; older turns condensed to their questions and verified claims | always: last 4 turns verbatim, earlier ones condensed |
+| **Findings** (episodic) | verified claims of past runs with their evidence ids, metrics and dates | the system, only after verification | until a newer finding on the same metric supersedes it, at most 90 days | the question's metrics match; newest first |
+| **Context answers** | the person's answers to the agent's questions ("exam week") with the dates and metrics asked about | the person | 180 days | the date range or metrics overlap |
+| **Check-ins** | daily rating 1-5 and fixed tags | the person | 365 days | through a `checkins` tool, for the window being investigated |
+| **Facts and preferences** (semantic) | short structured facts: routine, goal, preference, context; at most 120 characters, with the metrics they concern | **proposed by the agent, saved only after the person approves** | until changed or deleted; not retrieved after 60 days unused | preferences always (at most 3); other facts when their metrics match |
+| **Traces** | every run's steps, cost and verdicts | the system | 30 days | never put in a prompt: for AgentOps and evaluation only |
+
+### Retrieval: the context builder
+
+Deterministic, before the model is called:
+
+1. **Scope.** The router's label (or the chosen expert) gives the metrics in play; an attached
+   finding or metric is added first.
+2. **Select.** Only rows for this user whose metrics or dates match the scope.
+3. **Rank.** Score = relevance (metric match, date overlap) + recency (decays with age) +
+   importance (a verified finding's effect size; facts the person confirmed count fully). Ties go
+   to the newer item.
+4. **Cap.** At most 5 items besides the conversation, within a fixed token budget (about 1,500
+   tokens). Older findings' evidence is re-attached so it can be cited instead of recomputed.
+5. **Record.** The trace lists which items were retrieved, so an answer can be traced to its
+   context and retrieval can be evaluated.
+
+No embeddings: memory here is structured (metrics, dates, tags), so filtering and ranking is
+cheaper, deterministic and testable. No model call is used to summarize memory.
+
+### Write path
+
+| Source | Can it write memory? |
+|---|---|
+| The person (answers, check-ins, approved facts, preferences) | yes |
+| The verifier (only claims that passed) | findings only |
+| The agent | only **proposals** (`propose_fact`), which wait for the person's approval |
+| External text: food names, entries from other apps, imported files | **never**, directly |
+
+Every stored item keeps its provenance (who wrote it, which run, when).
+
+### Injection defenses
+
+- External and stored text is passed to the model as **quoted data** inside a delimited block
+  marked as data, never in the system prompt; it is length-limited and stripped of control
+  characters.
+- Text that reads like an instruction ("ignore previous instructions", role tags, URLs) is dropped
+  from memory candidates and logged.
+- The agent's tools only read statistics; nothing in the model's reach can write memory, change
+  settings or reach another user's data.
+- The router (Jev) receives the question text only, never data or memory.
+
+### How it is evaluated
+
+Memory on against off on scenarios that need it (follow-up questions, a change explained by an
+earlier context answer); stale memory (a superseded finding must not be used); poisoning attempts
+(a food name carrying an instruction, a proposed fact the person declined); retrieval precision
+(share of retrieved items that were relevant) and context size per run.
 
 ## Boundaries
 
