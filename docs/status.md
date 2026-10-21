@@ -80,12 +80,12 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
-1. **The agent**, built behind an LLM interface with a scripted fake for tests: tools wrapping the
-   analysis, the investigation loop, the verifier, then the router and experts. Needs an OpenAI key
-   in `.env` only for real runs.
-2. The API serving live data from the database; "Sync now" and sync status in the Data tab.
-3. Nutrition columns (deduplicated) and the nutrition expert.
-4. Recovery score and the morning check-in.
-5. Evaluation suite, tracing and metrics, accounts, then deployment.
+The approved plan, with the decisions from the 20-question session and the schedule, is in
+[roadmap.md](roadmap.md). In short: **Sprint 1 (Oct 22–28)** builds the agent end to end (LLM
+layer with a scripted fake, agent tools, general agent with the hypothesis loop and verifier,
+four experts with consult and the router, memory, live data and the agent served to the app);
+**Sprint 2 (Oct 29–Nov 4)** adds the recovery score, check-in, nutrition, daily runs, reminders
+and experiments, tracing, accounts, deployment and the first evaluation; November after that is
+buffer and hardening.
 
-The detailed plan is in [roadmap.md](roadmap.md).
+The first PR is the LLM layer: `backend/app/agent/llm.py`.
