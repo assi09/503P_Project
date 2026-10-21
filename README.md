@@ -51,6 +51,31 @@ FA_EXPORT_DIR=Takeout FA_TIMEZONE=Asia/Beirut uvicorn app.api.main:app --app-dir
 It listens on `http://127.0.0.1:8000` only, since there is no login yet. Interactive API docs
 are at `/docs`.
 
+### Google Health sign-in (live data)
+
+Live data comes from the Google Health API. It needs a Google Cloud project of your own:
+
+1. Create a project and enable the **Google Health API**.
+2. Under **Google Auth Platform**, create the consent screen (audience **External**, status
+   **Testing**) and add the Google account your Fitbit uses as a **test user**.
+3. Under **Data access**, add the read-only scopes `googlehealth.activity_and_fitness`,
+   `googlehealth.health_metrics_and_measurements`, `googlehealth.sleep` and
+   `googlehealth.nutrition` (each `https://www.googleapis.com/auth/<scope>.readonly`).
+4. Under **Clients**, create an OAuth client of type **Desktop app** and put its ID and secret in
+   `.env` as `FA_GOOGLE_CLIENT_ID` and `FA_GOOGLE_CLIENT_SECRET`.
+
+Then, from the repository root:
+
+```bash
+source .venv/bin/activate
+python -m app.sync connect      # signs in through the browser
+python -m app.sync check        # confirms each kind of data can be read
+```
+
+The sign-in is stored in `data/google_token.json` (git-ignored, readable only by you). These
+scopes are restricted, so the app stays in Testing mode: only test users can sign in, and Google
+expires the sign-in after 7 days, after which `connect` has to be run again.
+
 ### Mobile app
 
 Requires Node 22. The app runs on mock data by default. Set `EXPO_PUBLIC_API_URL` (e.g.
