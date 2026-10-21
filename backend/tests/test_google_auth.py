@@ -131,3 +131,24 @@ def test_disconnect_forgets_the_sign_in(tmp_path):
     assert disconnect(token_file) is True
     assert not token_file.exists()
     assert disconnect(token_file) is False
+
+
+def test_token_provider_keeps_a_valid_token_in_memory(tmp_path, monkeypatch):
+    token_file = tmp_path / "token.json"
+    save(credentials(), token_file)
+    token = google_auth.token_provider(token_file)
+    monkeypatch.setattr(google_auth, "load", lambda _: pytest.fail("should not reload"))
+    assert token() == "access"
+    assert token() == "access"
+
+
+def test_token_provider_renews_an_expired_token(tmp_path, monkeypatch):
+    token_file = tmp_path / "token.json"
+    save(credentials(expired=True), token_file)
+
+    def refresh(self, _request):
+        self.token = "renewed"
+        self.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+
+    monkeypatch.setattr(Credentials, "refresh", refresh)
+    assert google_auth.token_provider(token_file)() == "renewed"

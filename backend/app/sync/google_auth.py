@@ -11,6 +11,7 @@ as `ReconnectNeeded`, never as a crash.
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -119,6 +120,19 @@ def load(token_file: Path) -> Credentials:
         ) from exc
     save(credentials, token_file)
     return credentials
+
+
+def token_provider(token_file: Path) -> Callable[[], str]:
+    """A function returning a current access token, renewing it when it expires."""
+    credentials = load(token_file)
+
+    def token() -> str:
+        nonlocal credentials
+        if not credentials.valid:
+            credentials = load(token_file)
+        return credentials.token
+
+    return token
 
 
 def disconnect(token_file: Path) -> bool:
