@@ -19,12 +19,13 @@ priority**; the UI and data plumbing exist to serve them.
 |---|---|
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
 | Storage | Postgres in Docker with the first migration (users, Google connections, daily metrics, sync runs); `python -m app.sync pull` stores live days |
-| Analysis | deterministic tools returning `Evidence`; 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
+| Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; first real run on a synthetic person explained the planted change correctly for $0.024 |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, ~160 backend and ~50 mobile tests |
 
-**Not built yet:** the agent (router, experts, verifier, memory), the recovery score, nutrition
+**Not built yet:** experts, router and memory, human-readable wording of findings, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -34,7 +35,9 @@ suite, the failure matrix and threat model.
 2. Database: `docker compose up -d db` (Postgres on port **5433**), then
    `alembic -c backend/alembic.ini upgrade head`.
 3. `.env` at the repository root (git-ignored; copy `.env.example`): `FA_TIMEZONE`,
-   `FA_EXPORT_DIR`, and `FA_GOOGLE_CLIENT_ID` / `FA_GOOGLE_CLIENT_SECRET` for live data.
+   `FA_EXPORT_DIR`, `FA_GOOGLE_CLIENT_ID` / `FA_GOOGLE_CLIENT_SECRET` for live data, and
+   `FA_OPENAI_API_KEY`, `FA_TYPESAFE_API_KEY` and `FA_LLM_SPEND_CAP_USD` for the agent. Both API
+   keys are set on Karim's machine; **budgets are about $5 each**, see [costs.md](costs.md).
 4. Live data: `python -m app.sync connect`, then `check`, `compare --export Takeout`,
    `pull --email <account>`. Run from the repository root.
 5. App: `cd mobile && npm ci && npx expo start` (Expo Go) or `npm run web`.
@@ -88,4 +91,6 @@ four experts with consult and the router, memory, live data and the agent served
 and experiments, tracing, accounts, deployment and the first evaluation; November after that is
 buffer and hardening.
 
-The first PR is the LLM layer: `backend/app/agent/llm.py`.
+Sprint 1 so far: LLM layer, agent tools, general agent and verifier are merged. Next, in order:
+human-readable findings (wording only; the data pipeline is unchanged), the four experts with
+consult and the Jev router, then live data and the agent served through the API to the app.
