@@ -1,0 +1,155 @@
+"""How metrics read for people: names, units and formatted values.
+
+Presentation only. The daily table, the evidence and the database keep their raw units; this module
+turns them into what a person reads ("time asleep", "7 h 12 min", "23:30", "Aug 15"), both for the
+model writing findings and for checking that what it wrote matches the evidence. Names follow the
+app's labels in `mobile/src/lib/format.ts`.
+"""
+
+from dataclasses import dataclass
+from datetime import date
+
+from app.analysis.evidence import Evidence
+
+
+@dataclass(frozen=True)
+class MetricInfo:
+    label: str
+    unit: str  # minutes, clock, count, kcal, km, bpm, ms, breaths, percent, celsius, score, load
+
+
+METRICS: dict[str, MetricInfo] = {
+    "steps": MetricInfo("steps", "count"),
+    "calories": MetricInfo("calories burned", "kcal"),
+    "distance_km": MetricInfo("distance", "km"),
+    "active_zone_minutes": MetricInfo("Active Zone Minutes", "minutes"),
+    "cardio_load": MetricInfo("cardio load", "load"),
+    "resting_hr": MetricInfo("resting heart rate", "bpm"),
+    "hrv_ms": MetricInfo("heart rate variability (HRV)", "ms"),
+    "respiratory_rate": MetricInfo("breathing rate", "breaths"),
+    "readiness": MetricInfo("readiness", "score"),
+    "skin_temp_variation_c": MetricInfo("skin temperature compared with your usual", "celsius"),
+    "sedentary_minutes": MetricInfo("sedentary time", "minutes"),
+    "lightly_active_minutes": MetricInfo("light activity", "minutes"),
+    "moderately_active_minutes": MetricInfo("moderate activity", "minutes"),
+    "very_active_minutes": MetricInfo("vigorous activity", "minutes"),
+    "wear_minutes": MetricInfo("wear time", "minutes"),
+    "sleep_minutes": MetricInfo("time asleep", "minutes"),
+    "time_in_bed": MetricInfo("time in bed", "minutes"),
+    "sleep_efficiency": MetricInfo("sleep efficiency", "percent"),
+    "sleep_score": MetricInfo("sleep score", "score"),
+    "deep_sleep_minutes": MetricInfo("deep sleep", "minutes"),
+    "light_sleep_minutes": MetricInfo("light sleep", "minutes"),
+    "rem_sleep_minutes": MetricInfo("REM sleep", "minutes"),
+    "awake_in_bed_minutes": MetricInfo("time awake in bed", "minutes"),
+    "bedtime_hour": MetricInfo("bedtime", "clock"),
+}
+
+# Statistics that are a level of the metric, and ones that are a difference between levels.
+LEVEL_KEYS = (
+    "mean",
+    "median",
+    "min",
+    "max",
+    "mean_recent",
+    "mean_baseline",
+    "mean_before",
+    "mean_after",
+    "mean_weekend",
+    "mean_weekday",
+)
+CHANGE_KEYS = ("difference", "change_over_window")
+
+SUFFIXES = {
+    "count": "",
+    "kcal": " kcal",
+    "km": " km",
+    "bpm": " bpm",
+    "ms": " ms",
+    "breaths": " breaths a minute",
+    "percent": "%",
+    "celsius": " °C",
+    "score": "",
+    "load": "",
+}
+
+
+def label(metric: str) -> str:
+    info = METRICS.get(metric)
+    return info.label if info else metric.replace("_", " ")
+
+
+def duration(minutes: float) -> str:
+    """45 -> "45 min", 432 -> "7 h 12 min"."""
+    total = round(abs(minutes))
+    hours, rest = divmod(total, 60)
+    if not hours:
+        return f"{rest} min"
+    return f"{hours} h {rest} min" if rest else f"{hours} h"
+
+
+def clock(hours: float) -> str:
+    """A time of day from hours relative to midnight: -0.5 -> "23:30", 1.25 -> "01:15"."""
+    minutes = round((hours % 24) * 60) % (24 * 60)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def _number(value: float) -> str:
+    digits = 0 if abs(value) >= 100 else 1
+    text = f"{value:,.{digits}f}"
+    return text[:-2] if text.endswith(".0") else text
+
+
+def format_level(metric: str, value: float) -> str:
+    unit = METRICS[metric].unit if metric in METRICS else "count"
+    if unit == "minutes":
+        return duration(value)
+    if unit == "clock":
+        return clock(value)
+    return _number(value) + SUFFIXES.get(unit, "")
+
+
+def format_change(metric: str, value: float) -> str:
+    """The size of a difference, without its sign: the wording carries the direction."""
+    unit = METRICS[metric].unit if metric in METRICS else "count"
+    if unit == "minutes":
+        return duration(value)
+    if unit == "clock":
+        return duration(value * 60)  # a bedtime shift reads as minutes
+    return _number(abs(value)) + SUFFIXES.get(unit, "")
+
+
+def short_date(day: date | str) -> str:
+    day = date.fromisoformat(day) if isinstance(day, str) else day
+    return f"{day:%b} {day.day}"
+
+
+def display(evidence: Evidence) -> dict[str, str]:
+    """The evidence's values as a person would read them, for the model to quote."""
+    if len(evidence.metrics) != 1:
+        shown: dict[str, str] = {}
+    else:
+        metric = evidence.metrics[0]
+        shown = {
+            key: format_level(metric, value)
+            for key, value in evidence.stats.items()
+            if key in LEVEL_KEYS and value is not None
+        }
+        shown |= {
+            key: format_change(metric, value)
+            for key, value in evidence.stats.items()
+            if key in CHANGE_KEYS and value is not None
+        }
+        if (pct := evidence.stats.get("pct_change")) is not None:
+            shown["pct_change"] = f"{abs(pct):.0f}%"
+    if change_date := evidence.stats.get("change_date"):
+        shown["change_date"] = short_date(change_date)
+    shown["windows"] = ", ".join(
+        f"{short_date(w.start)} to {short_date(w.end)}" for w in evidence.windows
+    )
+    return shown
+
+
+def metric_list(metrics: list[str] | tuple[str, ...]) -> str:
+    """How the task names the metrics: the tool name with what people call it."""
+    return ", ".join(f"{m} ({label(m)})" for m in metrics)

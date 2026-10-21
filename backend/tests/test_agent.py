@@ -251,3 +251,50 @@ def test_run_agent_shares_evidence_with_the_toolbox(frame):
     )
     result = run_agent(llm, box, "Describe my sleep.")
     assert result.evidence is box.evidence and len(box.evidence) == 1
+
+
+def test_evidence_shows_the_model_readable_values_and_names(frame):
+    llm = ScriptedLLM(
+        [
+            ScriptedLLM.call("describe", metric="bedtime_hour", start=day(0), end=day(59)),
+            ScriptedLLM.say("x"),
+            ScriptedLLM.say("y"),
+        ]
+    )
+    answer(llm, frame, "When do I go to bed?")
+    payload = json.loads(llm.requests[1]["messages"][-1]["content"])
+    assert payload["labels"] == {"bedtime_hour": "bedtime"}
+    assert ":" in payload["display"]["mean"]  # a clock time, while stats keep hours
+    assert isinstance(payload["stats"]["mean"], float)
+    assert "bedtime_hour (bedtime)" in llm.requests[0]["messages"][1]["content"]
+
+
+def test_an_unsupported_summary_is_repaired_then_replaced(frame):
+    def with_summary(text):
+        def turn(messages):
+            evidence = evidence_from(messages, "describe")
+            return submit(
+                [
+                    {
+                        "text": "Your sleep stayed about the same.",
+                        "kind": "no_change",
+                        "evidence_ids": [evidence["evidence_id"]],
+                        "metric": "sleep_minutes",
+                    }
+                ],
+                summary=text,
+            )
+
+        return turn
+
+    llm = ScriptedLLM(
+        [
+            ScriptedLLM.call("describe", metric="sleep_minutes", start=day(0), end=day(59)),
+            with_summary("You lost 3 h 3 min of sleep."),
+            with_summary("You lost 3 h 3 min of sleep, really."),
+        ]
+    )
+    result = answer(llm, frame, "How is my sleep?")
+    repair = json.loads(llm.requests[2]["messages"][-1]["content"])
+    assert "durations not found" in " ".join(repair["summary_problems"])
+    assert result.summary == "Your sleep stayed about the same."  # the verified claim instead

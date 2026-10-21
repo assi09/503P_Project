@@ -18,8 +18,9 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
+from app.agent.present import metric_list
 from app.agent.tools import Toolbox, evidence_payload
-from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, verify
+from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, text_problems, verify
 from app.analysis.evidence import Evidence
 from app.analysis.screen import screen
 
@@ -44,11 +45,18 @@ How to work:
    correlate. Every tool returns evidence with an evidence_id.
 3. Call submit_findings once, with a short summary, your claims and each hypothesis's status.
 
+Writing for the person (the summary and every claim's text are shown to them as written):
+- At most 4 claims, the ones that matter most, each one plain sentence. The summary is one or two
+  sentences.
+- Call metrics by the names in the task ("time asleep", "bedtime"), never by tool names such as
+  sleep_minutes.
+- Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
+  "12%"), and dates as "Aug 15".
+
 Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
   an association says whether it goes up or down.
-- Quote only numbers and dates that appear in the cited evidence; round them the way people talk
-  ("about 45 minutes", "7.2 hours").
+- Quote only numbers, times and dates that appear in the cited evidence.
 - Only claim a change or an association when the evidence is significant. Say "no clear change"
   otherwise.
 - The tools show change and association, not cause: write "went with" or "coincided with", never
@@ -104,13 +112,14 @@ def _control_tools() -> list[dict]:
     ]
 
 
-def _rejections_message(rejected: list[Rejection], accepted: int) -> str:
+def _rejections_message(rejected: list[Rejection], accepted: int, summary: list[str]) -> str:
     return json.dumps(
         {
             "accepted_claims": accepted,
             "rejected_claims": [
                 {"text": r.claim.text, "reasons": list(r.reasons)} for r in rejected
             ],
+            "summary_problems": summary,
             "instruction": "Fix or drop the rejected claims and call submit_findings again with "
             "the complete list of claims.",
         }
@@ -174,7 +183,8 @@ def run_agent(
         for call in completion.tool_calls:
             content, done = _handle(call, toolbox, result, budget, repairs_left)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
-            if call.name == SUBMIT and not done and result.rejected:
+            # A verified submission sent back for repair uses up the repair round.
+            if call.name == SUBMIT and not done and result.trace[-1]["type"] == "verify":
                 repairs_left -= 1
             submitted = submitted or done
         if submitted:
@@ -204,6 +214,8 @@ def _handle(
             result.trace.append({"type": "submit", "error": message})
             return json.dumps({"error": f"Invalid submission: {message}"}), False
         verdict = verify(submission.claims, toolbox.evidence)
+        # The summary is shown too: it may only use what the run's evidence holds.
+        summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
         result.summary = submission.summary
         result.hypotheses = submission.hypotheses
         result.claims = list(verdict.accepted)
@@ -215,10 +227,16 @@ def _handle(
                 "rejected": [
                     {"text": r.claim.text, "reasons": list(r.reasons)} for r in verdict.rejected
                 ],
+                "summary_problems": summary_problems,
             }
         )
-        if verdict.rejected and repairs_left > 0:
-            return _rejections_message(list(verdict.rejected), len(verdict.accepted)), False
+        if (verdict.rejected or summary_problems) and repairs_left > 0:
+            message = _rejections_message(
+                list(verdict.rejected), len(verdict.accepted), summary_problems
+            )
+            return message, False
+        if summary_problems:  # still wrong after the repair: show a verified claim instead
+            result.summary = verdict.accepted[0].text if verdict.accepted else ""
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 
     if budget.tool_calls > budget.max_tool_calls:
@@ -239,7 +257,7 @@ def _handle(
 def _describe_range(toolbox: Toolbox) -> str:
     return (
         f"Data covers {toolbox.first_day} to {toolbox.last_day}. "
-        f"Metrics you can use: {', '.join(toolbox.metrics)}."
+        f"Metrics you can use, with what people call them: {metric_list(toolbox.metrics)}."
     )
 
 

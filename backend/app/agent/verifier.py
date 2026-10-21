@@ -39,8 +39,8 @@ class Hypothesis(BaseModel):
 class Submission(BaseModel):
     """What the agent hands in at the end of a run."""
 
-    summary: str = Field(max_length=600)
-    claims: list[Claim] = Field(max_length=8)
+    summary: str = Field(max_length=400)
+    claims: list[Claim] = Field(max_length=5)
     hypotheses: list[Hypothesis] = Field(default_factory=list, max_length=12)
 
 
@@ -107,7 +107,13 @@ MONTH_DAY = re.compile(
 DAY_MONTH = re.compile(
     r"\b(\d{1,2}) (" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b", re.I
 )
-CLOCK = re.compile(r"\b\d{1,2}:\d{2}\b")
+CLOCK = re.compile(r"\b(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?(?![\w:])", re.IGNORECASE)
+DURATION = re.compile(
+    r"(?<![\d.,])(\d+)\s*(?:h|hr|hrs|hours?)\b(?:\s*(?:and\s*)?(\d+)\s*(?:min|mins|minutes?)\b)?",
+    re.IGNORECASE,
+)
+# Internal column names (sleep_minutes, hrv_ms...) must not reach the person.
+COLUMN_NAME = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
 NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
 
 
@@ -136,6 +142,19 @@ def _numbers_in(value) -> list[float]:
         return [n for v in value for n in _numbers_in(v)]
     return []
 
+
+LEVEL_KEYS = (
+    "mean",
+    "median",
+    "min",
+    "max",
+    "mean_recent",
+    "mean_baseline",
+    "mean_before",
+    "mean_after",
+    "mean_weekend",
+    "mean_weekday",
+)
 
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
 VALUE_KEYS = (
@@ -187,11 +206,12 @@ def _allowed_numbers(cited: list[Evidence]) -> list[float]:
 
 
 def _quoted_numbers(text: str) -> list[tuple[float, int]]:
-    """Numbers in a sentence with their decimal places, ignoring dates and clock times."""
+    """Numbers in a sentence with their decimal places, ignoring dates, times and durations."""
     text = ISO_DATE.sub(" ", text)
     text = MONTH_DAY.sub(" ", text)
     text = DAY_MONTH.sub(" ", text)
     text = CLOCK.sub(" ", text)
+    text = DURATION.sub(" ", text)
     found = []
     for match in NUMBER.finditer(text):
         raw = match.group().replace(",", "")
@@ -206,6 +226,34 @@ def _matches(number: float, decimals: int, allowed: list[float]) -> bool:
         if abs(number - value) <= tolerance + 1e-9:
             return True
     return False
+
+
+def _quoted_durations(text: str) -> list[float]:
+    """Durations written as hours and minutes ("7 h 12 min", "2 hours"), in minutes."""
+    return [int(h) * 60 + int(m or 0) for h, m in DURATION.findall(text)]
+
+
+def _quoted_clock_times(text: str) -> list[float]:
+    """Times of day ("23:30", "11:30 pm"), as hours relative to midnight (23:30 -> -0.5)."""
+    times = []
+    for h, m, meridiem in CLOCK.findall(text):
+        hours = (
+            int(h) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else int(h)
+        )
+        value = hours + int(m) / 60
+        times.append(value - 24 if value >= 12 else value)
+    return times
+
+
+def _clock_levels(cited: list[Evidence]) -> list[float]:
+    """The times of day the cited evidence holds: levels of metrics measured as a clock time."""
+    return [
+        value
+        for evidence in cited
+        if any(metric.endswith("_hour") for metric in evidence.metrics)
+        for key, value in evidence.stats.items()
+        if key in LEVEL_KEYS and isinstance(value, int | float)
+    ]
 
 
 def _quoted_dates(text: str, years: set[int]) -> list[date]:
@@ -283,24 +331,45 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         ):
             reasons.append("the wording contradicts the stated direction")
 
+    return reasons + text_problems(claim.text, cited)
+
+
+def text_problems(text: str, cited: list[Evidence]) -> list[str]:
+    """What is wrong with a sentence shown to the person, given the evidence it rests on."""
+    reasons = []
     allowed = _allowed_numbers(cited)
-    unsupported = [n for n, d in _quoted_numbers(claim.text) if not _matches(n, d, allowed)]
+    unsupported = [n for n, d in _quoted_numbers(text) if not _matches(n, d, allowed)]
     if unsupported:
         reasons.append(
             "quotes numbers not found in the cited evidence: "
             + ", ".join(f"{n:g}" for n in unsupported)
         )
+    durations = [m for m in _quoted_durations(text) if not _matches(m, 0, allowed)]
+    if durations:
+        reasons.append(
+            "quotes durations not found in the cited evidence: "
+            + ", ".join(f"{m:g} min" for m in durations)
+        )
+    levels = _clock_levels(cited)
+    times = [t for t in _quoted_clock_times(text) if not any(abs(t - v) <= 0.1 for v in levels)]
+    if times:
+        reasons.append("quotes times of day not found in the cited evidence")
     years = {w.start.year for e in cited for w in e.windows} | {
         w.end.year for e in cited for w in e.windows
     }
-    if bad := [d for d in _quoted_dates(claim.text, years) if not _date_supported(d, cited)]:
+    if bad := [d for d in _quoted_dates(text, years) if not _date_supported(d, cited)]:
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
+    if columns := COLUMN_NAME.findall(text):
+        reasons.append(
+            "uses internal metric names (" + ", ".join(sorted(set(columns))) + "); use the "
+            "names people use, as given in the task"
+        )
 
-    if MEDICAL.search(claim.text):
+    if MEDICAL.search(text):
         reasons.append("uses medical language; describe patterns, do not diagnose")
-    if CAUSAL.search(claim.text):
+    if CAUSAL.search(text):
         reasons.append("states causation; the tools show change and association, not cause")
-    if ENERGY_BALANCE.search(claim.text):
+    if ENERGY_BALANCE.search(text):
         reasons.append("reasons about calorie balance, which Fitbit's estimates cannot support")
     return reasons
 
