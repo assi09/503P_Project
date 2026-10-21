@@ -1,0 +1,21 @@
+# Local development services. `docker compose up -d db` starts Postgres on localhost:5433
+# (5433 so it does not clash with a Postgres already installed on 5432).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fitbit_agent
+      POSTGRES_PASSWORD: local-dev-only
+      POSTGRES_DB: fitbit_agent
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitbit_agent -d fitbit_agent"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  db-data:

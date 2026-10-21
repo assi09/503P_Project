@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     google_client_id: SecretStr | None = None
     google_client_secret: SecretStr | None = None
     google_token_file: Path = Path("data/google_token.json")
+    # The database: Postgres from docker-compose.yml locally, a managed Postgres when deployed.
+    database_url: str = (
+        "postgresql+psycopg://fitbit_agent:local-dev-only@localhost:5433/fitbit_agent"
+    )
 
 
 settings = Settings()
