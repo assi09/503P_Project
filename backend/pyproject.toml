@@ -9,6 +9,8 @@ description = "Agentic analysis of longitudinal Fitbit data"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    "google-auth-oauthlib>=1.5",
+    "httpx2>=2.14",
     "numpy>=1.26",
     "pandas>=2.2",
     "pydantic>=2.7",
@@ -19,7 +21,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "httpx2>=2.14",  # Starlette's TestClient
     "pytest>=8",
     "ruff>=0.6",
 ]
