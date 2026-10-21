@@ -11,12 +11,17 @@ agent makes must be backed by a computed statistic** (an `Evidence` record) that
 inspect. The course grades evaluation, reliability, security, AgentOps and engineering practice,
 and bonus credit needs *evidence of use*, so process matters as much as code.
 
+**Start with [docs/status.md](docs/status.md)**: the objective, what works, the local setup
+(including the Google Cloud project), the data on disk, decisions so far and what is next. The
+agent and its evaluation are the priority.
+
 | Path | Contents |
 |---|---|
-| `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), deterministic analysis tools returning `Evidence` (`app/analysis`), synthetic data with planted effects (`app/synthetic.py`) |
+| `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 57) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric and its Fitbit source) |
+| `docs/` | `status.md` (where the project is), `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
+| `docker-compose.yml` | local Postgres on port 5433 |
 
 The app talks to the backend only through the contract in `mobile/src/api/types.ts`. Until an
 endpoint exists in the backend, the app uses the in-memory mock in `mobile/src/api/mock.ts`.
@@ -27,6 +32,11 @@ endpoint exists in the backend, the app uses the in-memory mock in `mobile/src/a
   and `.env` are git-ignored; keep it that way. Test fixtures and mock data use **made-up
   values**; only headers and formats may be copied from a real export. Before every commit, check
   the diff for real values, personal paths and secrets.
+- **Secrets stay local.** The OAuth client ID and secret live only in `.env`; the Google sign-in in
+  `data/google_token.json`. Never print, log or paste tokens, and never print personal health
+  values in commands, PRs or chat: report aggregates (counts, agreement rates).
+- **One source per history.** Never combine Takeout and API data into one series: the API's sleep
+  comes from a newer algorithm, so a mix fakes a change. Daily metrics are stored per source.
 - **No medical diagnosis or advice**, anywhere: agent output, mock replies or UI copy. The app
   describes patterns in the user's own data.
 - **The LLM never computes statistics.** Numbers come from deterministic tools in
@@ -74,6 +84,10 @@ cd backend && ruff check . && ruff format --check . && pytest -q
 - When ingestion changes, also run it on the real local export (`Takeout/`, if present) and check
   the result against Fitbit's own values. Report only aggregates; never commit or paste
   personal values.
+- When the API mapping changes, run `python -m app.sync compare --export Takeout` (needs a sign-in)
+  and compare with the results recorded in `docs/metrics.md`.
+- When the models change, add a migration (`alembic -c backend/alembic.ini revision --autogenerate
+  -m "..."`); the tests fail if models and migrations drift apart.
 
 **Mobile**
 
@@ -115,6 +129,17 @@ npx expo export --platform web     # the web build must still build
   Expo login on both.
 - In the Takeout export, the legacy `Global Export Data` steps file is in UTC but its calories file
   is in local time; activity minutes come from Fitbit's daily totals, not `Activity Level`.
+- Newer Takeout exports have **no** `Global Export Data` folder, and every nutrition value is "N/A".
+  Live data comes from the API instead.
+- Google Health API quirks: `sleep` returns nothing without a time filter; `steps` ignores
+  `pageSize`; 64-bit numbers arrive as strings and durations as `"123s"`; the Active Zone Minutes
+  cardio and peak sums are already doubled; daily roll-ups accept at most 90 days (14 for heart
+  rate, active minutes and calories).
+- The Google OAuth app is in Testing mode: the sign-in expires after 7 days (`ReconnectNeeded`);
+  run `python -m app.sync connect` again. Only listed test users can sign in.
+- Postgres for this project is on port **5433** (`docker compose up -d db`); 5432 may be another
+  Postgres on the machine.
+- macOS may block reading `~/Downloads` from the terminal; move files into the project instead.
 
 ## When in doubt
 
