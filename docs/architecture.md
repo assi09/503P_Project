@@ -31,6 +31,8 @@ verifier rejects statements it cannot match to one.
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
 | Agent, verifier, memory | `backend/app/agent/` | planned |
+| Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
+| Router and experts | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | planned |
 | Evaluation suite | `eval/` | planned |
@@ -68,10 +70,13 @@ numbers all come from its evidence. It is what the app shows until the agent exi
 
 ### Agent (planned)
 
-A single agent, not a multi-agent system. It screens the data for changes, forms hypotheses about
-*why* a metric changed (for example a bedtime shift, an activity change, or a data-quality problem
-such as low wear time), chooses which tools to run to test them, and stops when the hypotheses are
-resolved or its budget is spent. It never computes statistics itself.
+A router and specialist experts (sleep, recovery, activity, later nutrition), each owning a set of
+metrics; see [product.md](product.md#experts) for the split and how cross-domain questions are
+handled. An expert screens its metrics for changes, forms hypotheses about *why* a metric changed
+(for example a bedtime shift, an activity change, or a data-quality problem such as low wear
+time), chooses which tools to run to test them, and stops when the hypotheses are resolved or its
+budget is spent. It never computes statistics itself. Whether the split beats a single general
+agent is measured, not assumed.
 
 ### Verifier (planned)
 
