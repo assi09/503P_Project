@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://fitbit_agent:local-dev-only@localhost:5433/fitbit_agent"
     )
+    # The agent's language model: a small model for tool loops, a large one for write-ups.
+    openai_api_key: SecretStr | None = None
+    openai_small_model: str = "gpt-5.4-mini"
+    openai_large_model: str = "gpt-5.5"
+    # Hard cap on model spending by this process, in US dollars.
+    llm_spend_cap_usd: float = 20.0
 
 
 settings = Settings()
