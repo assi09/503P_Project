@@ -29,9 +29,11 @@ class FixedRouter:
         needed = {e: 1.0 if e in needs else 0.0 for e in EXPERT_LABELS}
         self.result = Classification(topic, needed, source="test")
         self.questions: list[str] = []
+        self.earlier: list[list[str]] = []
 
-    def classify(self, question: str) -> Classification:
+    def classify(self, question: str, earlier=()) -> Classification:
         self.questions.append(question)
+        self.earlier.append(list(earlier))
         return self.result
 
 

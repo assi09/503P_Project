@@ -160,6 +160,7 @@ def test_only_a_clean_short_question_leaves_the_server():
         ("Do I have insomnia?", OUT_OF_SCOPE),
         ("Should I see a doctor about my heart rate?", OUT_OF_SCOPE),
         ("What medication would help me sleep?", OUT_OF_SCOPE),
+        ("Should I take melatonin for it?", OUT_OF_SCOPE),
     ],
 )
 def test_the_keyword_rule_labels_plain_questions(question, label):
@@ -170,6 +171,10 @@ def test_the_keyword_rule_labels_plain_questions(question, label):
 def test_the_keyword_rule_does_not_refuse_questions_about_being_sick():
     result = KeywordRouter().classify("Did my HRV drop when I was sick?")
     assert result.top == "recovery"
+    supplements = KeywordRouter().classify(
+        "Did my protein-supplement days go with better recovery?"
+    )
+    assert supplements.top != OUT_OF_SCOPE
 
 
 def test_the_keyword_rule_says_a_cross_domain_question_needs_both_experts():
@@ -188,7 +193,8 @@ def test_the_llm_router_reads_probabilities_from_its_tool_call():
     request = llm.requests[0]
     assert request["tools"] == ["route"]
     assert json.loads(request["messages"][1]["content"]) == {
-        "question": "How many steps did I walk?"
+        "question": "How many steps did I walk?",
+        "earlier_questions": [],
     }
 
 
@@ -261,3 +267,27 @@ def test_a_chosen_expert_leads_and_the_router_still_picks_its_consults():
 def test_an_unknown_expert_choice_is_a_programming_error():
     with pytest.raises(ValueError, match="unknown expert"):
         decide(classified(sleep=1.0), choice="cardiology")
+
+
+def test_jev_sees_up_to_three_earlier_questions_newest_first():
+    api = FakeJev(choice(probabilities(sleep=1.0)))
+    earlier = ["Has my bedtime moved?", "How is my HRV?", "Steps?", "Oldest\x00 one?"]
+    jev(api).classify("And last week?", earlier)
+    body = json.loads(api.requests[0].content)
+    assert body["state"] == {
+        "question": "And last week?",
+        "earlier_questions": ["Has my bedtime moved?", "How is my HRV?", "Steps?"],
+    }
+    assert "current question" in body["questions"]["topic"]["instructions"]
+
+
+def test_the_keyword_rule_reads_a_follow_up_through_the_latest_question_with_a_topic():
+    earlier = ["Thanks!", "Why is my HRV low?", "How many steps did I walk?"]
+    result = KeywordRouter().classify("And what about last week?", earlier)
+    assert result.top == "recovery"  # "Thanks!" has no topic, so the HRV question decides
+    assert KeywordRouter().classify("How is my sleep?", earlier).top == "sleep"  # its own wins
+
+
+def test_the_fallback_passes_the_earlier_questions_on():
+    router = FallbackRouter(jev(FakeJev(httpx2.ReadTimeout("slow"))), KeywordRouter())
+    assert router.classify("And last week?", ["Why is my HRV low?"]).top == "recovery"

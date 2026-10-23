@@ -11,13 +11,15 @@ consult the other experts the question needs.
 Jev (TypeSafe's typed decision model) is the classifier in the app. If it fails or times out, a
 keyword rule over metric names routes instead, so a question is never lost to the router. An LLM
 router exists for the evaluation, to compare accuracy, latency and cost. Every router receives the
-question text only, never the person's data or memory.
+question text only, never the person's data or memory: the current question and up to three earlier
+ones from the conversation, so a follow-up ("and last week?") can be read in light of what it refers
+to, even several questions back.
 """
 
 import json
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
@@ -47,18 +49,22 @@ CRITERIA = {
     "anything that is not about the person's own Fitbit data",
 }
 INSTRUCTIONS = (
-    "A person asks a question about their own Fitbit data. Which topic is the question about?"
+    "A person asks a question about their own Fitbit data, possibly following up on their earlier "
+    "questions. Which topic is the current question about? Earlier questions, newest first, only "
+    "show what it may refer to."
 )
 
 
 def needs_instructions(expert: str) -> str:
     return (
-        f"A person asks a question about their own Fitbit data. Does answering it need their "
-        f"{expert} data ({CRITERIA[expert]})?"
+        f"A person asks a question about their own Fitbit data, possibly following up on their "
+        f"earlier questions. Does answering the current question need their {expert} data "
+        f"({CRITERIA[expert]})?"
     )
 
 
 MAX_QUESTION_CHARS = 500
+MAX_EARLIER = 3  # earlier questions the router sees, newest first
 
 # Thresholds on the probabilities. Tuned by the router evaluation, not fitted to anyone's data.
 REFUSE_AT = 0.5  # out of scope at least this likely: refuse
@@ -92,12 +98,18 @@ class Classification:
 
 
 class Router(Protocol):
-    def classify(self, question: str) -> Classification: ...
+    def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification: ...
 
 
 def clean(question: str) -> str:
     """What leaves the server: the question only, without control characters, length-limited."""
     return CONTROL.sub(" ", question).strip()[:MAX_QUESTION_CHARS]
+
+
+def state(question: str, earlier: Sequence[str] = ()) -> dict:
+    """What a router is given: the cleaned question and the latest earlier ones, newest first."""
+    recent = [clean(q) for q in earlier[:MAX_EARLIER] if clean(q)]
+    return {"question": clean(question), "earlier_questions": recent}
 
 
 def normalized(raw: dict) -> dict[str, float]:
@@ -151,9 +163,11 @@ class JevRouter:
             base_url=settings.typesafe_base_url,
         )
 
-    def payload(self, question: str) -> dict:
+    def payload(self, question: str, earlier: Sequence[str] = ()) -> dict:
+        given = state(question, earlier)
         return {
-            "state": clean(question),
+            # A bare question when there is nothing earlier, as Jev reads plain text best.
+            "state": given if given["earlier_questions"] else given["question"],
             "model": self._model,
             # Evaluated in parallel in one call: the topic, and per expert whether it is needed.
             "questions": {
@@ -165,12 +179,12 @@ class JevRouter:
             },
         }
 
-    def classify(self, question: str) -> Classification:
+    def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
         started = self._clock()
         try:
             response = self._http.post(
                 self._url,
-                json=self.payload(question),
+                json=self.payload(question, earlier),
                 headers={"Authorization": f"Bearer {self._key}"},
             )
         except httpx2.TimeoutException as exc:
@@ -269,17 +283,34 @@ KEYWORDS = {
         r"intake",
     ),
 }
-# Not "sick" or "ill": "did my HRV drop when I was sick?" is a question about the data.
-OFF_TOPIC = _words(r"doctor", r"symptom", r"cure", r"medicine")
+# Not "sick" or "ill": "did my HRV drop when I was sick?" is a question about the data. Not
+# "supplement" either: "did my protein-supplement days go with better recovery?" is one too.
+OFF_TOPIC = _words(
+    r"doctor",
+    r"symptom",
+    r"cure",
+    r"medicine",
+    r"melatonin",
+    r"pills?\b",
+    r"drugs?\b",
+)
 
 
 class KeywordRouter:
-    """Metric words decide the topic; medical words mean out of scope. Free and instant."""
+    """Metric words decide the topic; medical words mean out of scope. Free and instant.
 
-    def classify(self, question: str) -> Classification:
-        text = clean(question)
+    A question with no metric words takes its topic from the latest earlier question that has some.
+    """
+
+    def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
+        given = state(question, earlier)
+        text = given["question"]
         probabilities = dict.fromkeys(LABELS, 0.0)
-        hits = {label: len(pattern.findall(text)) for label, pattern in KEYWORDS.items()}
+        hits = self._hits(text)
+        for previous in given["earlier_questions"]:
+            if any(hits.values()):
+                break
+            hits = self._hits(previous)
         needs = {label: 1.0 if count else 0.0 for label, count in hits.items()}
         if MEDICAL.search(text) or OFF_TOPIC.search(text):
             probabilities[OUT_OF_SCOPE] = 1.0
@@ -290,6 +321,10 @@ class KeywordRouter:
         else:
             probabilities |= {label: count / total for label, count in hits.items()}
         return Classification(probabilities, needs, source="keyword")
+
+    @staticmethod
+    def _hits(text: str) -> dict[str, int]:
+        return {label: len(pattern.findall(text)) for label, pattern in KEYWORDS.items()}
 
 
 ROUTE_TOOL = "route"
@@ -316,7 +351,7 @@ class LLMRouter:
     def __init__(self, llm: LLM):
         self._llm = llm
 
-    def classify(self, question: str) -> Classification:
+    def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
         tool = {
             "type": "function",
             "function": {
@@ -334,7 +369,7 @@ class LLMRouter:
         }
         messages = [
             {"role": "system", "content": LLM_ROUTER_PROMPT},
-            {"role": "user", "content": json.dumps({"question": clean(question)})},
+            {"role": "user", "content": json.dumps(state(question, earlier))},
         ]
         budget = Budget(max_calls=1, max_tool_calls=1, max_cost_usd=0.002)
         try:
@@ -360,11 +395,11 @@ class FallbackRouter:
     primary: Router
     fallback: Router
 
-    def classify(self, question: str) -> Classification:
+    def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
         try:
-            return self.primary.classify(question)
+            return self.primary.classify(question, earlier)
         except RouterError as exc:
-            return replace(self.fallback.classify(question), error=str(exc))
+            return replace(self.fallback.classify(question, earlier), error=str(exc))
 
 
 @dataclass(frozen=True)
