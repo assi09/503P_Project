@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_small_model: str = "gpt-5.4-mini"
     openai_large_model: str = "gpt-5.5"
+    # The router: TypeSafe's Jev, given the question text only.
+    typesafe_api_key: SecretStr | None = None
+    typesafe_model: str = "jev-latest"
+    typesafe_base_url: str = "https://api.typesafe.ai"
     # Hard cap on model spending by this process, in US dollars.
     llm_spend_cap_usd: float = 20.0
 
