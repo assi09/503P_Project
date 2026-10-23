@@ -8,6 +8,7 @@ must not diagnose, overstate causation, or reason about calorie balance from Fit
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
@@ -374,10 +375,17 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
     return reasons
 
 
-def verify(claims: list[Claim], evidence: dict[str, Evidence]) -> Verdict:
+def verify(
+    claims: list[Claim],
+    evidence: dict[str, Evidence],
+    extra: Callable[[Claim], list[str]] | None = None,
+) -> Verdict:
+    """Checks every claim; `extra` adds the caller's own rules, such as an expert's ownership."""
     accepted, rejected = [], []
     for claim in claims:
         reasons = check_claim(claim, evidence)
+        if extra:
+            reasons += extra(claim)
         if reasons:
             rejected.append(Rejection(claim, tuple(reasons)))
         else:
