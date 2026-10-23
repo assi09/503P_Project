@@ -209,9 +209,19 @@ def run_agent(
             break
 
         submitted = False
+        # The budget is charged for the whole turn at once; calls run in order until it is spent,
+        # so a turn with too many calls loses only the ones past the limit.
+        used = budget.tool_calls - len(completion.tool_calls)
         for call in completion.tool_calls:
+            used += 1
             content, done = _handle(
-                call, toolbox, result, budget, repairs_left, extras, claim_check
+                call,
+                toolbox,
+                result,
+                used > budget.max_tool_calls,
+                repairs_left,
+                extras,
+                claim_check,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -228,7 +238,7 @@ def _handle(
     call: ToolCall,
     toolbox: Toolbox,
     result: AgentResult,
-    budget: Budget,
+    over_budget: bool,
     repairs_left: int,
     extras: dict[str, ExtraTool],
     claim_check: Callable[[Claim], list[str]] | None,
@@ -281,7 +291,7 @@ def _handle(
             result.summary = verdict.accepted[0].text if verdict.accepted else ""
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 
-    if budget.tool_calls > budget.max_tool_calls:
+    if over_budget:
         message = f"The tool budget is spent; call {SUBMIT} now with what you have."
         result.trace.append({"type": "tool", "name": call.name, "error": message})
         return json.dumps({"error": message}), False

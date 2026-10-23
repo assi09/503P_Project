@@ -183,6 +183,19 @@ def test_a_reply_without_tools_gets_one_reminder(frame):
     assert result.stop_reason == "no_submission" and result.claims == []
 
 
+def test_a_turn_with_too_many_tool_calls_loses_only_the_excess(frame):
+    calls = tuple(
+        ToolCall(f"c{i}", "describe", {"metric": "sleep_minutes", "start": day(0), "end": day(9)})
+        for i in range(5)
+    )
+    many = Completion(None, calls, "scripted", Usage(), 0.0, 0.0)
+    llm = ScriptedLLM([many, ScriptedLLM.say("done"), ScriptedLLM.say("done")])
+    result = answer(llm, frame, "How is my sleep?", budget=Budget(max_tool_calls=3))
+    steps = [s for s in result.trace if s["type"] == "tool"]
+    assert [("evidence_id" in s) for s in steps] == [True, True, True, False, False]
+    assert len(result.evidence) == 3
+
+
 def test_the_budget_ends_the_run_and_warns_before_the_last_turn(frame):
     turns = [ScriptedLLM.call("describe", metric="sleep_minutes", start=day(0), end=day(59))] * 3
     llm = ScriptedLLM(list(turns))
