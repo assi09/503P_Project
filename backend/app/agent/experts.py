@@ -26,6 +26,7 @@ from app.agent.llm import LLM, Budget
 from app.agent.present import label, metric_list
 from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
 from app.agent.verifier import Claim
+from app.analysis.evidence import Evidence
 
 CONSULT = "consult"
 MAX_CONSULTS = 2
@@ -318,10 +319,16 @@ def ask_expert(
     consult: Iterable[str] = (),
     today: date | None = None,
     budget: Budget | None = None,
+    context: str = "",
+    evidence: dict[str, Evidence] | None = None,
+    owners: dict[str, str] | None = None,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
-    `consult` lists the experts the router allows it to consult, at most `MAX_CONSULTS`."""
+    `consult` lists the experts the router allows it to consult, at most `MAX_CONSULTS`.
+    `context`, `evidence` and `owners` come from `context.build`: the conversation block, the
+    earlier evidence the run may cite, and which expert produced each, so the ownership rule treats
+    an earlier answer's evidence like a consult's."""
     expert = EXPERTS[name]
     allowed = tuple(dict.fromkeys(c for c in consult if c != name))[:MAX_CONSULTS]
     budget = budget or lead_budget(depth, len(allowed))
@@ -334,7 +341,8 @@ def ask_expert(
             budget=budget,
         )
     toolbox = Toolbox(frame, visible_metrics(expert))
-    borrowed: dict[str, str] = {}
+    toolbox.evidence.update(evidence or {})
+    borrowed: dict[str, str] = dict(owners or {})
     consults = _Consults(llm, frame, expert, toolbox, budget, today, allowed, borrowed, [])
     consultable = consults.experts()
     extras = [consults.tool()] if consultable else []
@@ -342,7 +350,7 @@ def ask_expert(
     result = run_agent(
         llm,
         toolbox,
-        answer_task(toolbox, question, today),
+        answer_task(toolbox, question, today, context),
         system_prompt=prompt,
         budget=budget,
         extra_tools=extras,
