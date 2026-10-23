@@ -192,10 +192,10 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
 13. **Quick depth can run out before the test the question needs.** Asked about exercise and
     sleep at quick depth (8 tool calls), the model spent them on descriptions and change points, and
     the correlations that answer the question were refused as over budget.
-15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
-    since August", it did not call `propose_fact` in either real run, the second after the prompt
-    asked it to. Proposals work in the scripted tests.
 14. **"No clear change" can hide a real one.** After the per-run correction rejected a real but
     borderline sleep drop, the model claimed "time asleep did not clearly change", which the
     verifier allows on non-significant evidence. Honest in statistical terms, misleading in plain
     words; the evaluation's planted scenarios will measure how often it happens.
+15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
+    since August", it did not call `propose_fact` in either real run, the second after the prompt
+    asked it to. Proposals work in the scripted tests.
