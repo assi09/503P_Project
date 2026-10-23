@@ -23,9 +23,9 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 414 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 426 backend and ~50 mobile tests |
 
-**Not built yet:** memory retrieval beyond the conversation, the recovery score, nutrition
+**Not built yet:** the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -109,13 +109,12 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) and the memory tables with their write rules (PR #36) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) the memory tables with their write rules (PR #36) and memory retrieval with fact proposals (PR #37) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. Memory retrieval into the context (findings, context answers, facts) and the agent's
-   `checkins` and `propose_fact` tools.
-2. Live data and the agent served through the API to the app.
+1. Live data and the agent served through the API to the app (Sprint 1, item 5).
+2. Check-ins as data the tools can analyse, with the recovery score (Sprint 2).
 
 ## What has been tested
 
@@ -141,7 +140,7 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -172,9 +171,11 @@ Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](c
 7. **Cosmetic:** the model sometimes wraps quoted values in quote marks ("6 h 57 min").
 8. **Not wired yet:** the API and the app do not call `ask()`; the app's Ask screen still uses the
    mock.
-9. **Follow-ups recompute instead of citing.** Earlier answers' evidence is re-attached and citable,
-   but in the real conversation the model recomputed the same comparison. Correct, slightly more
-   expensive; a prompt nudge may be enough.
+9. **Follow-ups and memory recompute instead of citing.** Earlier answers' and findings' evidence
+   is re-attached and citable, but the model recomputed every time, even after the prompt said to
+   cite it. Since the per-run correction, this has a cost: in one run a sleep drop already verified
+   in memory was lost, because the recomputed test did not survive the correction, while citing the
+   stored one would have passed.
 10. **The advice guard misses implied diagnoses.** It caught 18 of 20 advice sentences (the word
     check 2 of 20) with no false alarms; it missed "your body is fighting something off" and "your
     heart rhythm may be irregular". Not tuned on the same set; to be measured on a held-out set in
@@ -191,6 +192,9 @@ Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](c
 13. **Quick depth can run out before the test the question needs.** Asked about exercise and
     sleep at quick depth (8 tool calls), the model spent them on descriptions and change points, and
     the correlations that answer the question were refused as over budget.
+15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
+    since August", it did not call `propose_fact` in either real run, the second after the prompt
+    asked it to. Proposals work in the scripted tests.
 14. **"No clear change" can hide a real one.** After the per-run correction rejected a real but
     borderline sleep drop, the model claimed "time asleep did not clearly change", which the
     verifier allows on non-significant evidence. Honest in statistical terms, misleading in plain

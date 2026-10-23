@@ -71,3 +71,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Two-turn conversation again with the guard on (OpenAI $0.0197, Jev guard $0.0001) | $0.0198 |
 | 2026-10-24 | Per-run correction: conversation, a traced rerun of turn 1, and turn 1 after the repair hint | $0.0371 |
 | 2026-10-24 | Coverage and summary checks: exercise question, two-turn conversation, exercise question again | $0.0551 |
+| 2026-10-24 | Memory retrieval and fact proposals: two runs with stored memory | $0.0226 |

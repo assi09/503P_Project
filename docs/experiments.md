@@ -163,3 +163,14 @@ Synthetic person: bedtime 1 h later and sleep 45 min shorter from Aug 15.
 | "Does exercising more change how I sleep?" | Jev: sleep leads, consults activity. Coverage flagged activity as missing in both rounds and **the answer ended with the fixed note** instead of skipping exercise; the summary check caught a summary describing a bedtime change the run had not tested. The repair did not add the missing part: it asked for a claim about activity, which the ownership rule rejects for the sleep expert (likely cause; reasons not saved). Wording fixed afterwards ($0.0274) |
 | Two-turn conversation | turn 1: 4 verified claims including the sleep drop; turn 2: no overstatement ("slightly later bedtime, but it was not statistically clear"), but it would have passed anyway, since turn 1's significant bedtime test was in the run ($0.0164) |
 | Exercise question again, after the rewording | **Jev did not mark activity as needed this time**, so coverage was not exercised and the rewording is still untested. Quick depth ran out of tool calls before the correlations; the real sleep drop was rejected after correction and the model claimed "did not clearly change", while the summary said "your sleep got shorter" (open issues 13, 14, 11) ($0.0113) |
+
+## Memory retrieval and fact proposals (PR #37), 2026-10-24
+
+Same synthetic person. Memory: a finding ("time asleep went down after Aug 15", with its evidence)
+and an answer ("travel" around Aug 15). Question: "I've been working night shifts since August. Why
+has my sleep dropped?"
+
+| Run | Result |
+|---|---|
+| 1 | both memory items retrieved (260 tokens, the finding's evidence attached); 4 verified claims, correct. But the answer used neither memory item nor the night shifts, did not propose a fact, and recomputed the drop instead of citing the attached evidence ($0.0095) |
+| 2, after two prompt lines (relate answers and facts to the data; propose a stated lasting fact) | the summary now relates the change to "the night-shift period you mentioned", not as a cause. Still no fact proposed, and still recomputed: the drop, re-dated with 4 change-point tests, did not survive the per-run correction and was lost, although citing the stored, verified evidence would have passed (open issues 9, 15) ($0.0131) |
