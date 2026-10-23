@@ -23,9 +23,9 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 327 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 359 backend and ~50 mobile tests |
 
-**Not built yet:** the context builder and memory, the recovery score, nutrition
+**Not built yet:** memory beyond the conversation, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -109,12 +109,13 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29) and the verifier's metric check (PR #30) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31) and the context builder for the conversation and attachments (PR #32) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
-[architecture.md](architecture.md#memory-and-context-designed-not-built). Next, in order:
+[architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. The context builder (chat history and attachments), then the memory tables and write path.
-2. Live data and the agent served through the API to the app.
+1. Open issues 3 and 4 (a run's tests corrected together; answers covering the whole question).
+2. The memory tables and write path (findings, context answers, check-ins, facts).
+3. Live data and the agent served through the API to the app.
 
 ## What has been tested
 
@@ -128,11 +129,14 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   $0.00003 a question; the keyword fallback 14 of 16.
 - **Routed answers end to end:** three runs; routing was right every time, and the third passed all
   four claims after three fixes (display names in claims, the tool-budget bug, null results).
+- **Follow-ups:** with the earlier questions, Jev routed 8 of 8 made-up follow-ups right (2 of 8
+  on the question alone), including references two and three questions back and a topic change;
+  a real two-turn conversation answered "What about on weekends?" about sleep with 4 verified claims.
 - **Consult policy:** 16 runs comparing consulting as routed (A) with skipping consults of experts
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.41 of OpenAI and $0.002 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.43 of OpenAI and $0.003 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -156,3 +160,6 @@ Spent so far on real runs: about $0.41 of OpenAI and $0.002 of Jev ([costs.md](c
 7. **Cosmetic:** the model sometimes wraps quoted values in quote marks ("6 h 57 min").
 8. **Not wired yet:** the API and the app do not call `ask()`; the app's Ask screen still uses the
    mock.
+9. **Follow-ups recompute instead of citing.** Earlier answers' evidence is re-attached and citable,
+   but in the real conversation the model recomputed the same comparison. Correct, slightly more
+   expensive; a prompt nudge may be enough.

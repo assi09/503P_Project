@@ -64,3 +64,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Same after both fixes: 4 verified claims, consult used | $0.0188 |
 | 2026-10-23 | Consult policy A vs B: 4 questions × 2 variants × 2 runs ([experiments.md](experiments.md#consult-policy-a-vs-b-2026-10-23)) | $0.2435 |
 | 2026-10-23 | Verifier metric check: sleep expert asked about HRV, no consult (4 verified claims) | $0.0081 |
+| 2026-10-23 | Follow-up routing, 8 conversations × 2 settings, Jev | $0.0005 |
+| 2026-10-23 | Two-turn conversation end to end (sleep, then "What about on weekends?") | $0.0156 |

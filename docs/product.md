@@ -122,7 +122,8 @@ first message is sent. The input has three controls:
 - **Depth:** *Quick* (the default) gives the expert a small tool budget; *Deep* lets it test more
   windows. Consults the router allows add their own budget at either depth. This is the latency
   and cost trade-off made visible, and both settings are measured in the evaluation.
-- **Attach:** a recent finding or a metric, shown above the input, which decides the topic.
+- **Attach:** a recent finding or a metric, shown above the input, which decides the topic: its
+  owner leads unless the user picked an expert, and an attached finding's evidence can be cited.
 
 Every answer says which expert gave it, whether the router or the user chose that expert, and
 which experts it consulted.
