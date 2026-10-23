@@ -151,17 +151,25 @@ def system_prompt(expert: Expert, frame: pd.DataFrame, depth: Depth, consultable
     ]
     if expert.notes:
         lines.append(f"- {expert.notes}")
+    # Without the owners' metrics the model cannot tell that "HRV" means asking recovery.
+    others = [e for e in EXPERTS.values() if e.name != expert.name and available(e, frame)]
+    lines.append(
+        "- Other experts and the metrics they own: "
+        + "; ".join(f"{e.name}: {_names(m for m in e.owns if m in frame.columns)}" for e in others)
+        + "."
+    )
     if depth is Depth.DEEP and consultable:
         lines.append(
-            f"- When the question is about another expert's metrics, call {CONSULT} with that "
-            f"expert ({', '.join(consultable)}) and a short question. You may then cite the "
-            "evidence it returns, including in claims about its metrics. Consult at most "
+            f"- When the question is about a metric you cannot see, call {CONSULT} with the "
+            "expert that owns it and a short question before you answer; never describe a "
+            "metric no evidence in this run covers. You may cite the evidence a consult "
+            f"returns, including in claims about that expert's metrics. Consult at most "
             f"{MAX_CONSULTS} times."
         )
     else:
         lines.append(
-            "- When the question is about other metrics, answer what your metrics show and say "
-            "that the rest is for another expert."
+            "- When the question is about a metric you cannot see, answer what your metrics show "
+            "and say which expert to ask about the rest; never describe that metric yourself."
         )
     return "\n".join(lines)
 

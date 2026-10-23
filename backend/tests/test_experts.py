@@ -112,6 +112,15 @@ def test_an_expert_answers_with_claims_about_its_own_metrics(frame):
     assert CONSULT not in request["tools"]  # quick answers do not consult
 
 
+def test_the_prompt_says_who_owns_the_metrics_the_expert_cannot_see(frame):
+    llm = ScriptedLLM([lambda m: submit([])])
+    ask_expert(llm, frame, "sleep", "Did my HRV move with my sleep?", depth=Depth.DEEP)
+    prompt = llm.requests[0]["messages"][0]["content"]
+    assert "recovery: heart rate variability (HRV)" in prompt
+    assert "nutrition" not in prompt  # no data, so not offered
+    assert f"call {CONSULT} with the expert that owns it" in prompt
+
+
 def test_claims_about_another_experts_metric_are_sent_back_then_dropped(frame):
     def about_steps(messages):
         evidence = evidence_from(messages, "describe")
