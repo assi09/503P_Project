@@ -109,13 +109,12 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28) and the router (PR #29) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29) and the verifier's metric check (PR #30) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-designed-not-built). Next, in order:
 
-1. The verifier rule for text that mentions a metric no evidence in the run covers (open issue 1).
-2. The context builder (chat history and attachments), then the memory tables and write path.
-3. Live data and the agent served through the API to the app.
+1. The context builder (chat history and attachments), then the memory tables and write path.
+2. Live data and the agent served through the API to the app.
 
 ## What has been tested
 
@@ -133,20 +132,21 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.40 of OpenAI and $0.002 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.41 of OpenAI and $0.002 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
-1. **Text can mention a metric no evidence covers.** The verifier checks numbers, dates and wording
-   but not which metrics a sentence talks about; a summary described HRV with no HRV evidence. Next
-   PR.
+1. ~~Text can mention a metric no evidence covers.~~ Fixed in PR #30: the verifier rejects a claim
+   or summary that names a metric its evidence does not cover (distinctive terms only, such as
+   "HRV" or "time asleep", not "sleep").
 2. **Consult policy A vs B** is undecided ([experiments.md](experiments.md#consult-policy-a-vs-b-2026-10-23));
    A stays until the evaluation compares both on the full scenario set.
 3. **False positives across many tests.** The screen corrects for testing many metrics, but tool
    calls within an agent run do not: one run reported an association that was not planted. Needs a
    per-run correction or a stricter bar for associations; to be measured in the evaluation.
 4. **Answers do not always address the question asked.** "Does exercising more change how I
-   sleep?" got correct sleep findings but no statement about exercise either way.
+   sleep?" got correct sleep findings but no statement about exercise either way, and a sleep
+   expert asked about HRV without a consult did not say to ask the recovery expert.
 5. **Routing thresholds are hand-set**, and Jev's probabilities vary a little between calls for the
    same question; the router evaluation needs a labeled question set (not the 16 used while
    designing).
