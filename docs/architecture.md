@@ -36,9 +36,10 @@ verifier rejects statements it cannot match to one.
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
-| General agent, verifier, readable findings | `backend/app/agent/` | done; experts, router and memory next |
+| General agent, verifier, readable findings | `backend/app/agent/` | done |
+| Experts and consult | `backend/app/agent/experts.py` | sleep, recovery, activity; nutrition defined, waiting for its columns |
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
-| Router and experts | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
+| Router | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
 | Evaluation suite | `eval/` | planned |
@@ -99,7 +100,8 @@ numbers all come from its evidence. It is what the app shows until the agent exi
 
 ### Agent
 
-`backend/app/agent/`. The general agent (`agent.py`) is built; the experts and router are next.
+`backend/app/agent/`. The general agent (`agent.py`) and the experts (`experts.py`) are built;
+the router is next.
 A run starts either from the screen's changes (`investigate`; when nothing changed, no model is
 called) or from a question (`answer`). The model records hypotheses, tests them with the toolbox
 (`tools.py`: validated calls over the analysis tools, limited to the metrics in scope), and calls
@@ -107,8 +109,17 @@ called) or from a question (`answer`). The model records hypotheses, tests them 
 its raw units. The LLM layer (`llm.py`) prices every call and enforces a per-run budget and a spending
 cap; `ScriptedLLM` stands in for the model in tests. Each run keeps a trace of every step.
 
-Planned: a router and specialist experts (sleep, recovery, activity, nutrition), each owning a set
-of metrics ([product.md](product.md#experts)), compared against the general agent as a baseline.
+**Experts** run the same loop with their own prompt and a toolbox over the metrics they own plus
+the ones they read ([product.md](product.md#experts)); wear time is shared. One rule is added to
+the verifier: **only the owner makes claims about a metric**. A claim about another expert's metric
+passes only when all its evidence came from that expert through `consult`. `consult` exists in
+*deep* answers only: it runs the other expert as a *quick* answer on a budget carved out of the
+lead's (leaving the lead enough calls to submit and repair), at most twice per answer and once per
+expert, and lends the lead the evidence behind its verified claims. Consulted experts cannot
+consult. An expert with no data (nutrition, for now) answers without calling the model. Budgets:
+quick 6 model calls, 8 tool calls, $0.02; deep 16, 24, $0.06; a consult at most 5, 6, $0.015.
+
+Planned: the router, and the evaluation comparing the experts with the general agent.
 
 ### Verifier
 
