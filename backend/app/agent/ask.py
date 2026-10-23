@@ -51,6 +51,7 @@ def _route_step(route: Route) -> dict:
         "type": "route",
         "source": c.source,
         "probabilities": {label: round(p, 4) for label, p in c.probabilities.items()},
+        "needs": {expert: round(p, 4) for expert, p in c.needs.items()},
         "action": route.action,
         "expert": route.expert,
         "consult": list(route.consult),

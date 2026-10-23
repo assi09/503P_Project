@@ -5,6 +5,7 @@ import pytest
 
 from app.agent.llm import LLMError, ScriptedLLM
 from app.agent.router import (
+    EXPERT_LABELS,
     GENERAL,
     JEV_PATH,
     LABELS,
@@ -25,8 +26,12 @@ def probabilities(**given: float) -> dict[str, float]:
     return dict.fromkeys(LABELS, 0.0) | given
 
 
-def classified(**given: float) -> Classification:
-    return Classification(probabilities(**given), source="test")
+def needing(*experts: str) -> dict[str, float]:
+    return {e: 0.9 if e in experts else 0.05 for e in EXPERT_LABELS}
+
+
+def classified(needs: tuple[str, ...] = (), **given: float) -> Classification:
+    return Classification(probabilities(**given), needing(*needs), source="test")
 
 
 class FakeJev:
@@ -49,12 +54,13 @@ def jev(api: FakeJev, **kwargs) -> JevRouter:
     return JevRouter("test-key", http=http, **kwargs)
 
 
-def choice(probs: dict, input_tokens: int = 100) -> httpx2.Response:
+def choice(probs: dict, needs: dict | None = None, input_tokens: int = 100) -> httpx2.Response:
     top = max(probs, key=probs.get)
     answer = {"type": "choice", "choice": top, "probabilities": probs, "confidence": probs[top]}
+    nouls = {f"needs_{e}": {"type": "noul", "noul": p} for e, p in (needs or needing(top)).items()}
     body = {
         "model": "jev-latest",
-        "answers": {"topic": answer},
+        "answers": {"topic": answer, **nouls},
         "usage": {"input_tokens": input_tokens},
     }
     return httpx2.Response(200, json=body)
@@ -71,14 +77,19 @@ def test_jev_gets_the_question_only_and_labels_to_choose_from():
     assert body["model"] == "jev-latest"
     question = body["questions"]["topic"]
     assert question["type"] == "choice" and set(question["criteria"]) == set(LABELS)
+    for expert in EXPERT_LABELS:  # and, separately, whether each expert's data is needed
+        needs = body["questions"][f"needs_{expert}"]
+        assert needs["type"] == "noul" and expert in needs["instructions"]
 
 
 def test_jev_probabilities_cost_and_latency_are_recorded():
     ticks = iter([10.0, 10.25])
-    api = FakeJev(choice(probabilities(sleep=0.7, recovery=0.3), input_tokens=1_000))
+    needs = needing("sleep", "recovery")
+    api = FakeJev(choice(probabilities(sleep=0.7, recovery=0.3), needs, input_tokens=1_000))
     result = jev(api, clock=lambda: next(ticks)).classify("How is my sleep?")
     assert result.source == "jev" and result.top == "sleep"
     assert result.probabilities["recovery"] == pytest.approx(0.3)
+    assert result.needs == needs
     assert result.cost_usd == pytest.approx(0.000042)
     assert result.latency_s == pytest.approx(0.25)
 
@@ -103,6 +114,14 @@ def test_missing_labels_count_as_zero_and_probabilities_are_rescaled():
         (httpx2.Response(200, json={"answers": {"topic": {"type": "noul"}}}), "expected format"),
         (choice({"sleep": -0.2, "recovery": 1.2}), "invalid probability"),
         (choice({"sleep": 0.0, "recovery": 0.0}), "no probabilities"),
+        (choice({"sleep": 1.0}, needing("sleep") | {"activity": 1.5}), "needs activity"),
+        (
+            httpx2.Response(
+                200,
+                json={"answers": {"topic": {"type": "choice", "probabilities": {"sleep": 1}}}},
+            ),
+            "expected format",
+        ),
     ],
 )
 def test_jev_failures_become_router_errors(response, message):
@@ -153,16 +172,19 @@ def test_the_keyword_rule_does_not_refuse_questions_about_being_sick():
     assert result.top == "recovery"
 
 
-def test_the_keyword_rule_splits_cross_domain_questions():
+def test_the_keyword_rule_says_a_cross_domain_question_needs_both_experts():
     result = KeywordRouter().classify("Did my late nights hurt my recovery?")
-    assert result.probabilities["sleep"] == pytest.approx(0.5)
-    assert result.probabilities["recovery"] == pytest.approx(0.5)
+    assert result.needs == {"sleep": 1.0, "recovery": 1.0, "activity": 0.0, "nutrition": 0.0}
 
 
 def test_the_llm_router_reads_probabilities_from_its_tool_call():
-    llm = ScriptedLLM([ScriptedLLM.call("route", cost_usd=0.0001, **probabilities(activity=1.0))])
+    route = ScriptedLLM.call(
+        "route", cost_usd=0.0001, topic=probabilities(activity=1.0), needs=needing("activity")
+    )
+    llm = ScriptedLLM([route])
     result = LLMRouter(llm).classify("How many steps did I walk?")
     assert result.top == "activity" and result.source == "llm" and result.cost_usd == 0.0001
+    assert result.needs == needing("activity")
     request = llm.requests[0]
     assert request["tools"] == ["route"]
     assert json.loads(request["messages"][1]["content"]) == {
@@ -175,6 +197,9 @@ def test_the_llm_router_fails_cleanly():
         LLMRouter(ScriptedLLM([ScriptedLLM.say("sleep, probably")])).classify("x")
     with pytest.raises(RouterError, match="no more turns"):
         LLMRouter(ScriptedLLM([])).classify("x")
+    without_needs = ScriptedLLM([ScriptedLLM.call("route", topic=probabilities(sleep=1.0))])
+    with pytest.raises(RouterError, match="which experts' data"):
+        LLMRouter(without_needs).classify("x")
     assert issubclass(RouterError, RuntimeError) and not issubclass(RouterError, LLMError)
 
 
@@ -192,7 +217,7 @@ def test_no_fallback_when_jev_answers():
 
 
 def test_one_clear_label_goes_to_that_expert_alone():
-    route = decide(classified(sleep=0.85, recovery=0.1, general=0.05))
+    route = decide(classified(("sleep",), sleep=0.85, recovery=0.1, general=0.05))
     assert (route.action, route.expert, route.consult, route.routed) == (
         "expert",
         "sleep",
@@ -201,9 +226,15 @@ def test_one_clear_label_goes_to_that_expert_alone():
     )
 
 
-def test_a_cross_domain_question_is_led_by_the_likeliest_expert_with_consults():
-    route = decide(classified(recovery=0.5, sleep=0.3, activity=0.2))
+def test_a_cross_domain_question_is_led_by_the_likeliest_topic_with_consults():
+    route = decide(classified(("recovery", "sleep"), recovery=0.7, sleep=0.1, out_of_scope=0.2))
     assert route.expert == "recovery" and route.consult == ("sleep",)
+
+
+def test_consults_follow_what_the_question_needs_not_the_spare_topic_probability():
+    # The topic's leftover probability is uncertainty: it does not make a second expert needed.
+    route = decide(classified(("sleep",), sleep=0.6, activity=0.4))
+    assert route.expert == "sleep" and route.consult == ()
 
 
 def test_low_confidence_goes_to_the_general_agent():
@@ -218,7 +249,7 @@ def test_out_of_scope_is_refused_even_when_the_person_picked_an_expert():
 
 
 def test_a_chosen_expert_leads_and_the_router_still_picks_its_consults():
-    route = decide(classified(recovery=0.9, sleep=0.1), choice="sleep")
+    route = decide(classified(("recovery",), recovery=0.9, sleep=0.1), choice="sleep")
     assert (route.action, route.expert, route.consult, route.routed) == (
         "expert",
         "sleep",

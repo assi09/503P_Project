@@ -6,7 +6,14 @@ from app.agent.agent import SUBMIT
 from app.agent.ask import REFUSAL, ask, default_router
 from app.agent.experts import CONSULT
 from app.agent.llm import Completion, ScriptedLLM, ToolCall, Usage
-from app.agent.router import LABELS, Classification, FallbackRouter, KeywordRouter, RouterError
+from app.agent.router import (
+    EXPERT_LABELS,
+    LABELS,
+    Classification,
+    FallbackRouter,
+    KeywordRouter,
+    RouterError,
+)
 from app.config import Settings
 from app.synthetic import generate
 
@@ -17,8 +24,10 @@ def frame():
 
 
 class FixedRouter:
-    def __init__(self, **given: float):
-        self.result = Classification(dict.fromkeys(LABELS, 0.0) | given, source="test")
+    def __init__(self, needs: tuple[str, ...] = (), **given: float):
+        topic = dict.fromkeys(LABELS, 0.0) | given
+        needed = {e: 1.0 if e in needs else 0.0 for e in EXPERT_LABELS}
+        self.result = Classification(topic, needed, source="test")
         self.questions: list[str] = []
 
     def classify(self, question: str) -> Classification:
@@ -50,13 +59,14 @@ def test_a_clear_question_goes_to_its_expert_without_consults(frame):
 
 def test_a_cross_domain_question_lets_the_lead_consult_the_other_expert(frame):
     llm = ScriptedLLM([empty_submission()])
-    router = FixedRouter(recovery=0.55, sleep=0.45)
+    router = FixedRouter(("recovery", "sleep"), recovery=0.75, sleep=0.25)
     reply = ask(llm, router, frame, "Did my late nights hurt my recovery?")
     assert reply.result.expert == "recovery" and reply.route.consult == ("sleep",)
     assert CONSULT in llm.requests[0]["tools"]
     step = reply.result.trace[0]
     assert step["expert"] == "recovery" and step["consult"] == ["sleep"]
-    assert step["probabilities"]["sleep"] == pytest.approx(0.45)
+    assert step["probabilities"]["sleep"] == pytest.approx(0.25)
+    assert step["needs"] == {"sleep": 1.0, "recovery": 1.0, "activity": 0.0, "nutrition": 0.0}
 
 
 def test_low_confidence_goes_to_the_general_agent(frame):
@@ -68,7 +78,8 @@ def test_low_confidence_goes_to_the_general_agent(frame):
 
 def test_a_chosen_expert_answers_and_the_answer_says_it_was_chosen(frame):
     llm = ScriptedLLM([empty_submission()])
-    reply = ask(llm, FixedRouter(sleep=1.0), frame, "How is my sleep?", choice="activity")
+    router = FixedRouter(("sleep",), sleep=1.0)
+    reply = ask(llm, router, frame, "How is my sleep?", choice="activity")
     assert reply.result.expert == "activity" and not reply.route.routed
     assert reply.route.consult == ("sleep",)  # the router still decides who is consulted
 

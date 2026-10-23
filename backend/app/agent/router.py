@@ -1,8 +1,12 @@
 """Routing a question to the expert that owns its topic.
 
-A classifier gives a probability for each label: one per expert, `general`, and `out_of_scope`.
-Code, not the classifier, decides what to do with them (`decide`): refuse, hand the question to the
-general agent, or give it to the most likely expert, which may consult the other likely ones.
+A classifier answers two things about a question. Its **topic**: one probability per label (an
+expert, `general` or `out_of_scope`) that picks the lead and checks the scope. And, independently
+for each expert, whether answering **needs** that expert's data: a cross-domain question ("did my
+late nights hurt my recovery?") needs two. A single topic distribution cannot say that, because its
+spare probability is uncertainty, not a second topic. Code, not the classifier, decides what to do
+(`decide`): refuse, hand the question to the general agent, or give it to the lead expert, which may
+consult the other experts the question needs.
 
 Jev (TypeSafe's typed decision model) is the classifier in the app. If it fails or times out, a
 keyword rule over metric names routes instead, so a question is never lost to the router. An LLM
@@ -45,12 +49,21 @@ CRITERIA = {
 INSTRUCTIONS = (
     "A person asks a question about their own Fitbit data. Which topic is the question about?"
 )
+
+
+def needs_instructions(expert: str) -> str:
+    return (
+        f"A person asks a question about their own Fitbit data. Does answering it need their "
+        f"{expert} data ({CRITERIA[expert]})?"
+    )
+
+
 MAX_QUESTION_CHARS = 500
 
 # Thresholds on the probabilities. Tuned by the router evaluation, not fitted to anyone's data.
 REFUSE_AT = 0.5  # out of scope at least this likely: refuse
 LEAD_AT = 0.4  # the most likely expert must reach this, or the general agent answers
-CONSULT_AT = 0.25  # other experts this likely are consulted by the lead
+CONSULT_AT = 0.5  # other experts whose data the question needs this likely are consulted
 
 JEV_URL = "https://api.typesafe.ai"
 JEV_PATH = "/v1/systemone"
@@ -66,7 +79,8 @@ class RouterError(RuntimeError):
 
 @dataclass(frozen=True)
 class Classification:
-    probabilities: dict[str, float]  # every label, summing to 1
+    probabilities: dict[str, float]  # the topic: every label, summing to 1
+    needs: dict[str, float]  # per expert, the probability that answering needs its data
     source: str  # jev, keyword, llm
     latency_s: float = 0.0
     cost_usd: float = 0.0
@@ -90,16 +104,24 @@ def normalized(raw: dict) -> dict[str, float]:
     """Probabilities over every label, summing to 1. Raises `RouterError` on unusable values."""
     if not isinstance(raw, dict):
         raise RouterError("The router returned no probabilities.")
-    values = {}
-    for label in LABELS:
-        value = raw.get(label, 0.0)
-        if isinstance(value, bool) or not isinstance(value, int | float) or not 0 <= value <= 1:
-            raise RouterError(f"The router returned an invalid probability for {label}.")
-        values[label] = float(value)
+    values = {label: _probability(raw.get(label, 0.0), label) for label in LABELS}
     total = sum(values.values())
     if total <= 0:
         raise RouterError("The router returned no probabilities.")
     return {label: value / total for label, value in values.items()}
+
+
+def _probability(value, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 <= value <= 1:
+        raise RouterError(f"The router returned an invalid probability for {name}.")
+    return float(value)
+
+
+def needs_from(raw) -> dict[str, float]:
+    """One independent probability per expert. Raises `RouterError` on unusable values."""
+    if not isinstance(raw, dict) or set(raw) != set(EXPERT_LABELS):
+        raise RouterError("The router did not say which experts' data the question needs.")
+    return {expert: _probability(raw[expert], f"needs {expert}") for expert in EXPERT_LABELS}
 
 
 class JevRouter:
@@ -133,8 +155,13 @@ class JevRouter:
         return {
             "state": clean(question),
             "model": self._model,
+            # Evaluated in parallel in one call: the topic, and per expert whether it is needed.
             "questions": {
-                "topic": {"type": "choice", "instructions": INSTRUCTIONS, "criteria": CRITERIA}
+                "topic": {"type": "choice", "instructions": INSTRUCTIONS, "criteria": CRITERIA},
+                **{
+                    f"needs_{expert}": {"type": "noul", "instructions": needs_instructions(expert)}
+                    for expert in EXPERT_LABELS
+                },
             },
         }
 
@@ -159,16 +186,22 @@ class JevRouter:
             raise RouterError(f"Jev returned an error ({response.status_code}).")
         try:
             body = response.json()
-            answer = body["answers"]["topic"]
+            answers = body["answers"]
+            topic = answers["topic"]
+            needs = {e: answers[f"needs_{e}"] for e in EXPERT_LABELS}
         except (ValueError, KeyError, TypeError) as exc:
             raise RouterError("Jev's answer was not in the expected format.") from exc
-        if not isinstance(answer, dict) or answer.get("type") != "choice":
+        if not isinstance(topic, dict) or topic.get("type") != "choice":
             raise RouterError("Jev's answer was not in the expected format.")
-        probabilities = normalized(answer.get("probabilities"))
+        if not all(isinstance(a, dict) and a.get("type") == "noul" for a in needs.values()):
+            raise RouterError("Jev's answer was not in the expected format.")
+        probabilities = normalized(topic.get("probabilities"))
+        needed = needs_from({e: a.get("noul") for e, a in needs.items()})
         usage = body.get("usage") or {}
         input_tokens = usage.get("input_tokens") or 0
         return Classification(
             probabilities,
+            needed,
             source="jev",
             latency_s=self._clock() - started,
             cost_usd=input_tokens * JEV_PRICE_PER_MILLION_INPUT / 1_000_000,
@@ -246,24 +279,35 @@ class KeywordRouter:
     def classify(self, question: str) -> Classification:
         text = clean(question)
         probabilities = dict.fromkeys(LABELS, 0.0)
+        hits = {label: len(pattern.findall(text)) for label, pattern in KEYWORDS.items()}
+        needs = {label: 1.0 if count else 0.0 for label, count in hits.items()}
         if MEDICAL.search(text) or OFF_TOPIC.search(text):
             probabilities[OUT_OF_SCOPE] = 1.0
-            return Classification(probabilities, source="keyword")
-        hits = {label: len(pattern.findall(text)) for label, pattern in KEYWORDS.items()}
+            return Classification(probabilities, needs, source="keyword")
         total = sum(hits.values())
         if not total:
             probabilities[GENERAL] = 1.0
         else:
             probabilities |= {label: count / total for label, count in hits.items()}
-        return Classification(probabilities, source="keyword")
+        return Classification(probabilities, needs, source="keyword")
 
 
 ROUTE_TOOL = "route"
 LLM_ROUTER_PROMPT = (
     INSTRUCTIONS
-    + " Give the probability of each topic with the route tool; they should sum to 1.\n"
+    + " With the route tool, give the probability of each topic (they should sum to 1), and "
+    "separately for each of sleep, recovery, activity and nutrition the probability that "
+    "answering needs that data (each from 0 to 1).\n"
     + "\n".join(f"- {label}: {meaning}" for label, meaning in CRITERIA.items())
 )
+
+
+def _probabilities_schema(labels: tuple[str, ...]) -> dict:
+    return {
+        "type": "object",
+        "properties": {label: {"type": "number", "minimum": 0, "maximum": 1} for label in labels},
+        "required": list(labels),
+    }
 
 
 class LLMRouter:
@@ -281,9 +325,10 @@ class LLMRouter:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        label: {"type": "number", "minimum": 0, "maximum": 1} for label in LABELS
+                        "topic": _probabilities_schema(LABELS),
+                        "needs": _probabilities_schema(EXPERT_LABELS),
                     },
-                    "required": list(LABELS),
+                    "required": ["topic", "needs"],
                 },
             },
         }
@@ -300,7 +345,8 @@ class LLMRouter:
         if call is None or call.arguments is None:
             raise RouterError("The model did not route the question.")
         return Classification(
-            normalized(call.arguments),
+            normalized(call.arguments.get("topic")),
+            needs_from(call.arguments.get("needs")),
             source="llm",
             latency_s=completion.latency_s,
             cost_usd=completion.cost_usd,
@@ -334,14 +380,15 @@ def decide(classification: Classification, choice: str = "auto") -> Route:
     """What to do with a question, from its label probabilities and the person's expert choice.
 
     The scope check runs on every question, so choosing an expert cannot get a medical question
-    answered. Consults are the router's call: the other experts likely enough to be involved.
+    answered. Consults are the router's call: the other experts whose data the question needs.
     """
     if choice != "auto" and choice not in EXPERTS:
         raise ValueError(f"unknown expert {choice!r}")
     p = classification.probabilities
     if p[OUT_OF_SCOPE] >= REFUSE_AT:
         return Route("refuse", None, (), choice == "auto", classification)
-    ranked = sorted(EXPERT_LABELS, key=lambda label: p[label], reverse=True)
+    needs = classification.needs
+    ranked = sorted(EXPERT_LABELS, key=lambda label: needs[label], reverse=True)
     if choice != "auto":
         lead, routed = choice, False
     else:
@@ -349,5 +396,5 @@ def decide(classification: Classification, choice: str = "auto") -> Route:
         if top == GENERAL or p[top] < LEAD_AT:
             return Route("general", None, (), True, classification)
         lead, routed = top, True
-    consult = tuple(e for e in ranked if e != lead and p[e] >= CONSULT_AT)
+    consult = tuple(e for e in ranked if e != lead and needs[e] >= CONSULT_AT)
     return Route("expert", lead, consult, routed, classification)
