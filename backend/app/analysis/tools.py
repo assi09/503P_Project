@@ -195,7 +195,8 @@ def correlate(
 
     summary: dict = {
         "lags_tested": max_lag + 1,
-        "rho_by_lag": {lag: _round(rho) for lag, (rho, _, _) in by_lag.items()},
+        # String keys, as JSON has them, so stored evidence equals what the tool returned.
+        "rho_by_lag": {str(lag): _round(rho) for lag, (rho, _, _) in by_lag.items()},
         "best_lag": None,
         "rho": None,
         "p_value": None,

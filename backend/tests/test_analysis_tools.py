@@ -189,7 +189,7 @@ def test_correlate_false_positive_rate_stays_near_alpha():
 def test_correlate_uses_driver_values_from_before_the_window():
     frame = generate(START, 30, seed=7).frame
     evidence = correlate(frame, "steps", "calories", window(10, 29), max_lag=2)
-    assert all(lag in evidence.stats["rho_by_lag"] for lag in (0, 1, 2))
+    assert all(lag in evidence.stats["rho_by_lag"] for lag in ("0", "1", "2"))
     assert evidence.n == 20
 
 
