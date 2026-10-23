@@ -154,7 +154,11 @@ date in the text must come from the cited evidence; every metric the text names 
 that evidence (distinctive terms such as "HRV" or "time asleep"; generic words such as "sleep" do
 not count); and the text must not use internal metric names, diagnose, state causation or reason
 about calorie balance. The summary is checked too.
-Failing text goes back to the model once with the reasons, then is dropped.
+Failing text goes back to the model once with the reasons, then is dropped. Two checks look at the
+answer as a whole: the summary may describe a metric as changing only if a significant test of it is
+in the run, and **coverage**: when the router says the question needs another expert's data and no
+verified claim draws on it, the answer goes back once, then carries a fixed note saying that part is
+not covered.
 
 **The advice guard** (`guard.py`) checks by meaning what the word rules check by words. The router
 only judges the question, and an in-scope question can still get an answer that advises ("cutting

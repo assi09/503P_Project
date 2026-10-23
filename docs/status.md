@@ -23,7 +23,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 380 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 388 backend and ~50 mobile tests |
 
 **Not built yet:** memory beyond the conversation, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
@@ -109,13 +109,13 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33) and the per-run test correction (PR #34) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. Open issues 4 and 11 (answers covering the whole question; summaries overstating a change).
-2. The memory tables and write path (findings, context answers, check-ins, facts).
-3. Live data and the agent served through the API to the app.
+1. The memory tables and write path (findings, context answers, check-ins, facts), or first
+   open issues 13 and 14 if answer quality comes first.
+2. Live data and the agent served through the API to the app.
 
 ## What has been tested
 
@@ -141,7 +141,7 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.49 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -156,9 +156,13 @@ Spent so far on real runs: about $0.49 of OpenAI and $0.004 of Jev ([costs.md](c
    found only by the weaker change-point test can now be rejected; the repair message says to
    confirm it with `compare_windows`, which the model has not yet been seen doing (it dropped the
    claim instead).
-4. **Answers do not always address the question asked.** "Does exercising more change how I
-   sleep?" got correct sleep findings but no statement about exercise either way, and a sleep
-   expert asked about HRV without a consult did not say to ask the recovery expert.
+4. **Answers do not always address the question asked.** Partly fixed in PR #35: when the router
+   says a question needs another expert's data and no verified claim draws on it, the answer goes
+   back once, and if still missing it carries a fixed note saying that part is not covered (a
+   needed expert without data gets a note too). Seen working once: "Does exercising more change how
+   I sleep?" ended with the note instead of silently skipping exercise. Not yet seen: the repair
+   actually adding the missing part (its wording was fixed after the first try, because it asked
+   for a claim the ownership rule rejects; untested since).
 5. **Routing thresholds are hand-set**, and Jev's probabilities vary a little between calls for the
    same question; the router evaluation needs a labeled question set (not the 16 used while
    designing).
@@ -175,10 +179,19 @@ Spent so far on real runs: about $0.49 of OpenAI and $0.004 of Jev ([costs.md](c
     check 2 of 20) with no false alarms; it missed "your body is fighting something off" and "your
     heart rhythm may be irregular". Not tuned on the same set; to be measured on a held-out set in
     the attack suite.
-11. **A summary can overstate a non-significant difference.** One summary said sleep score was
-    "somewhat lower on weekends" while its own claim, correctly, said there was no clear
-    difference. The summary is checked for numbers, dates and metric names, not for claiming a
-    change; a direction-word check on summaries, or the guard asked one more question, could fix it.
+11. **A summary can overstate a non-significant difference.** Mostly fixed in PR #35: each clause
+    that names a metric with a direction word needs a significant test of that metric in the run;
+    it caught a summary describing an untested bedtime change. Limits: support is matched by metric,
+    not by the comparison (a weekend claim passes if any significant bedtime test is in the run),
+    and generic words are not checked ("your sleep got shorter" passed in a run whose claims said no
+    clear change).
+13. **Quick depth can run out before the test the question needs.** Asked about exercise and
+    sleep at quick depth (8 tool calls), the model spent them on descriptions and change points, and
+    the correlations that answer the question were refused as over budget.
+14. **"No clear change" can hide a real one.** After the per-run correction rejected a real but
+    borderline sleep drop, the model claimed "time asleep did not clearly change", which the
+    verifier allows on non-significant evidence. Honest in statistical terms, misleading in plain
+    words; the evaluation's planted scenarios will measure how often it happens.
 12. **Accepted risk: when Jev is down, the scope check is a word list.** Jev is the scope check and
     has always answered so far; the keyword fallback catches only listed words. Revisit if the
     attack suite shows it matters.

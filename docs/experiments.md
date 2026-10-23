@@ -153,3 +153,13 @@ sleep shorter from day 45, sleep following bedtime.
 | Two-turn conversation | the turn-1 sleep drop was **lost**: the model dated changes with 6 change-point tests only, and sleep's p = 0.048 became 0.096 after correction ($0.0159) |
 | Turn 1 again, traced | same; the repair round resubmitted without running a stronger test ($0.0101) |
 | Turn 1 after the repair hint | **sleep drop found** (compare_windows p = 0.014, corrected 0.028), 3 verified claims; but the model ran compare_windows before submitting, so the hint was not what found it; the one claim that got the hint (time in bed) was dropped, not confirmed ($0.0111) |
+
+## Coverage and summary checks (PR #35), 2026-10-24
+
+Synthetic person: bedtime 1 h later and sleep 45 min shorter from Aug 15.
+
+| Run | Result |
+|---|---|
+| "Does exercising more change how I sleep?" | Jev: sleep leads, consults activity. Coverage flagged activity as missing in both rounds and **the answer ended with the fixed note** instead of skipping exercise; the summary check caught a summary describing a bedtime change the run had not tested. The repair did not add the missing part: it asked for a claim about activity, which the ownership rule rejects for the sleep expert (likely cause; reasons not saved). Wording fixed afterwards ($0.0274) |
+| Two-turn conversation | turn 1: 4 verified claims including the sleep drop; turn 2: no overstatement ("slightly later bedtime, but it was not statistically clear"), but it would have passed anyway, since turn 1's significant bedtime test was in the run ($0.0164) |
+| Exercise question again, after the rewording | **Jev did not mark activity as needed this time**, so coverage was not exercised and the rewording is still untested. Quick depth ran out of tool calls before the correlations; the real sleep drop was rejected after correction and the model claimed "did not clearly change", while the summary said "your sleep got shorter" (open issues 13, 14, 11) ($0.0113) |
