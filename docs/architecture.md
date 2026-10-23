@@ -107,7 +107,8 @@ called) or from a question (`answer`). The model records hypotheses, tests them 
 (`tools.py`: validated calls over the analysis tools, limited to the metrics in scope), and calls
 `submit_findings`. Text shown to people uses the names and formats in `present.py`; the data keeps
 its raw units. The LLM layer (`llm.py`) prices every call and enforces a per-run budget and a spending
-cap; `ScriptedLLM` stands in for the model in tests. Each run keeps a trace of every step.
+cap; tool calls past the budget are refused one by one, so a turn that asks for too many loses only
+the excess. `ScriptedLLM` stands in for the model in tests. Each run keeps a trace of every step.
 
 **Experts** run the same loop with their own prompt and a toolbox over the metrics they own plus
 the ones they read ([product.md](product.md#experts)); wear time is shared. One rule is added to
