@@ -167,10 +167,13 @@ def _rejections_message(
     }
     if uncovered:
         message["uncovered"] = uncovered
+        # Worded so the claim it asks for can pass the ownership rule: about the expert's own
+        # metric, citing evidence that involves the other one, or citing what a consult found.
         message["instruction"] += (
-            " The question also concerns what is listed under uncovered: add a claim on what the "
-            "evidence shows about it, testing it first if needed, or a no_change claim if nothing "
-            "is significant."
+            " The question also concerns what is listed under uncovered. Add a claim about one of "
+            "your own metrics that cites evidence involving it, such as a correlation between it "
+            "and your metric (a no_change claim if it is not significant), or cite what the "
+            "expert you consulted about it found. Test it first if you have not."
         )
     return json.dumps(message)
 

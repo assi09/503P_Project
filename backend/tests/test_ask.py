@@ -371,6 +371,7 @@ def test_a_part_of_the_question_left_out_is_sent_back(frame):
     reply = ask(llm, router, frame, EXERCISE_QUESTION)
     repair = json.loads(llm.requests[2]["messages"][-1]["content"])
     assert repair["uncovered"] == ["activity"]
+    assert "one of your own metrics" in repair["instruction"]  # a claim the ownership rule allows
     assert len(reply.result.claims) == 2 and reply.result.uncovered == []
     assert reply.result.notes == []
 
