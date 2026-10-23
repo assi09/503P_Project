@@ -69,3 +69,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Two-turn conversation end to end (sleep, then "What about on weekends?") | $0.0156 |
 | 2026-10-23 | Advice guard on the 32-sentence set, Jev | $0.0002 |
 | 2026-10-23 | Two-turn conversation again with the guard on (OpenAI $0.0197, Jev guard $0.0001) | $0.0198 |
+| 2026-10-24 | Per-run correction: conversation, a traced rerun of turn 1, and turn 1 after the repair hint | $0.0371 |

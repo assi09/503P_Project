@@ -23,7 +23,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 373 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 380 backend and ~50 mobile tests |
 
 **Not built yet:** memory beyond the conversation, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
@@ -109,11 +109,11 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32) and the advice guard (PR #33) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33) and the per-run test correction (PR #34) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. Open issues 3 and 4 (a run's tests corrected together; answers covering the whole question).
+1. Open issues 4 and 11 (answers covering the whole question; summaries overstating a change).
 2. The memory tables and write path (findings, context answers, check-ins, facts).
 3. Live data and the agent served through the API to the app.
 
@@ -135,11 +135,13 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
 - **Advice guard:** on 20 made-up advice or diagnosis sentences and 12 sound ones, the word check
   caught 2 and the Jev guard 18, neither with a false alarm; on a real conversation the guard
   flagged nothing.
+- **Many tests per run:** simulated on 400 synthetic people (free): without a correction 56% of
+  runs on a calm person report something false; with it 6%.
 - **Consult policy:** 16 runs comparing consulting as routed (A) with skipping consults of experts
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.45 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.49 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -148,9 +150,12 @@ Spent so far on real runs: about $0.45 of OpenAI and $0.004 of Jev ([costs.md](c
    "HRV" or "time asleep", not "sleep").
 2. **Consult policy A vs B** is undecided ([experiments.md](experiments.md#consult-policy-a-vs-b-2026-10-23));
    A stays until the evaluation compares both on the full scenario set.
-3. **False positives across many tests.** The screen corrects for testing many metrics, but tool
-   calls within an agent run do not: one run reported an association that was not planted. Needs a
-   per-run correction or a stricter bar for associations; to be measured in the evaluation.
+3. ~~False positives across many tests.~~ Fixed in PR #34: a run's own tests are corrected
+   together. On 200 synthetic people with nothing planted, runs reporting something false fell from
+   56% to 6%; planted changes were still found 92-98% of the time. Trade-off: a borderline change
+   found only by the weaker change-point test can now be rejected; the repair message says to
+   confirm it with `compare_windows`, which the model has not yet been seen doing (it dropped the
+   claim instead).
 4. **Answers do not always address the question asked.** "Does exercising more change how I
    sleep?" got correct sleep findings but no statement about exercise either way, and a sleep
    expert asked about HRV without a consult did not say to ask the recovery expert.

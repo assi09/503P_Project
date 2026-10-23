@@ -147,7 +147,9 @@ other on a labeled question set.
 ### Verifier
 
 Deterministic (`verifier.py`). Each claim must cite existing, sufficient evidence; a change or an
-association must be significant and point the stated way; every number, duration, time of day and
+association must be significant and point the stated way, where **significance is judged after
+correcting for all of the run's own tests together** (Benjamini-Hochberg, the screen's method;
+evidence from the screen, a consult or an earlier answer keeps its own run's correction); every number, duration, time of day and
 date in the text must come from the cited evidence; every metric the text names must be covered by
 that evidence (distinctive terms such as "HRV" or "time asleep"; generic words such as "sleep" do
 not count); and the text must not use internal metric names, diagnose, state causation or reason
