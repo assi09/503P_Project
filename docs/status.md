@@ -1,6 +1,6 @@
 # Project status
 
-The page to read first when picking the project up. Updated 2026-10-21.
+The page to read first when picking the project up. Updated 2026-10-23.
 
 ## Objective
 
@@ -20,12 +20,12 @@ priority**; the UI and data plumbing exist to serve them.
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
 | Storage | Postgres in Docker with the first migration (users, Google connections, daily metrics, sync runs); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
-| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; first real run on a synthetic person explained the planted change correctly for $0.024 |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; first real run on a synthetic person explained the planted change correctly for $0.024; **experts** (sleep, recovery, activity; nutrition waiting for data) with ownership of claims and `consult` in deep answers |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, ~160 backend and ~50 mobile tests |
 
-**Not built yet:** experts, router and memory, human-readable wording of findings, the recovery score, nutrition
+**Not built yet:** router and memory, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -91,9 +91,8 @@ four experts with consult and the router, memory, live data and the agent served
 and experiments, tracing, accounts, deployment and the first evaluation; November after that is
 buffer and hardening.
 
-Sprint 1 so far: LLM layer, agent tools, general agent, verifier and human-readable findings are
-merged. The memory and context design (kinds, scope, lifetime, retrieval, write path, injection
+Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings and the
+experts with consult are done. The memory and context design (kinds, scope, lifetime, retrieval, write path, injection
 defenses, evaluation) is in [architecture.md](architecture.md#memory-and-context-designed-not-built).
-Next, in order: the four experts with consult, the Jev router and the context builder (chat
-history and attachments); then the memory tables and write path; then live data and the agent
+Next, in order: the Jev router and the context builder (chat history and attachments); then the memory tables and write path; then live data and the agent
 served through the API to the app.

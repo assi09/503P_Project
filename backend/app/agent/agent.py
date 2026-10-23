@@ -5,12 +5,13 @@ in claims that cite the evidence. The verifier checks every claim; rejected clai
 model once with the reasons, and whatever still fails is dropped. The run stops on submission, when
 its budget is spent, or on a model error, and always returns what it has, with a full trace.
 
-This is the general agent (all metrics, no routing). The experts reuse `run_agent` with their own
-prompt and metrics.
+This is the general agent (all metrics, no routing). The experts (`experts.py`) reuse `run_agent`
+with their own prompt, metrics, an extra claim rule and the `consult` tool.
 """
 
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -52,6 +53,7 @@ Writing for the person (the summary and every claim's text are shown to them as 
   sleep_minutes.
 - Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
   "12%"), and dates as "Aug 15".
+- Never write evidence ids in the text: they go in evidence_ids only.
 
 Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
@@ -66,10 +68,34 @@ Rules for claims:
 """
 
 
+@dataclass(frozen=True)
+class ExtraTool:
+    """A tool the caller adds to the loop, such as `consult`. It returns what the model reads and
+    the step to record in the trace."""
+
+    name: str
+    description: str
+    parameters: dict
+    run: Callable[[dict | None], tuple[str, dict]]
+
+    def schema(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+
 @dataclass
 class AgentResult:
     run_id: str
-    stop_reason: str  # submitted, budget, model_error, no_submission
+    # submitted, budget, model_error, no_submission, nothing_to_explain, unavailable
+    stop_reason: str
+    expert: str = "general"
+    consulted: list[str] = field(default_factory=list)
     summary: str = ""
     claims: list[Claim] = field(default_factory=list)
     rejected: list[Rejection] = field(default_factory=list)
@@ -134,11 +160,14 @@ def run_agent(
     system_prompt: str = SYSTEM_PROMPT,
     budget: Budget | None = None,
     role: Role = Role.SMALL,
+    extra_tools: list[ExtraTool] = (),
+    claim_check: Callable[[Claim], list[str]] | None = None,
 ) -> AgentResult:
     budget = budget or Budget()
     result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
     result.evidence = toolbox.evidence  # shared: tools add to it as they run
-    tools = toolbox.schemas() + _control_tools()
+    extras = {tool.name: tool for tool in extra_tools}
+    tools = toolbox.schemas() + [tool.schema() for tool in extras.values()] + _control_tools()
     messages: list[dict] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": task},
@@ -146,7 +175,7 @@ def run_agent(
     repairs_left, nudges_left = REPAIR_ROUNDS, NUDGES
 
     while True:
-        if budget.max_calls - budget.calls == 1:
+        if budget.max_calls - budget.calls <= 1:
             messages.append(
                 {"role": "user", "content": f"This is your last turn: call {SUBMIT} now."}
             )
@@ -181,7 +210,9 @@ def run_agent(
 
         submitted = False
         for call in completion.tool_calls:
-            content, done = _handle(call, toolbox, result, budget, repairs_left)
+            content, done = _handle(
+                call, toolbox, result, budget, repairs_left, extras, claim_check
+            )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
             if call.name == SUBMIT and not done and result.trace[-1]["type"] == "verify":
@@ -194,7 +225,13 @@ def run_agent(
 
 
 def _handle(
-    call: ToolCall, toolbox: Toolbox, result: AgentResult, budget: Budget, repairs_left: int
+    call: ToolCall,
+    toolbox: Toolbox,
+    result: AgentResult,
+    budget: Budget,
+    repairs_left: int,
+    extras: dict[str, ExtraTool],
+    claim_check: Callable[[Claim], list[str]] | None,
 ) -> tuple[str, bool]:
     """Runs one tool call; returns what the model reads and whether the run is finished."""
     if call.name == HYPOTHESES:
@@ -213,7 +250,7 @@ def _handle(
             message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
             result.trace.append({"type": "submit", "error": message})
             return json.dumps({"error": f"Invalid submission: {message}"}), False
-        verdict = verify(submission.claims, toolbox.evidence)
+        verdict = verify(submission.claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
         result.summary = submission.summary
@@ -243,6 +280,11 @@ def _handle(
         message = f"The tool budget is spent; call {SUBMIT} now with what you have."
         result.trace.append({"type": "tool", "name": call.name, "error": message})
         return json.dumps({"error": message}), False
+
+    if call.name in extras:
+        content, step = extras[call.name].run(call.arguments)
+        result.trace.append({"type": call.name, **step})
+        return content, False
 
     outcome = toolbox.run(call)
     step = {"type": "tool", "name": call.name, "arguments": call.arguments}
@@ -309,9 +351,13 @@ def answer(
 ) -> AgentResult:
     """Answers a person's question about their data, with verified claims."""
     toolbox = Toolbox(frame, metrics or list(frame.columns))
-    when = f"Today is {today}. " if today else ""
-    task = f"{when}{_describe_range(toolbox)}\n\nThe person asks: {question}"
+    task = answer_task(toolbox, question, today)
     return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt)
+
+
+def answer_task(toolbox: Toolbox, question: str, today: date | None = None) -> str:
+    when = f"Today is {today}. " if today else ""
+    return f"{when}{_describe_range(toolbox)}\n\nThe person asks: {question}"
 
 
 def trace_json(result: AgentResult) -> str:
@@ -319,6 +365,8 @@ def trace_json(result: AgentResult) -> str:
     return json.dumps(
         {
             "run_id": result.run_id,
+            "expert": result.expert,
+            "consulted": result.consulted,
             "stop_reason": result.stop_reason,
             "error": result.error,
             "cost_usd": result.budget.cost_usd,

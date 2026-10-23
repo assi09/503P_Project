@@ -8,6 +8,7 @@ must not diagnose, overstate causation, or reason about calorie balance from Fit
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
@@ -114,6 +115,8 @@ DURATION = re.compile(
 )
 # Internal column names (sleep_minutes, hrv_ms...) must not reach the person.
 COLUMN_NAME = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
+# Evidence ids (12 hex characters) belong in `evidence_ids`; in the text they read as numbers.
+EVIDENCE_ID = re.compile(r"\b(?=[a-f]*\d)[0-9a-f]{12}\b")
 NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
 
 
@@ -207,6 +210,7 @@ def _allowed_numbers(cited: list[Evidence]) -> list[float]:
 
 def _quoted_numbers(text: str) -> list[tuple[float, int]]:
     """Numbers in a sentence with their decimal places, ignoring dates, times and durations."""
+    text = EVIDENCE_ID.sub(" ", text)
     text = ISO_DATE.sub(" ", text)
     text = MONTH_DAY.sub(" ", text)
     text = DAY_MONTH.sub(" ", text)
@@ -359,6 +363,8 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
     }
     if bad := [d for d in _quoted_dates(text, years) if not _date_supported(d, cited)]:
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
+    if EVIDENCE_ID.search(text):
+        reasons.append("writes evidence ids in the text; list them only in evidence_ids")
     if columns := COLUMN_NAME.findall(text):
         reasons.append(
             "uses internal metric names (" + ", ".join(sorted(set(columns))) + "); use the "
@@ -374,10 +380,17 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
     return reasons
 
 
-def verify(claims: list[Claim], evidence: dict[str, Evidence]) -> Verdict:
+def verify(
+    claims: list[Claim],
+    evidence: dict[str, Evidence],
+    extra: Callable[[Claim], list[str]] | None = None,
+) -> Verdict:
+    """Checks every claim; `extra` adds the caller's own rules, such as an expert's ownership."""
     accepted, rejected = [], []
     for claim in claims:
         reasons = check_claim(claim, evidence)
+        if extra:
+            reasons += extra(claim)
         if reasons:
             rejected.append(Rejection(claim, tuple(reasons)))
         else:

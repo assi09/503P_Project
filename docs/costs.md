@@ -54,3 +54,6 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-21 | OpenAI and TypeSafe model lists (key checks) | $0 |
 | 2026-10-21 | First real investigation, synthetic person (sleep drop with later bedtime) | $0.024 |
 | 2026-10-21 | Readable findings check, same synthetic person (3 model calls, 10 tool calls) | $0.0096 |
+| 2026-10-23 | Recovery expert, deep, synthetic person (4 model calls, 22 tool calls; all claims rejected: ids in the text) | $0.0217 |
+| 2026-10-23 | Sleep expert, deep, same person after the fix (7 model calls, 16 tool calls; 3 verified claims, no consult) | $0.0152 |
+| 2026-10-23 | Sleep expert, deep, after listing other experts' metrics (10 model calls, 17 tool calls; consulted recovery, 4 verified claims) | $0.0247 |

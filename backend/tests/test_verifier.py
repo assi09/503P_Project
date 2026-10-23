@@ -236,6 +236,15 @@ def test_internal_metric_names_are_rejected(evidence):
     assert "internal metric names (sleep_minutes)" in " ".join(found)
 
 
+def test_evidence_ids_in_the_text_get_their_own_reason(evidence):
+    from app.agent.verifier import text_problems
+
+    cited = list(evidence.values())
+    found = text_problems(f"Your sleep got shorter (evidence {cited[0].id}).", cited)
+    assert found == ["writes evidence ids in the text; list them only in evidence_ids"]
+    assert text_problems("Your sleep got shorter (evidence deadbeefcafe).", cited) == []
+
+
 def test_text_problems_check_any_text_against_evidence(evidence):
     from app.agent.verifier import text_problems
 
