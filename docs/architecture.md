@@ -43,7 +43,8 @@ verifier rejects statements it cannot match to one.
 | Context builder | `backend/app/agent/context.py` | conversation and attachments; other memory planned |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
-| Evaluation suite | `eval/` | planned |
+| Advice guard and the Jev client | `backend/app/agent/guard.py`, `jev.py` | checks shown text by meaning |
+| Evaluation suite | `eval/` | started: the advice sentence set; the rest planned |
 
 ### Ingestion
 
@@ -152,6 +153,15 @@ that evidence (distinctive terms such as "HRV" or "time asleep"; generic words s
 not count); and the text must not use internal metric names, diagnose, state causation or reason
 about calorie balance. The summary is checked too.
 Failing text goes back to the model once with the reasons, then is dropped.
+
+**The advice guard** (`guard.py`) checks by meaning what the word rules check by words. The router
+only judges the question, and an in-scope question can still get an answer that advises ("cutting
+caffeine should help") or names a condition, worded so no listed word appears. So every sentence
+that passed the deterministic checks, the summary included, goes to Jev in one call, with one
+yes/no per sentence: does it diagnose, name a condition, or tell the person what to do for their
+health? A flagged sentence is rejected like any other. If Jev is down, the word rules alone apply
+and the trace says so. Consulted runs are not checked, since only the lead's text is shown. The
+Jev HTTP client (`jev.py`) is shared by the router and the guard.
 
 ## Memory and context (conversation built; other memory designed)
 

@@ -22,6 +22,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer_task, run_agent
+from app.agent.guard import Guard
 from app.agent.llm import LLM, Budget
 from app.agent.present import label, metric_list
 from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
@@ -322,6 +323,7 @@ def ask_expert(
     context: str = "",
     evidence: dict[str, Evidence] | None = None,
     owners: dict[str, str] | None = None,
+    guard: Guard | None = None,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -355,6 +357,7 @@ def ask_expert(
         budget=budget,
         extra_tools=extras,
         claim_check=ownership_check(expert, borrowed),
+        guard=guard,  # consulted runs are not guarded: only the lead's text is shown
     )
     result.expert = name
     result.consulted = consults.consulted

@@ -17,6 +17,8 @@ import pandas as pd
 from app.agent.agent import AgentResult, answer
 from app.agent.context import Attachment, Context, Turn, build
 from app.agent.experts import BUDGETS, Depth, ask_expert, owner
+from app.agent.guard import Guard, JevGuard
+from app.agent.jev import JevClient, JevError
 from app.agent.llm import LLM
 from app.agent.router import (
     FallbackRouter,
@@ -49,6 +51,14 @@ def default_router(settings) -> Router:
         return FallbackRouter(JevRouter.from_settings(settings), KeywordRouter())
     except RouterError:
         return KeywordRouter()
+
+
+def default_guard(settings) -> Guard | None:
+    """Jev checking shown text for advice; none without a TypeSafe key (word checks only)."""
+    try:
+        return JevGuard(JevClient.from_settings(settings))
+    except JevError:
+        return None
 
 
 def _route_step(route: Route) -> dict:
@@ -84,6 +94,7 @@ def ask(
     history: Sequence[Turn] = (),
     stored_evidence: dict[str, Evidence] | None = None,
     attachment: Attachment | None = None,
+    guard: Guard | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -104,6 +115,7 @@ def ask(
             budget=replace(BUDGETS[depth]),
             context=context.block,
             evidence=context.evidence,
+            guard=guard,
         )
     else:
         result = ask_expert(
@@ -117,6 +129,7 @@ def ask(
             context=context.block,
             evidence=context.evidence,
             owners=context.owners,
+            guard=guard,
         )
     result.trace[:0] = [_context_step(context), _route_step(route)]
     return Answer(route, result, context)
