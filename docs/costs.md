@@ -58,3 +58,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Sleep expert, deep, same person after the fix (7 model calls, 16 tool calls; 3 verified claims, no consult) | $0.0152 |
 | 2026-10-23 | Sleep expert, deep, after listing other experts' metrics (10 model calls, 17 tool calls; consulted recovery, 4 verified claims) | $0.0247 |
 | 2026-10-23 | Jev routing checks, 16 made-up questions: topic only (14/16), then topic and per-expert needs (16/16 on the lead, 14/16 exact), 50 calls in all | $0.0013 |
+| 2026-10-23 | Routed answer end to end, quick, synthetic person: Jev led with recovery and consulted sleep; all claims rejected (display names in the claims' metric field) | $0.0204 |
+| 2026-10-23 | Same after the name fix: routing right again, 0 claims (null result written as an association; the consult's tool calls all refused by a budget bug) | $0.0207 |
