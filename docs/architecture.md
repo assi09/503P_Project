@@ -31,7 +31,7 @@ verifier rejects statements it cannot match to one.
 | Google Health sign-in | `backend/app/sync/google_auth.py` | done: loopback OAuth, token file `0600`, one local user |
 | Google Health API client | `backend/app/sync/client.py` | done: paging, roll-up windows, retries |
 | API data → daily table | `backend/app/sync/daily.py` | done, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
-| Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs, chat messages, cited evidence |
+| Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs, chat messages, cited evidence, findings, context questions, check-ins, memory facts |
 | Live data → database | `backend/app/sync/pull.py` | `python -m app.sync pull`; the API service still reads Takeout |
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
@@ -169,7 +169,7 @@ health? A flagged sentence is rejected like any other. If Jev is down, the word 
 and the trace says so. Consulted runs are not checked, since only the lead's text is shown. The
 Jev HTTP client (`jev.py`) is shared by the router and the guard.
 
-## Memory and context (conversation built; other memory designed)
+## Memory and context (conversation built; other memory stored, retrieval next)
 
 The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The
 principles: the context window is scarce, so a run gets a small, deterministic selection; memory
@@ -222,6 +222,17 @@ treats it like a consult's. The router sees the current question and up to 3 ear
 only), so a follow-up such as "and last week?" is routed by what it refers to, even several
 questions back. An attachment's metric decides the lead unless the person picked an expert.
 Findings, context answers, check-ins and facts come with their tables.
+
+**Stored, with the write rules enforced in code** (`backend/app/db/memory.py`, migration 0003):
+findings only from verified change and association claims of investigation runs, a newer one on
+the same metric superseding the older; context questions written by code from a template and a
+fixed menu of options (travel, work or exam schedule, more or less training, illness, new device,
+other, rather not say), the answer one of them, the same metric and period never asked twice, and
+two declined questions pausing questions for 14 days; check-ins for today only, 1 to 5 with fixed
+tags; facts proposed by the agent and kept only once the person approves (at most 120 characters,
+a fixed kind, known metrics, nothing instruction-like, never re-proposed once declined). `expire()`
+enforces the 90, 180 and 365 day lifetimes. Retrieving them into the context, and the agent's
+`checkins` and `propose_fact` tools, come next.
 
 ### Write path
 

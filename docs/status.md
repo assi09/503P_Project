@@ -18,14 +18,14 @@ priority**; the UI and data plumbing exist to serve them.
 | Area | State |
 |---|---|
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
-| Storage | Postgres in Docker, two migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence); `python -m app.sync pull` stores live days |
+| Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 388 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 414 backend and ~50 mobile tests |
 
-**Not built yet:** memory beyond the conversation, the recovery score, nutrition
+**Not built yet:** memory retrieval beyond the conversation, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -109,12 +109,12 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) and the memory tables with their write rules (PR #36) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. The memory tables and write path (findings, context answers, check-ins, facts), or first
-   open issues 13 and 14 if answer quality comes first.
+1. Memory retrieval into the context (findings, context answers, facts) and the agent's
+   `checkins` and `propose_fact` tools.
 2. Live data and the agent served through the API to the app.
 
 ## What has been tested
