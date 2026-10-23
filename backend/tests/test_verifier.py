@@ -251,3 +251,30 @@ def test_text_problems_check_any_text_against_evidence(evidence):
     cited = list(evidence.values())
     assert text_problems("Your sleep got shorter while bedtime moved later.", cited) == []
     assert text_problems("You slept 2 h less, due to stress.", cited)
+
+
+def test_a_sentence_may_only_name_metrics_its_evidence_covers(evidence):
+    from app.agent.verifier import text_problems
+
+    sleep = [evidence["sleep"]]
+    found = text_problems("Your time asleep went down, and your HRV held steady.", sleep)
+    assert found == [
+        "mentions heart rate variability (HRV), which none of the cited evidence covers; "
+        "describe only what the evidence shows"
+    ]
+    assert text_problems("Your time asleep went down.", sleep) == []
+    # A correlation covers both of its metrics.
+    assert text_problems("Later bedtimes went with less time asleep.", [evidence["link"]]) == []
+    assert "bedtime" in " ".join(text_problems("Your bedtime moved later.", sleep))
+
+
+def test_generic_words_do_not_count_as_naming_a_metric(evidence):
+    from app.agent.verifier import text_problems
+
+    steps = [evidence["steps"]]
+    assert (
+        text_problems("Your activity and sleep looked steady; steps did not change.", steps) == []
+    )
+    # "time awake in bed" is its own metric, not "time in bed".
+    found = " ".join(text_problems("Time awake in bed rose.", [evidence["sleep"]]))
+    assert "time awake in bed" in found and "time in bed," not in found

@@ -328,3 +328,18 @@ def test_a_quick_answer_still_consults_when_the_router_says_so(frame):
     llm = ScriptedLLM(consulting_recovery(lambda messages: submit([])))
     result = ask_expert(llm, frame, "recovery", "Why?", depth=Depth.QUICK, consult=["sleep"])
     assert result.consulted == ["sleep"] and result.stop_reason == "submitted"
+
+
+def test_a_summary_about_a_metric_no_evidence_covers_is_sent_back(frame):
+    def hrv_summary(messages):
+        evidence = evidence_from(messages, "compare_windows")
+        drop = claim(
+            evidence, "sleep_minutes", "Your time asleep went down.", "change", direction="down"
+        )
+        return submit([drop], summary="Your time asleep went down, but your HRV held steady.")
+
+    llm = ScriptedLLM([SLEEP_DROP, hrv_summary, hrv_summary])
+    result = ask_expert(llm, frame, "sleep", "Did my HRV move with my sleep?")
+    repair = json.loads(llm.requests[2]["messages"][-1]["content"])
+    assert "heart rate variability (HRV)" in repair["summary_problems"][0]
+    assert result.summary == "Your time asleep went down."  # replaced by a verified claim

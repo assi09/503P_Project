@@ -139,8 +139,10 @@ other on a labeled question set.
 
 Deterministic (`verifier.py`). Each claim must cite existing, sufficient evidence; a change or an
 association must be significant and point the stated way; every number, duration, time of day and
-date in the text must come from the cited evidence; and the text must not use internal metric
-names, diagnose, state causation or reason about calorie balance. The summary is checked too.
+date in the text must come from the cited evidence; every metric the text names must be covered by
+that evidence (distinctive terms such as "HRV" or "time asleep"; generic words such as "sleep" do
+not count); and the text must not use internal metric names, diagnose, state causation or reason
+about calorie balance. The summary is checked too.
 Failing text goes back to the model once with the reasons, then is dropped.
 
 ## Memory and context (designed, not built)

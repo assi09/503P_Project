@@ -78,3 +78,13 @@ lower HRV?".
   [status.md](status.md#open-issues)).
 
 **Decision.** Open: A is kept until the evaluation, where both run on the full scenario set.
+
+## Verifier metric check (PR #30), 2026-10-23
+
+Expert run 2's case again: the sleep expert asked "Has my sleep changed lately, and did my HRV move
+with it?" with no consult allowed, after the verifier started rejecting text that names a metric no
+cited evidence covers. 4 claims verified, 0 rejected, 3 model calls ($0.0081). The model did not
+mention HRV at all this time (the prompt from PR #28 already steers it), so **the new rule did not
+fire**: the run shows the stricter verifier does not reject a sound answer, and the scripted test
+shows the rule catches the case. The answer also did not point to the recovery expert for HRV
+(open issue 4).
