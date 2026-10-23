@@ -16,7 +16,7 @@ import pandas as pd
 
 from app.agent.agent import AgentResult, answer
 from app.agent.context import Attachment, Context, Turn, build
-from app.agent.experts import BUDGETS, Depth, ask_expert, owner
+from app.agent.experts import BUDGETS, EXPERTS, Depth, ask_expert, available, owner
 from app.agent.guard import Guard, JevGuard
 from app.agent.jev import JevClient, JevError
 from app.agent.llm import LLM
@@ -78,6 +78,21 @@ def _route_step(route: Route) -> dict:
     }
 
 
+def _notes(frame: pd.DataFrame, route: Route, result: AgentResult) -> list[str]:
+    """Fixed sentences for what the answer could not cover, so a gap is said, not hidden."""
+    notes = [
+        f"There is no {name} data to look at yet, so this answer leaves that part out."
+        for name in route.consult
+        if name in EXPERTS and not available(EXPERTS[name], frame)
+    ]
+    notes += [
+        f"This answer does not cover the {name} side of the question: nothing about it could "
+        "be verified."
+        for name in result.uncovered
+    ]
+    return notes
+
+
 def _context_step(context: Context) -> dict:
     return {"type": "context", **context.included, "dropped": context.dropped}
 
@@ -130,6 +145,8 @@ def ask(
             evidence=context.evidence,
             owners=context.owners,
             guard=guard,
+            needs=(route.expert, *route.consult),
         )
+        result.notes += _notes(frame, route, result)
     result.trace[:0] = [_context_step(context), _route_step(route)]
     return Answer(route, result, context)

@@ -320,3 +320,92 @@ def test_without_a_typesafe_key_there_is_no_guard():
 
     assert default_guard(Settings(typesafe_api_key=None)) is None
     assert isinstance(default_guard(Settings(typesafe_api_key="key")), JevGuard)
+
+
+CORRELATE_STEPS = ScriptedLLM.call(
+    "correlate",
+    "corr",
+    driver="steps",
+    target="sleep_minutes",
+    start="2026-07-01",
+    end="2026-08-29",
+)
+
+
+def claims_from(*specs):
+    """A submission whose claims cite the latest evidence of the named tools."""
+
+    def turn(messages):
+        claims = []
+        for tool, text, metric in specs:
+            payload = next(
+                json.loads(m["content"])
+                for m in reversed(messages)
+                if m["role"] == "tool" and f'"tool": "{tool}"' in m["content"]
+            )
+            claims.append(
+                {
+                    "text": text,
+                    "kind": "no_change",
+                    "evidence_ids": [payload["evidence_id"]],
+                    "metric": metric,
+                }
+            )
+        call = ToolCall("submit", SUBMIT, {"summary": "Here is what I found.", "claims": claims})
+        return Completion(None, (call,), "scripted", Usage(), 0.0, 0.0)
+
+    return turn
+
+
+SLEEP_ONLY = claims_from(("describe", "Your time asleep held steady.", "sleep_minutes"))
+WITH_STEPS = claims_from(
+    ("describe", "Your time asleep held steady.", "sleep_minutes"),
+    ("correlate", "Your steps did not clearly go with your time asleep.", "sleep_minutes"),
+)
+EXERCISE_QUESTION = "Does exercising more change how I sleep?"
+
+
+def test_a_part_of_the_question_left_out_is_sent_back(frame):
+    llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY, CORRELATE_STEPS, WITH_STEPS])
+    router = FixedRouter(("sleep", "activity"), sleep=0.8, activity=0.2)
+    reply = ask(llm, router, frame, EXERCISE_QUESTION)
+    repair = json.loads(llm.requests[2]["messages"][-1]["content"])
+    assert repair["uncovered"] == ["activity"]
+    assert "one of your own metrics" in repair["instruction"]  # a claim the ownership rule allows
+    assert len(reply.result.claims) == 2 and reply.result.uncovered == []
+    assert reply.result.notes == []
+
+
+def test_a_part_still_left_out_is_said_in_a_fixed_note(frame):
+    llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY, SLEEP_ONLY])
+    router = FixedRouter(("sleep", "activity"), sleep=0.8, activity=0.2)
+    reply = ask(llm, router, frame, EXERCISE_QUESTION)
+    assert reply.result.uncovered == ["activity"]
+    assert reply.result.notes == [
+        "This answer does not cover the activity side of the question: nothing about it could "
+        "be verified."
+    ]
+
+
+def test_a_needed_expert_without_data_is_said_not_asked_for(frame):
+    llm = ScriptedLLM([DESCRIBE_SLEEP, SLEEP_ONLY])
+    router = FixedRouter(("sleep", "nutrition"), sleep=0.8, nutrition=0.2)
+    reply = ask(llm, router, frame, "Does eating late change how I sleep?")
+    assert reply.result.uncovered == [] and len(reply.result.claims) == 1
+    assert reply.result.notes == [
+        "There is no nutrition data to look at yet, so this answer leaves that part out."
+    ]
+
+
+def test_a_coverage_check_does_not_count_as_covering_a_topic():
+    from datetime import date
+
+    from app.agent.experts import coverage_check
+    from app.agent.verifier import Claim
+    from app.analysis import tools
+    from app.analysis.evidence import Window
+
+    data = generate(date(2026, 7, 1), 60, seed=5).frame
+    covered = tools.coverage(data, Window(start=date(2026, 7, 1), end=date(2026, 8, 29)))
+    claim = Claim(text="Wear was complete.", kind="data_quality", evidence_ids=[covered.id])
+    assert coverage_check(["activity"], {covered.id: covered})([claim]) == ["activity"]

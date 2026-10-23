@@ -213,6 +213,23 @@ def ownership_check(expert: Expert, borrowed: dict[str, str]):
     return check
 
 
+def coverage_check(needed: list[str], evidence: dict[str, Evidence]):
+    """Which of the experts a question needs the verified claims do not draw on: none of the
+    claims is about one of their metrics or cites evidence that includes one (a correlation
+    counts for both of its metrics; a coverage check, which lists every metric, does not)."""
+
+    def uncovered(claims: list[Claim]) -> list[str]:
+        seen = {c.metric for c in claims if c.metric}
+        for claim in claims:
+            for evidence_id in claim.evidence_ids:
+                record = evidence.get(evidence_id)
+                if record is not None and record.tool != "coverage":
+                    seen |= set(record.metrics)
+        return [name for name in needed if not seen & set(EXPERTS[name].owns)]
+
+    return uncovered
+
+
 class ConsultArguments(BaseModel):
     expert: str
     question: str = Field(min_length=1, max_length=300)
@@ -324,6 +341,7 @@ def ask_expert(
     evidence: dict[str, Evidence] | None = None,
     owners: dict[str, str] | None = None,
     guard: Guard | None = None,
+    needs: Iterable[str] = (),
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -358,6 +376,11 @@ def ask_expert(
         extra_tools=extras,
         claim_check=ownership_check(expert, borrowed),
         guard=guard,  # consulted runs are not guarded: only the lead's text is shown
+        coverage=coverage_check(
+            [n for n in needs if n in EXPERTS and available(EXPERTS[n], frame)], toolbox.evidence
+        )
+        if needs
+        else None,
     )
     result.expert = name
     result.consulted = consults.consulted

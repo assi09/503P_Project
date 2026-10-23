@@ -475,6 +475,43 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
     return reasons
 
 
+# A clause that only says nothing clearly changed does not claim a change.
+NEGATED = re.compile(
+    r"\b(no clear|not clearly|did not|didn't|does not|doesn't|do not|don't|no significant|"
+    r"not significant|unchanged|steady|stable|similar|the same|no real)\b",
+    re.IGNORECASE,
+)
+SHIFT_WORDS = re.compile(r"\b(later|earlier|shift\w*)\b", re.IGNORECASE)
+CLAUSES = re.compile(r"[.;!?]|,|\b(?:while|but|whereas|although)\b", re.IGNORECASE)
+
+
+def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
+    """Metrics a summary describes as changing that no significant test in the run supports.
+
+    Claims are checked against their kind; the summary has none, so each clause that names a
+    metric with a direction word ("lower", "dropped", "later") needs a significant test of that
+    metric among the run's evidence. Clauses saying nothing clearly changed are skipped."""
+    supported = {
+        metric for e in evidence if e.tool in TEST_TOOLS and _significant(e) for metric in e.metrics
+    }
+    flagged: list[str] = []
+    for clause in CLAUSES.split(summary):
+        if not clause or NEGATED.search(clause):
+            continue
+        if not (UP_WORDS.search(clause) or DOWN_WORDS.search(clause) or SHIFT_WORDS.search(clause)):
+            continue
+        for metric, pattern in MENTIONS.items():
+            if pattern.search(clause) and metric not in supported and metric not in flagged:
+                flagged.append(metric)
+    if not flagged:
+        return []
+    names = ", ".join(label(m) for m in flagged)
+    return [
+        f"describes a change in {names} that no significant evidence in this run shows; say "
+        "there was no clear change, or leave it out"
+    ]
+
+
 def verify(
     claims: list[Claim],
     evidence: dict[str, Evidence],

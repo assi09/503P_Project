@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.agent.verifier import Claim, check_claim, verify
-from app.analysis.evidence import Window
+from app.analysis.evidence import Evidence, Window
 from app.analysis.tools import change_point, compare_windows, correlate, coverage, describe
 from app.synthetic import Coupling, Step, generate
 
@@ -278,3 +278,66 @@ def test_generic_words_do_not_count_as_naming_a_metric(evidence):
     # "time awake in bed" is its own metric, not "time in bed".
     found = " ".join(text_problems("Time awake in bed rose.", [evidence["sleep"]]))
     assert "time awake in bed" in found and "time in bed," not in found
+
+
+def _test_evidence(metric: str, p: float, tool: str = "compare_windows") -> Evidence:
+    return Evidence(
+        tool=tool,
+        metrics=(metric,),
+        windows=(window(0, 29),),
+        n=30,
+        sufficient=True,
+        stats={"p_value": p, "difference": -1.0},
+    )
+
+
+def test_a_summary_may_not_describe_a_change_no_significant_test_shows():
+    from app.agent.verifier import overstated
+
+    # From a real run: the weekday split of sleep score was not significant.
+    evidence = [
+        _test_evidence("sleep_score", 0.2, "weekday_split"),
+        _test_evidence("sleep_minutes", 0.6, "weekday_split"),
+    ]
+    summary = (
+        "The main difference is that sleep score was somewhat lower on weekends, while time "
+        "asleep and sleep efficiency do not show clear weekend-weekday differences."
+    )
+    assert overstated(summary, evidence) == [
+        "describes a change in sleep score that no significant evidence in this run shows; say "
+        "there was no clear change, or leave it out"
+    ]
+
+
+def test_each_clause_is_judged_on_its_own():
+    from app.agent.verifier import overstated
+
+    # From a real run: bedtime's change was significant, time in bed's was not.
+    evidence = [_test_evidence("bedtime_hour", 0.001), _test_evidence("time_in_bed", 0.09)]
+    summary = "You started going to bed later, and spending less time in bed."
+    found = overstated("Your bedtime moved later. You spent less time in bed.", evidence)
+    assert "time in bed" in found[0] and "bedtime" not in found[0]
+    assert overstated("Your bedtime moved later.", evidence) == []
+    assert "time in bed" in overstated(summary, evidence)[0]
+
+
+def test_saying_nothing_clearly_changed_is_not_an_overstatement():
+    from app.agent.verifier import overstated
+
+    evidence = [_test_evidence("sleep_efficiency", 0.4)]
+    assert overstated("Sleep efficiency did not clearly go down.", evidence) == []
+    assert overstated("Sleep efficiency stayed about the same.", evidence) == []
+
+
+def test_an_association_supports_both_of_its_metrics():
+    from app.agent.verifier import overstated
+
+    link = Evidence(
+        tool="correlate",
+        metrics=("bedtime_hour", "sleep_minutes"),
+        windows=(window(0, 29),),
+        n=30,
+        sufficient=True,
+        stats={"p_value": 0.001, "p_value_adjusted": 0.003, "rho": -0.6},
+    )
+    assert overstated("Later bedtimes went with less time asleep.", [link]) == []
