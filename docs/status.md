@@ -185,6 +185,9 @@ Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](c
     not by the comparison (a weekend claim passes if any significant bedtime test is in the run),
     and generic words are not checked ("your sleep got shorter" passed in a run whose claims said no
     clear change).
+12. **Accepted risk: when Jev is down, the scope check is a word list.** Jev is the scope check and
+    has always answered so far; the keyword fallback catches only listed words. Revisit if the
+    attack suite shows it matters.
 13. **Quick depth can run out before the test the question needs.** Asked about exercise and
     sleep at quick depth (8 tool calls), the model spent them on descriptions and change points, and
     the correlations that answer the question were refused as over budget.
@@ -192,6 +195,3 @@ Spent so far on real runs: about $0.55 of OpenAI and $0.004 of Jev ([costs.md](c
     borderline sleep drop, the model claimed "time asleep did not clearly change", which the
     verifier allows on non-significant evidence. Honest in statistical terms, misleading in plain
     words; the evaluation's planted scenarios will measure how often it happens.
-12. **Accepted risk: when Jev is down, the scope check is a word list.** Jev is the scope check and
-    has always answered so far; the keyword fallback catches only listed words. Revisit if the
-    attack suite shows it matters.
