@@ -1,18 +1,22 @@
-"""Answering one question from the Ask screen: route it, then refuse, or answer it.
+"""Answering one question from the Ask screen: build its context, route it, then refuse or answer.
 
-The router's decision is recorded as the first step of the run's trace, with the probabilities,
-which router produced them and why an earlier one failed, so every answer can be traced back to how
-it was routed.
+The context (earlier turns, their evidence, an attachment) is chosen by code before any model runs
+(`context.py`). The router sees the question and the earlier questions only. An attachment's metric
+decides the lead, like picking an expert, unless the person picked one; the scope check and the
+choice of consults stay with the router. What the context included and how the question was routed
+are the first steps of the trace, so every answer can be traced to its context and its routing.
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 
 import pandas as pd
 
 from app.agent.agent import AgentResult, answer
-from app.agent.experts import BUDGETS, Depth, ask_expert
+from app.agent.context import Attachment, Context, Turn, build
+from app.agent.experts import BUDGETS, Depth, ask_expert, owner
 from app.agent.llm import LLM
 from app.agent.router import (
     FallbackRouter,
@@ -23,6 +27,7 @@ from app.agent.router import (
     RouterError,
     decide,
 )
+from app.analysis.evidence import Evidence
 
 # Shown without calling the model: the refusal costs nothing and cannot be talked around.
 REFUSAL = (
@@ -35,6 +40,7 @@ REFUSAL = (
 class Answer:
     route: Route
     result: AgentResult
+    context: Context
 
 
 def default_router(settings) -> Router:
@@ -62,6 +68,10 @@ def _route_step(route: Route) -> dict:
     }
 
 
+def _context_step(context: Context) -> dict:
+    return {"type": "context", **context.included, "dropped": context.dropped}
+
+
 def ask(
     llm: LLM,
     router: Router,
@@ -71,16 +81,42 @@ def ask(
     choice: str = "auto",
     depth: Depth = Depth.QUICK,
     today: date | None = None,
+    history: Sequence[Turn] = (),
+    stored_evidence: dict[str, Evidence] | None = None,
+    attachment: Attachment | None = None,
 ) -> Answer:
-    """Routes the question and has the right agent answer it, with verified claims."""
-    route = decide(router.classify(question), choice)
+    """Routes the question and has the right agent answer it, with verified claims.
+
+    `history` is the conversation so far (oldest first) and `stored_evidence` the evidence its
+    answers cite, both loaded by the caller for this person only."""
+    context = build(history, stored_evidence or {}, attachment)
+    if choice == "auto" and attachment and (attached := owner(attachment.metric)):
+        choice = attached.name  # the attachment decides the topic
+    route = decide(router.classify(question, context.earlier_questions), choice)
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif route.action == "general":
-        result = answer(llm, frame, question, today=today, budget=replace(BUDGETS[depth]))
+        result = answer(
+            llm,
+            frame,
+            question,
+            today=today,
+            budget=replace(BUDGETS[depth]),
+            context=context.block,
+            evidence=context.evidence,
+        )
     else:
         result = ask_expert(
-            llm, frame, route.expert, question, depth=depth, consult=route.consult, today=today
+            llm,
+            frame,
+            route.expert,
+            question,
+            depth=depth,
+            consult=route.consult,
+            today=today,
+            context=context.block,
+            evidence=context.evidence,
+            owners=context.owners,
         )
-    result.trace.insert(0, _route_step(route))
-    return Answer(route, result)
+    result.trace[:0] = [_context_step(context), _route_step(route)]
+    return Answer(route, result, context)

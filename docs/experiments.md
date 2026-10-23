@@ -88,3 +88,23 @@ mention HRV at all this time (the prompt from PR #28 already steers it), so **th
 fire**: the run shows the stricter verifier does not reject a sound answer, and the scripted test
 shows the rule catches the case. The answer also did not point to the recovery expert for HRV
 (open issue 4).
+
+## Follow-ups and context (PR #32), 2026-10-23
+
+**Routing follow-ups.** 8 made-up conversations: follow-ups referring back 1, 2 and 3 questions
+("And compared with last month?" after "Ok.", "Interesting.", "How much deep sleep do I get?"), a
+topic change, a cross-domain follow-up and an out-of-scope one ("Should I take melatonin for it?").
+
+| Router | Question only | With up to 3 earlier questions |
+|---|---|---|
+| Jev | 2/8 (the rest went to general) | **8/8** |
+| Keyword rule | 1/8 | 7/8 (missed "melatonin"; added to its off-topic words) |
+
+Cost $0.0005. Same caveat as before: written while designing, a smoke test.
+
+**A real two-turn conversation** (synthetic person with bedtime 1 h later and sleep 45 min
+shorter from Aug 15): "Has my sleep changed lately?" then "What about on weekends?". The follow-up
+was routed to sleep by the earlier question, got the first turn verbatim with 5 evidence records
+(935 tokens), read "weekends" as being about sleep, and answered with 4 verified claims, 0 rejected
+($0.0156 for both turns). It **recomputed** the Aug 15 comparison instead of citing the earlier
+evidence that was there (open issue 9 in [status.md](status.md#open-issues)).

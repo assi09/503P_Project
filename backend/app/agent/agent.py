@@ -364,16 +364,25 @@ def answer(
     today: date | None = None,
     budget: Budget | None = None,
     system_prompt: str = SYSTEM_PROMPT,
+    context: str = "",
+    evidence: dict[str, Evidence] | None = None,
 ) -> AgentResult:
-    """Answers a person's question about their data, with verified claims."""
+    """Answers a person's question about their data, with verified claims.
+
+    `context` is the conversation block from `context.build`, and `evidence` what it lets the run
+    cite without recomputing."""
     toolbox = Toolbox(frame, metrics or list(frame.columns))
-    task = answer_task(toolbox, question, today)
+    toolbox.evidence.update(evidence or {})
+    task = answer_task(toolbox, question, today, context)
     return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt)
 
 
-def answer_task(toolbox: Toolbox, question: str, today: date | None = None) -> str:
+def answer_task(
+    toolbox: Toolbox, question: str, today: date | None = None, context: str = ""
+) -> str:
     when = f"Today is {today}. " if today else ""
-    return f"{when}{_describe_range(toolbox)}\n\nThe person asks: {question}"
+    earlier = f"\n\n{context}" if context else ""
+    return f"{when}{_describe_range(toolbox)}{earlier}\n\nThe person asks: {question}"
 
 
 def trace_json(result: AgentResult) -> str:

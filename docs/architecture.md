@@ -40,6 +40,7 @@ verifier rejects statements it cannot match to one.
 | Experts and consult | `backend/app/agent/experts.py` | sleep, recovery, activity; nutrition defined, waiting for its columns |
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
 | Router and the ask flow | `backend/app/agent/router.py`, `ask.py` | Jev with keyword fallback; LLM router for the evaluation |
+| Context builder | `backend/app/agent/context.py` | conversation and attachments; other memory planned |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
 | Evaluation suite | `eval/` | planned |
@@ -152,7 +153,7 @@ not count); and the text must not use internal metric names, diagnose, state cau
 about calorie balance. The summary is checked too.
 Failing text goes back to the model once with the reasons, then is dropped.
 
-## Memory and context (designed, not built)
+## Memory and context (conversation built; other memory designed)
 
 The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The
 principles: the context window is scarce, so a run gets a small, deterministic selection; memory
@@ -193,6 +194,18 @@ Deterministic, before the model is called:
 
 No embeddings: memory here is structured (metrics, dates, tags), so filtering and ranking is
 cheaper, deterministic and testable. No model call is used to summarize memory.
+
+**Built so far: the conversation and attachments** (`backend/app/agent/context.py`, stored in
+`chat_messages` and `evidence`). The last 4 turns go in verbatim (question, answer, verified claims
+with their evidence ids) and their cited evidence is re-attached, at most 8 records; older turns are
+condensed to the question and the claims' text; an attachment (a metric, or a finding with its
+evidence) comes first. Items are added newest first while they fit in about 1,500 tokens. Refused
+turns and turns that read like instructions are left out, and the trace records what was included
+and dropped. Re-attached evidence counts as the expert's that produced it, so the ownership rule
+treats it like a consult's. The router sees the current question and up to 3 earlier ones (questions
+only), so a follow-up such as "and last week?" is routed by what it refers to, even several
+questions back. An attachment's metric decides the lead unless the person picked an expert.
+Findings, context answers, check-ins and facts come with their tables.
 
 ### Write path
 
