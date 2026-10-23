@@ -30,6 +30,7 @@ Measured on 2026-10-21 where noted; otherwise from published prices.
 | Expert answer with a consult | `gpt-5.4-mini` | ~$0.02 (measured: $0.0169–0.0261, 7–11 model calls, about 19 s) |
 | Write-up with the large model, one call | `gpt-5.5` | ~$0.04–0.05 |
 | Routing one question | Jev | ~$0.00003 (measured: topic plus four yes/no questions, median 0.21 s) |
+| Checking one answer for advice | Jev | ~$0.00004 (4 to 5 sentences per call) |
 
 Prices used for cost accounting are in `backend/app/agent/llm.py` (`PRICES`; per million tokens:
 `gpt-5.4-mini` $0.75 in / $4.50 out, `gpt-5.5` $5 / $30). The model list on 2026-10-21
@@ -66,3 +67,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Verifier metric check: sleep expert asked about HRV, no consult (4 verified claims) | $0.0081 |
 | 2026-10-23 | Follow-up routing, 8 conversations × 2 settings, Jev | $0.0005 |
 | 2026-10-23 | Two-turn conversation end to end (sleep, then "What about on weekends?") | $0.0156 |
+| 2026-10-23 | Advice guard on the 32-sentence set, Jev | $0.0002 |
+| 2026-10-23 | Two-turn conversation again with the guard on (OpenAI $0.0197, Jev guard $0.0001) | $0.0198 |

@@ -21,6 +21,7 @@ agent and its evaluation are the priority.
 | `mobile/` | Expo (SDK 57) + Expo Router + TypeScript app for iOS, Android and web |
 | `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
+| `eval/` | evaluation sets and scripts that call paid APIs on purpose (never run in CI) |
 | `docker-compose.yml` | local Postgres on port 5433 |
 
 The app talks to the backend only through the contract in `mobile/src/api/types.ts`. Until an

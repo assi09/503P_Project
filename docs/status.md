@@ -23,7 +23,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 359 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 373 backend and ~50 mobile tests |
 
 **Not built yet:** memory beyond the conversation, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
@@ -109,7 +109,7 @@ and experiments, tracing, accounts, deployment and the first evaluation; Novembe
 buffer and hardening.
 
 Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31) and the context builder for the conversation and attachments (PR #32) are done. The memory and context design
+experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32) and the advice guard (PR #33) are done. The memory and context design
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
@@ -132,11 +132,14 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
 - **Follow-ups:** with the earlier questions, Jev routed 8 of 8 made-up follow-ups right (2 of 8
   on the question alone), including references two and three questions back and a topic change;
   a real two-turn conversation answered "What about on weekends?" about sleep with 4 verified claims.
+- **Advice guard:** on 20 made-up advice or diagnosis sentences and 12 sound ones, the word check
+  caught 2 and the Jev guard 18, neither with a false alarm; on a real conversation the guard
+  flagged nothing.
 - **Consult policy:** 16 runs comparing consulting as routed (A) with skipping consults of experts
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.43 of OpenAI and $0.003 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.45 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -163,3 +166,14 @@ Spent so far on real runs: about $0.43 of OpenAI and $0.003 of Jev ([costs.md](c
 9. **Follow-ups recompute instead of citing.** Earlier answers' evidence is re-attached and citable,
    but in the real conversation the model recomputed the same comparison. Correct, slightly more
    expensive; a prompt nudge may be enough.
+10. **The advice guard misses implied diagnoses.** It caught 18 of 20 advice sentences (the word
+    check 2 of 20) with no false alarms; it missed "your body is fighting something off" and "your
+    heart rhythm may be irregular". Not tuned on the same set; to be measured on a held-out set in
+    the attack suite.
+11. **A summary can overstate a non-significant difference.** One summary said sleep score was
+    "somewhat lower on weekends" while its own claim, correctly, said there was no clear
+    difference. The summary is checked for numbers, dates and metric names, not for claiming a
+    change; a direction-word check on summaries, or the guard asked one more question, could fix it.
+12. **Accepted risk: when Jev is down, the scope check is a word list.** Jev is the scope check and
+    has always answered so far; the keyword fallback catches only listed words. Revisit if the
+    attack suite shows it matters.
