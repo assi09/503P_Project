@@ -18,7 +18,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Area | State |
 |---|---|
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
-| Storage | Postgres in Docker with the first migration (users, Google connections, daily metrics, sync runs); `python -m app.sync pull` stores live days |
+| Storage | Postgres in Docker, two migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |

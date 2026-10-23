@@ -31,7 +31,7 @@ verifier rejects statements it cannot match to one.
 | Google Health sign-in | `backend/app/sync/google_auth.py` | done: loopback OAuth, token file `0600`, one local user |
 | Google Health API client | `backend/app/sync/client.py` | done: paging, roll-up windows, retries |
 | API data → daily table | `backend/app/sync/daily.py` | done, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
-| Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs |
+| Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs, chat messages, cited evidence |
 | Live data → database | `backend/app/sync/pull.py` | `python -m app.sync pull`; the API service still reads Takeout |
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
@@ -73,6 +73,13 @@ Postgres (Docker locally, managed when deployed), schema changes as Alembic migr
 tests. Daily metrics are stored one row per user, source, day and metric, so new metrics (such as
 nutrition) need no migration. Every table holding a person's data has a `user_id`, and every query
 filters on it. Tables for later features are added by migration when the feature is built.
+
+The conversation is one thread per person (`chat_messages`): each question with its attachment,
+and each answer with its verified claims, who answered, whether the router chose them, whom they
+consulted, whether it was refused, and the run id that links it to its trace. **Only evidence a
+verified claim cites is stored** (`evidence`, once per id), so the app can show it and a follow-up
+can cite it without recomputing; everything else a run computed can be recomputed from the data.
+Both are deleted with the person.
 
 ### Analysis tools
 
