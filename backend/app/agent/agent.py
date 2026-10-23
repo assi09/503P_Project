@@ -29,6 +29,7 @@ from app.agent.verifier import (
     Rejection,
     Submission,
     Verdict,
+    overstated,
     run_adjusted,
     text_problems,
     verify,
@@ -117,6 +118,8 @@ class AgentResult:
     recorded_hypotheses: list[str] = field(default_factory=list)
     evidence: dict[str, Evidence] = field(default_factory=dict)
     trace: list[dict] = field(default_factory=list)
+    uncovered: list[str] = field(default_factory=list)  # parts of the question left unanswered
+    notes: list[str] = field(default_factory=list)  # fixed sentences shown with the answer
     budget: Budget = field(default_factory=Budget)
     error: str | None = None
 
@@ -152,18 +155,24 @@ def _control_tools() -> list[dict]:
     ]
 
 
-def _rejections_message(rejected: list[Rejection], accepted: int, summary: list[str]) -> str:
-    return json.dumps(
-        {
-            "accepted_claims": accepted,
-            "rejected_claims": [
-                {"text": r.claim.text, "reasons": list(r.reasons)} for r in rejected
-            ],
-            "summary_problems": summary,
-            "instruction": "Fix or drop the rejected claims and call submit_findings again with "
-            "the complete list of claims.",
-        }
-    )
+def _rejections_message(
+    rejected: list[Rejection], accepted: int, summary: list[str], uncovered: list[str] = ()
+) -> str:
+    message = {
+        "accepted_claims": accepted,
+        "rejected_claims": [{"text": r.claim.text, "reasons": list(r.reasons)} for r in rejected],
+        "summary_problems": summary,
+        "instruction": "Fix or drop the rejected claims and call submit_findings again with "
+        "the complete list of claims.",
+    }
+    if uncovered:
+        message["uncovered"] = uncovered
+        message["instruction"] += (
+            " The question also concerns what is listed under uncovered: add a claim on what the "
+            "evidence shows about it, testing it first if needed, or a no_change claim if nothing "
+            "is significant."
+        )
+    return json.dumps(message)
 
 
 def run_agent(
@@ -177,6 +186,7 @@ def run_agent(
     extra_tools: list[ExtraTool] = (),
     claim_check: Callable[[Claim], list[str]] | None = None,
     guard: Guard | None = None,
+    coverage: Callable[[list[Claim]], list[str]] | None = None,
 ) -> AgentResult:
     budget = budget or Budget()
     result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
@@ -238,6 +248,7 @@ def run_agent(
                 extras,
                 claim_check,
                 guard,
+                coverage,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -259,6 +270,7 @@ def _handle(
     extras: dict[str, ExtraTool],
     claim_check: Callable[[Claim], list[str]] | None,
     guard: Guard | None,
+    coverage: Callable[[list[Claim]], list[str]] | None,
 ) -> tuple[str, bool]:
     """Runs one tool call; returns what the model reads and whether the run is finished."""
     if call.name == HYPOTHESES:
@@ -288,11 +300,15 @@ def _handle(
         toolbox.evidence.update({e.id: e for e in run_adjusted(own)})
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
-        summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
+        run_evidence = list(toolbox.evidence.values())
+        summary_problems = text_problems(submission.summary, run_evidence)
+        summary_problems += overstated(submission.summary, run_evidence)
         if guard:
             verdict, summary_problems = _guarded(
                 guard, verdict, submission.summary, summary_problems, result
             )
+        uncovered = coverage(list(verdict.accepted)) if coverage else []
+        result.uncovered = uncovered
         result.summary = submission.summary
         result.hypotheses = submission.hypotheses
         result.claims = list(verdict.accepted)
@@ -305,11 +321,12 @@ def _handle(
                     {"text": r.claim.text, "reasons": list(r.reasons)} for r in verdict.rejected
                 ],
                 "summary_problems": summary_problems,
+                "uncovered": uncovered,
             }
         )
-        if (verdict.rejected or summary_problems) and repairs_left > 0:
+        if (verdict.rejected or summary_problems or uncovered) and repairs_left > 0:
             message = _rejections_message(
-                list(verdict.rejected), len(verdict.accepted), summary_problems
+                list(verdict.rejected), len(verdict.accepted), summary_problems, uncovered
             )
             return message, False
         if summary_problems:  # still wrong after the repair: show a verified claim instead
