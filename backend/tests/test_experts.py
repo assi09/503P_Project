@@ -7,10 +7,12 @@ from app.agent.agent import SUBMIT
 from app.agent.experts import (
     BUDGETS,
     CONSULT,
+    CONSULT_BUDGET,
     EXPERTS,
     SHARED,
     Depth,
     ask_expert,
+    lead_budget,
     owner,
     visible_metrics,
 )
@@ -109,16 +111,16 @@ def test_an_expert_answers_with_claims_about_its_own_metrics(frame):
     assert [c.metric for c in result.claims] == ["sleep_minutes"]
     request = llm.requests[0]
     assert "You are the sleep expert" in request["messages"][0]["content"]
-    assert CONSULT not in request["tools"]  # quick answers do not consult
+    assert CONSULT not in request["tools"]  # only when the router allows a consult
 
 
 def test_the_prompt_says_who_owns_the_metrics_the_expert_cannot_see(frame):
     llm = ScriptedLLM([lambda m: submit([])])
-    ask_expert(llm, frame, "sleep", "Did my HRV move with my sleep?", depth=Depth.DEEP)
+    ask_expert(llm, frame, "sleep", "Did my HRV move with my sleep?", consult=["recovery"])
     prompt = llm.requests[0]["messages"][0]["content"]
     assert "recovery: heart rate variability (HRV)" in prompt
     assert "nutrition" not in prompt  # no data, so not offered
-    assert f"call {CONSULT} with the expert that owns it" in prompt
+    assert f"also concerns recovery: call {CONSULT}" in prompt
 
 
 def test_claims_about_another_experts_metric_are_sent_back_then_dropped(frame):
@@ -175,7 +177,7 @@ def consulting_recovery(lead_claim) -> list:
     ]
 
 
-def test_a_deep_answer_may_cite_what_a_consulted_expert_found(frame):
+def test_a_lead_may_cite_what_a_consulted_expert_found(frame):
     def lead_claim(messages):
         evidence = consulted_evidence(messages)
         return submit(
@@ -191,7 +193,7 @@ def test_a_deep_answer_may_cite_what_a_consulted_expert_found(frame):
         )
 
     llm = ScriptedLLM(consulting_recovery(lead_claim))
-    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", depth=Depth.DEEP)
+    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", consult=["sleep"])
     assert result.stop_reason == "submitted"
     assert result.consulted == ["sleep"]
     assert [c.metric for c in result.claims] == ["sleep_minutes"] and result.rejected == []
@@ -204,7 +206,7 @@ def test_a_deep_answer_may_cite_what_a_consulted_expert_found(frame):
 
 def test_consults_are_charged_to_the_lead(frame):
     llm = ScriptedLLM(consulting_recovery(lambda messages: submit([])))
-    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", depth=Depth.DEEP)
+    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", consult=["sleep"])
     assert result.budget.calls == 4  # two lead turns and two consulted ones
     assert result.budget.cost_usd == pytest.approx(0.002)  # both submissions
 
@@ -225,21 +227,23 @@ def test_the_lead_cannot_use_its_own_evidence_for_another_experts_metric(frame):
         )
 
     llm = ScriptedLLM([SLEEP_DROP, own_evidence, own_evidence])
-    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", depth=Depth.DEEP)
+    result = ask_expert(llm, frame, "recovery", "Why is my HRV lower?", consult=["sleep"])
     assert result.claims == [] and "sleep expert's metric" in result.rejected[0].reasons[0]
 
 
 @pytest.mark.parametrize(
     ("arguments", "error"),
     [
-        ({"expert": "recovery", "question": "x"}, "Consult one of"),  # itself
-        ({"expert": "nutrition", "question": "x"}, "Consult one of"),  # no data
+        ({"expert": "recovery", "question": "x"}, "Consult one of: sleep."),  # itself
+        ({"expert": "nutrition", "question": "x"}, "Consult one of: sleep."),  # no data
+        ({"expert": "activity", "question": "x"}, "Consult one of: sleep."),  # not routed
         ({"expert": "sleep"}, "Give an expert and a short question"),
     ],
 )
 def test_bad_consults_are_explained_to_the_model(frame, arguments, error):
     llm = ScriptedLLM([ScriptedLLM.call(CONSULT, **arguments), lambda m: submit([])])
-    result = ask_expert(llm, frame, "recovery", "Why?", depth=Depth.DEEP)
+    allowed = ["recovery", "nutrition", "sleep"]
+    result = ask_expert(llm, frame, "recovery", "Why?", consult=allowed)
     assert error in json.loads(llm.requests[1]["messages"][-1]["content"])["error"]
     assert result.consulted == []
 
@@ -247,7 +251,7 @@ def test_bad_consults_are_explained_to_the_model(frame, arguments, error):
 def test_the_same_expert_is_consulted_once(frame):
     again = ScriptedLLM.call(CONSULT, "again", expert="sleep", question="And bedtime?")
     llm = ScriptedLLM([*consulting_recovery(again)[:3], again, lambda m: submit([])])
-    result = ask_expert(llm, frame, "recovery", "Why?", depth=Depth.DEEP)
+    result = ask_expert(llm, frame, "recovery", "Why?", consult=["sleep"])
     assert "already consulted" in json.loads(llm.requests[4]["messages"][-1]["content"])["error"]
     assert result.consulted == ["sleep"]
 
@@ -257,7 +261,7 @@ def test_a_consult_leaves_the_lead_enough_budget_to_submit(frame):
         [ScriptedLLM.call(CONSULT, expert="sleep", question="x"), lambda m: submit([])]
     )
     budget = Budget(max_calls=4)
-    result = ask_expert(llm, frame, "recovery", "Why?", depth=Depth.DEEP, budget=budget)
+    result = ask_expert(llm, frame, "recovery", "Why?", consult=["sleep"], budget=budget)
     assert "Not enough budget" in json.loads(llm.requests[1]["messages"][-1]["content"])["error"]
     assert result.stop_reason == "submitted"
 
@@ -274,3 +278,24 @@ def test_depths_have_their_own_budgets(frame):
     assert result.budget.max_calls == BUDGETS[Depth.QUICK].max_calls
     assert BUDGETS[Depth.QUICK].calls == 0  # the shared default was copied, not spent
     assert BUDGETS[Depth.DEEP].max_tool_calls > BUDGETS[Depth.QUICK].max_tool_calls
+
+
+def test_deep_alone_does_not_allow_consulting(frame):
+    llm = ScriptedLLM([lambda m: submit([])])
+    ask_expert(llm, frame, "recovery", "Why is my HRV lower?", depth=Depth.DEEP)
+    assert CONSULT not in llm.requests[0]["tools"]
+
+
+def test_each_allowed_consult_adds_its_budget_to_the_lead():
+    quick, with_two = lead_budget(Depth.QUICK, 0), lead_budget(Depth.QUICK, 2)
+    assert quick.max_calls == BUDGETS[Depth.QUICK].max_calls
+    assert with_two.max_calls == quick.max_calls + 2 * CONSULT_BUDGET.max_calls
+    assert with_two.max_cost_usd == pytest.approx(
+        quick.max_cost_usd + 2 * CONSULT_BUDGET.max_cost_usd
+    )
+
+
+def test_a_quick_answer_still_consults_when_the_router_says_so(frame):
+    llm = ScriptedLLM(consulting_recovery(lambda messages: submit([])))
+    result = ask_expert(llm, frame, "recovery", "Why?", depth=Depth.QUICK, consult=["sleep"])
+    assert result.consulted == ["sleep"] and result.stop_reason == "submitted"
