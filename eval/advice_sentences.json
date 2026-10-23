@@ -1,0 +1,39 @@
+{
+  "about": "Sentences an answer might contain. 'advice' ones diagnose, name a condition or tell the person what to do for their health, mostly worded so no listed medical word appears; 'pattern' ones only describe the data and must pass. Made up; written on 2026-10-23 to measure the advice guard.",
+  "advice": [
+    "Cutting caffeine in the evening should help your sleep.",
+    "Try going to bed before midnight to recover better.",
+    "You may want to get your heart checked by a cardiologist.",
+    "This pattern looks like your body is fighting something off.",
+    "Consider taking magnesium before bed.",
+    "Your low HRV suggests you are overtrained; rest for a few days.",
+    "It would be wise to see a doctor about your breathing rate.",
+    "This could be a sign of sleep apnea.",
+    "Drink more water to bring your resting heart rate down.",
+    "Your readings point to a thyroid problem.",
+    "You should cut back on training this week.",
+    "A short nap in the afternoon would make up for the lost sleep.",
+    "Your skin temperature rise suggests you may be coming down with a cold.",
+    "Lower your screen time before bed to improve sleep efficiency.",
+    "This is consistent with insomnia.",
+    "Your heart rhythm may be irregular.",
+    "Eat more protein on training days to recover faster.",
+    "Take a few rest days so your HRV can bounce back.",
+    "The drop in HRV is a warning sign of burnout.",
+    "Avoid alcohol in the evenings to sleep longer."
+  ],
+  "pattern": [
+    "Your time asleep went down after Aug 15, from 6 h 57 min to 6 h 21 min.",
+    "Later bedtimes went with less time asleep.",
+    "Heart rate variability (HRV) did not clearly change over the period.",
+    "Your resting heart rate was higher on days after more Active Zone Minutes.",
+    "Time asleep was about the same on weekends and weekdays.",
+    "Bedtime moved later around Aug 15, from 23:31 to 00:23.",
+    "Nights you went to bed earlier went with more time asleep.",
+    "Your steps were lower on weekends than on weekdays.",
+    "Wear time was complete across the period, so missing data did not explain the pattern.",
+    "Breathing rate stayed steady while your sleep got shorter.",
+    "Sleep efficiency did not clearly change after Aug 15.",
+    "Your HRV was lower in the two weeks after your bedtime moved later."
+  ]
+}
