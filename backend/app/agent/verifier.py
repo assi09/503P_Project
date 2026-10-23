@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.present import label
 from app.analysis.evidence import Evidence
+from app.analysis.screen import benjamini_hochberg
 
 ALPHA = 0.05
 
@@ -153,9 +154,49 @@ MENTIONS = {
 NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
 
 
+TEST_TOOLS = ("compare_windows", "change_point", "trend", "correlate", "weekday_split")
+RUN_ADJUSTED = "p_value_run_adjusted"
+
+
+def _base_p(evidence: Evidence) -> float | None:
+    """The p-value as its tool or the screen reported it (corrected for the screen's metrics or a
+    correlation's lags where they apply)."""
+    stats = evidence.stats
+    return stats.get("p_value_adjusted", stats.get("p_value"))
+
+
+def _p(evidence: Evidence) -> float | None:
+    """The p-value a decision rests on: corrected for the run's tests when the run set one."""
+    return evidence.stats.get(RUN_ADJUSTED, _base_p(evidence))
+
+
 def _significant(evidence: Evidence) -> bool:
-    p = evidence.stats.get("p_value_adjusted", evidence.stats.get("p_value"))
+    p = _p(evidence)
     return p is not None and p < ALPHA
+
+
+def run_adjusted(tests: list[Evidence]) -> list[Evidence]:
+    """The run's own tests with Benjamini-Hochberg adjusted p-values, judged together.
+
+    An agent tests many things per run; without this, more than half of runs on a person where
+    nothing changed reported something (eval/multiple_testing.py: 56%, and 6% with it, while
+    planted changes were still found 92-98% of the time). Each copy keeps its id and its raw
+    p-value, and records the adjusted value and how many tests it was adjusted for.
+    """
+    usable = [e for e in tests if e.tool in TEST_TOOLS and _base_p(e) is not None]
+    if not usable:
+        return list(tests)
+    q = dict(
+        zip((e.id for e in usable), benjamini_hochberg([_base_p(e) for e in usable]), strict=True)
+    )
+    return [
+        e.model_copy(
+            update={"stats": {**e.stats, RUN_ADJUSTED: round(q[e.id], 6), "tests_in_run": len(q)}}
+        )
+        if e.id in q
+        else e
+        for e in tests
+    ]
 
 
 def _sign(evidence: Evidence) -> float | None:
@@ -344,7 +385,19 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         )
         support = [e for e in about if e.tool in tools and _significant(e)]
         if not support:
-            reasons.append(f"no cited {claim.kind} evidence is significant at {ALPHA}")
+            tested = next((e.stats["tests_in_run"] for e in about if "tests_in_run" in e.stats), 0)
+            within = f" after correcting for the {tested} tests in this run" if tested else ""
+            reason = f"no cited {claim.kind} evidence is significant at {ALPHA}{within}"
+            # Lost only to the correction, on the weaker test: say how to confirm it.
+            if any(
+                e.tool == "change_point" and (p := _base_p(e)) is not None and p < ALPHA
+                for e in about
+            ):
+                reason += (
+                    "; to confirm the change, compare the windows before and after its "
+                    "change_date with compare_windows, a stronger test, and cite that"
+                )
+            reasons.append(reason)
         elif claim.direction is None:
             reasons.append("a change or association claim must state its direction")
         else:

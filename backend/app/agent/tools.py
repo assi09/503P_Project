@@ -156,6 +156,7 @@ class Toolbox:
         self.frame = frame[[*self.metrics, *context]]
         self.tools = {name: TOOLS[name] for name in (tools or TOOLS)}
         self.evidence: dict[str, Evidence] = {}
+        self.produced: list[str] = []  # ids of the evidence this run's own tool calls made
         days = frame.index
         self.first_day = days.min().date() if len(days) else None
         self.last_day = days.max().date() if len(days) else None
@@ -211,6 +212,7 @@ class Toolbox:
         except (ToolError, ValueError) as exc:
             return self._error(str(exc))
         self.evidence[evidence.id] = evidence
+        self.produced.append(evidence.id)
         return ToolResult(content=json.dumps(evidence_payload(evidence)), evidence=evidence)
 
     @staticmethod
