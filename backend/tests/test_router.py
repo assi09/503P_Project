@@ -3,11 +3,11 @@ import json
 import httpx2
 import pytest
 
+from app.agent.jev import JEV_PATH
 from app.agent.llm import LLMError, ScriptedLLM
 from app.agent.router import (
     EXPERT_LABELS,
     GENERAL,
-    JEV_PATH,
     LABELS,
     OUT_OF_SCOPE,
     Classification,

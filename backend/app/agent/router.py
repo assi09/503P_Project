@@ -18,14 +18,14 @@ to, even several questions back.
 
 import json
 import re
-import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 import httpx2
 
 from app.agent.experts import EXPERTS
+from app.agent.jev import JevClient, JevError, clean
 from app.agent.llm import LLM, Budget, LLMError
 from app.agent.verifier import MEDICAL
 
@@ -63,20 +63,12 @@ def needs_instructions(expert: str) -> str:
     )
 
 
-MAX_QUESTION_CHARS = 500
 MAX_EARLIER = 3  # earlier questions the router sees, newest first
 
 # Thresholds on the probabilities. Tuned by the router evaluation, not fitted to anyone's data.
 REFUSE_AT = 0.5  # out of scope at least this likely: refuse
 LEAD_AT = 0.4  # the most likely expert must reach this, or the general agent answers
 CONSULT_AT = 0.5  # other experts whose data the question needs this likely are consulted
-
-JEV_URL = "https://api.typesafe.ai"
-JEV_PATH = "/v1/systemone"
-JEV_TIMEOUT_S = 2.0  # routing must be fast: past this the keyword rule answers instead
-JEV_PRICE_PER_MILLION_INPUT = 0.042  # output tokens are free
-
-CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 class RouterError(RuntimeError):
@@ -99,11 +91,6 @@ class Classification:
 
 class Router(Protocol):
     def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification: ...
-
-
-def clean(question: str) -> str:
-    """What leaves the server: the question only, without control characters, length-limited."""
-    return CONTROL.sub(" ", question).strip()[:MAX_QUESTION_CHARS]
 
 
 def state(question: str, earlier: Sequence[str] = ()) -> dict:
@@ -137,22 +124,14 @@ def needs_from(raw) -> dict[str, float]:
 
 
 class JevRouter:
-    def __init__(
-        self,
-        api_key: str,
-        http: httpx2.Client | None = None,
-        model: str = "jev-latest",
-        base_url: str = JEV_URL,
-        clock: Callable[[], float] = time.monotonic,
-    ):
-        if not api_key.strip():
-            raise RouterError("No TypeSafe key: set FA_TYPESAFE_API_KEY in .env.")
-        self._key = api_key.strip()
-        # No retries: a slow or failing call falls back to the keyword rule instead.
-        self._http = http or httpx2.Client(timeout=JEV_TIMEOUT_S)
-        self._model = model
-        self._url = base_url.rstrip("/") + JEV_PATH
-        self._clock = clock
+    """Routes with Jev: no retries, since a slow or failing call falls back to the keyword rule."""
+
+    def __init__(self, api_key: str, http: httpx2.Client | None = None, **options):
+        try:
+            self.client = JevClient(api_key, http, **options)
+        except JevError as exc:
+            raise RouterError(str(exc)) from exc
+        self.model = self.client.model
 
     @classmethod
     def from_settings(cls, settings) -> "JevRouter":
@@ -168,7 +147,7 @@ class JevRouter:
         return {
             # A bare question when there is nothing earlier, as Jev reads plain text best.
             "state": given if given["earlier_questions"] else given["question"],
-            "model": self._model,
+            "model": self.model,
             # Evaluated in parallel in one call: the topic, and per expert whether it is needed.
             "questions": {
                 "topic": {"type": "choice", "instructions": INSTRUCTIONS, "criteria": CRITERIA},
@@ -180,26 +159,11 @@ class JevRouter:
         }
 
     def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
-        started = self._clock()
         try:
-            response = self._http.post(
-                self._url,
-                json=self.payload(question, earlier),
-                headers={"Authorization": f"Bearer {self._key}"},
-            )
-        except httpx2.TimeoutException as exc:
-            raise RouterError("Jev took too long to answer.") from exc
-        except httpx2.TransportError as exc:
-            raise RouterError("Could not reach Jev.") from exc
-        # Error bodies may repeat the question, so only the status is kept.
-        if response.status_code in (401, 403):
-            raise RouterError("TypeSafe rejected the API key.")
-        if response.status_code == 429:
-            raise RouterError("Jev is rate limiting or the account is out of credit.")
-        if not response.is_success:
-            raise RouterError(f"Jev returned an error ({response.status_code}).")
+            body, latency, cost = self.client.call(self.payload(question, earlier))
+        except JevError as exc:
+            raise RouterError(str(exc)) from exc
         try:
-            body = response.json()
             answers = body["answers"]
             topic = answers["topic"]
             needs = {e: answers[f"needs_{e}"] for e in EXPERT_LABELS}
@@ -211,15 +175,7 @@ class JevRouter:
             raise RouterError("Jev's answer was not in the expected format.")
         probabilities = normalized(topic.get("probabilities"))
         needed = needs_from({e: a.get("noul") for e, a in needs.items()})
-        usage = body.get("usage") or {}
-        input_tokens = usage.get("input_tokens") or 0
-        return Classification(
-            probabilities,
-            needed,
-            source="jev",
-            latency_s=self._clock() - started,
-            cost_usd=input_tokens * JEV_PRICE_PER_MILLION_INPUT / 1_000_000,
-        )
+        return Classification(probabilities, needed, source="jev", latency_s=latency, cost_usd=cost)
 
 
 def _words(*patterns: str) -> re.Pattern:
