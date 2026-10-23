@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer_task, run_agent
 from app.agent.llm import LLM, Budget
-from app.agent.present import label
+from app.agent.present import label, metric_list
 from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
 from app.agent.verifier import Claim
 
@@ -157,10 +157,11 @@ def system_prompt(expert: Expert, frame: pd.DataFrame, consultable: list[str]) -
     lines = [
         SYSTEM_PROMPT,
         f"You are the {expert.name} expert.",
-        f"- You make claims only about your metrics: {_names(owned)}. Every claim's metric must "
-        "be one of these, or wear time when data quality matters.",
+        f"- You make claims only about your metrics: {metric_list(owned)}. Every claim's metric "
+        "field must be one of these names before the parentheses, or wear_minutes when data "
+        "quality matters.",
         f"- You may use these to explain changes in yours, but not make claims about them: "
-        f"{_names(read)}.",
+        f"{metric_list(read) or 'none'}.",
         f"- {expert.focus}",
     ]
     if expert.notes:
@@ -201,10 +202,10 @@ def ownership_check(expert: Expert, borrowed: dict[str, str]):
         metric_owner = owner(metric)
         if metric_owner and all(borrowed.get(i) == metric_owner.name for i in claim.evidence_ids):
             return []
-        whose = f"the {metric_owner.name} expert's" if metric_owner else "not one of your"
+        whose = f"the {metric_owner.name} expert's metric" if metric_owner else "not your metric"
         return [
-            f"{label(metric)} is {whose} metric: claim only what its owner's evidence shows, "
-            "or leave it out"
+            f"{label(metric)} is {whose}: claim only what its owner's evidence shows, or leave "
+            "it out"
         ]
 
     return check

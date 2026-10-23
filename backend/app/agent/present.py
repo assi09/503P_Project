@@ -150,6 +150,14 @@ def display(evidence: Evidence) -> dict[str, str]:
     return shown
 
 
+def column(name: str) -> str:
+    """The metric a name refers to: a column name as it is, or what people call it ("bedtime")."""
+    if name in METRICS:
+        return name
+    wanted = name.strip().lower()
+    return next((m for m, info in METRICS.items() if info.label.lower() == wanted), name)
+
+
 def metric_list(metrics: list[str] | tuple[str, ...]) -> str:
     """How the task names the metrics: the tool name with what people call it."""
     return ", ".join(f"{m} ({label(m)})" for m in metrics)

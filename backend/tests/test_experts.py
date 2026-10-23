@@ -141,6 +141,35 @@ def test_claims_about_another_experts_metric_are_sent_back_then_dropped(frame):
     assert "activity expert's metric" in llm.requests[2]["messages"][-1]["content"]
 
 
+def test_a_claim_naming_its_metric_as_people_do_is_checked_as_that_metric(frame):
+    def by_label(messages):
+        evidence = evidence_from(messages, "compare_windows")
+        return submit(
+            [
+                claim(
+                    evidence,
+                    "time asleep",
+                    "Your time asleep went down.",
+                    "change",
+                    direction="down",
+                )
+            ]
+        )
+
+    result = ask_expert(
+        ScriptedLLM([SLEEP_DROP, by_label]), frame, "sleep", "Has my sleep changed?"
+    )
+    assert [c.metric for c in result.claims] == ["sleep_minutes"] and result.rejected == []
+
+
+def test_the_prompt_gives_the_metric_names_claims_must_use(frame):
+    llm = ScriptedLLM([lambda m: submit([])])
+    ask_expert(llm, frame, "recovery", "How is my HRV?")
+    prompt = llm.requests[0]["messages"][0]["content"]
+    assert "hrv_ms (heart rate variability (HRV))" in prompt
+    assert "names before the parentheses" in prompt
+
+
 def test_wear_time_and_data_quality_claims_are_open_to_every_expert(frame):
     def quality(messages):
         evidence = evidence_from(messages, "coverage")

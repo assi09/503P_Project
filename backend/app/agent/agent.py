@@ -19,7 +19,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
-from app.agent.present import metric_list
+from app.agent.present import column, metric_list
 from app.agent.tools import Toolbox, evidence_payload
 from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, text_problems, verify
 from app.analysis.evidence import Evidence
@@ -250,7 +250,12 @@ def _handle(
             message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
             result.trace.append({"type": "submit", "error": message})
             return json.dumps({"error": f"Invalid submission: {message}"}), False
-        verdict = verify(submission.claims, toolbox.evidence, claim_check)
+        # Models sometimes name the metric as people do ("bedtime"); the checks need the column.
+        claims = [
+            c.model_copy(update={"metric": column(c.metric)}) if c.metric else c
+            for c in submission.claims
+        ]
+        verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
         result.summary = submission.summary
