@@ -3,8 +3,9 @@
 A claim must cite evidence that exists and had enough data. What it asserts must hold in that
 evidence: a change or an association must be significant and in the stated direction, every number
 in the sentence must come from the cited statistics (allowing rounding and minutes/hours), every
-date must fall inside the cited windows, and the wording must not contradict the direction. Claims
-must not diagnose, overstate causation, or reason about calorie balance from Fitbit's estimates.
+date must fall inside the cited windows, every metric the sentence names must be covered by the
+cited evidence, and the wording must not contradict the direction. Claims must not diagnose,
+overstate causation, or reason about calorie balance from Fitbit's estimates.
 """
 
 import re
@@ -15,6 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.agent.present import label
 from app.analysis.evidence import Evidence
 
 ALPHA = 0.05
@@ -117,6 +119,37 @@ DURATION = re.compile(
 COLUMN_NAME = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
 # Evidence ids (12 hex characters) belong in `evidence_ids`; in the text they read as numbers.
 EVIDENCE_ID = re.compile(r"\b(?=[a-f]*\d)[0-9a-f]{12}\b")
+# How sentences name metrics, so a sentence cannot describe one no evidence covers. Only distinctive
+# terms: generic words ("sleep", "activity") would match sentences about other metrics.
+MENTIONS = {
+    metric: re.compile(pattern, re.IGNORECASE)
+    for metric, pattern in {
+        "hrv_ms": r"\bHRV\b|heart rate variability",
+        "resting_hr": r"resting heart rate|\bRHR\b",
+        "respiratory_rate": r"breathing rate|respiratory rate",
+        "skin_temp_variation_c": r"skin temperature",
+        "readiness": r"\breadiness\b",
+        "steps": r"\bsteps\b",
+        "distance_km": r"\bdistance\b",
+        "active_zone_minutes": r"active zone minutes|\bAZM\b",
+        "cardio_load": r"cardio load",
+        "calories": r"calories burned",
+        "sedentary_minutes": r"\bsedentary\b",
+        "lightly_active_minutes": r"light activity",
+        "moderately_active_minutes": r"moderate activity",
+        "very_active_minutes": r"vigorous activity",
+        "wear_minutes": r"wear time",
+        "sleep_minutes": r"time asleep",
+        "time_in_bed": r"time in bed",
+        "sleep_efficiency": r"sleep efficiency",
+        "sleep_score": r"sleep score",
+        "deep_sleep_minutes": r"deep sleep",
+        "light_sleep_minutes": r"light sleep",
+        "rem_sleep_minutes": r"\bREM\b",
+        "awake_in_bed_minutes": r"time awake|awake in bed",
+        "bedtime_hour": r"\bbedtimes?\b",
+    }.items()
+}
 NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
 
 
@@ -365,6 +398,15 @@ def text_problems(text: str, cited: list[Evidence]) -> list[str]:
         reasons.append("mentions dates outside the cited evidence: " + ", ".join(map(str, bad)))
     if EVIDENCE_ID.search(text):
         reasons.append("writes evidence ids in the text; list them only in evidence_ids")
+    covered = {metric for evidence in cited for metric in evidence.metrics}
+    if uncovered := [
+        m for m, pattern in MENTIONS.items() if m not in covered and pattern.search(text)
+    ]:
+        names = ", ".join(label(m) for m in uncovered)
+        reasons.append(
+            f"mentions {names}, which none of the cited evidence covers; describe only what the "
+            "evidence shows"
+        )
     if columns := COLUMN_NAME.findall(text):
         reasons.append(
             "uses internal metric names (" + ", ".join(sorted(set(columns))) + "); use the "
