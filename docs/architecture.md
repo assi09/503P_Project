@@ -169,7 +169,7 @@ health? A flagged sentence is rejected like any other. If Jev is down, the word 
 and the trace says so. Consulted runs are not checked, since only the lead's text is shown. The
 Jev HTTP client (`jev.py`) is shared by the router and the guard.
 
-## Memory and context (conversation built; other memory stored, retrieval next)
+## Memory and context
 
 The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The
 principles: the context window is scarce, so a run gets a small, deterministic selection; memory
@@ -231,8 +231,21 @@ other, rather not say), the answer one of them, the same metric and period never
 two declined questions pausing questions for 14 days; check-ins for today only, 1 to 5 with fixed
 tags; facts proposed by the agent and kept only once the person approves (at most 120 characters,
 a fixed kind, known metrics, nothing instruction-like, never re-proposed once declined). `expire()`
-enforces the 90, 180 and 365 day lifetimes. Retrieving them into the context, and the agent's
-`checkins` and `propose_fact` tools, come next.
+enforces the 90, 180 and 365 day lifetimes.
+
+**Retrieved into each answer** (`context.select_memory`, `memory.memory_items`). Routing comes first,
+so the metrics in play are known: the lead's own and the ones it reads, and its consults'. Current
+findings, answers (not "rather not say") and approved facts whose metrics overlap them are scored
+on relevance, recency (halving every 30 days) and importance (a finding's effect size; what the
+person confirmed counts fully); preferences always come, at most three; at most five items in all,
+within the same token budget as the conversation. A finding's evidence is re-attached and counts as
+its metric's owner's. The trace lists what was retrieved, and approved facts that went into a run
+are marked used, so unused ones fade out after 60 days.
+
+**Proposing facts.** The agent has a `propose_fact` tool for something lasting the person stated
+about themselves (never inferred from the data), at most one per answer, checked against the fact
+rules (`facts.py`). Proposals come back with the answer for the person to approve; the agent never
+writes memory. Check-ins as data the tools can analyse come with the recovery score.
 
 ### Write path
 

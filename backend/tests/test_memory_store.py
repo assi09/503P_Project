@@ -267,3 +267,39 @@ def test_deleting_a_person_deletes_all_their_memory(session, drop):
     session.execute(delete(User).where(User.id == user_id))
     for table in (Finding, ContextQuestion, CheckIn, MemoryFact):
         assert session.scalars(select(table)).all() == []
+
+
+# Retrieval
+
+
+def test_memory_items_bring_what_may_still_be_retrieved(session, drop):
+    from app.db.memory import memory_items
+
+    user_id = person(session)
+    save_findings(session, user_id, "run1", [change(drop)], {drop.id: drop}, NOW)
+    answered = ask(session, user_id)
+    answer_question(session, user_id, answered.id, "travel", NOW)
+    declined = ask(session, user_id, metric="hrv_ms")
+    answer_question(session, user_id, declined.id, "rather_not_say", NOW)
+    approved = propose_fact(session, user_id, "preference", "Prefers short answers")
+    decide_fact(session, user_id, approved.id, True, NOW)
+    propose_fact(session, user_id, "goal", "Sleep 8 hours")  # still waiting for the person
+    items = {item.kind: item for item in memory_items(session, user_id, NOW)}
+    assert set(items) == {"finding", "answer", "preference"}
+    assert items["finding"].evidence == (drop,) and items["finding"].importance > 0
+    assert items["answer"].text == (
+        "Asked what was going on when their time asleep changed around Aug 15, the person "
+        "said: travel."
+    )
+
+
+def test_facts_fade_out_unless_they_keep_being_used(session):
+    from app.db.memory import mark_used, memory_items
+
+    user_id = person(session)
+    fact = propose_fact(session, user_id, "routine", "Trains on Tuesdays", ["steps"])
+    decide_fact(session, user_id, fact.id, True, NOW)
+    assert memory_items(session, user_id, NOW + timedelta(days=61)) == []
+    mark_used(session, user_id, [str(fact.id), "not-a-uuid"], NOW + timedelta(days=50))
+    [item] = memory_items(session, user_id, NOW + timedelta(days=61))
+    assert item.id == str(fact.id) and fact.uses == 1

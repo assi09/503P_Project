@@ -66,6 +66,11 @@ Writing for the person (the summary and every claim's text are shown to them as 
 - Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
   "12%"), and dates as "Aug 15".
 - Never write evidence ids in the text: they go in evidence_ids only.
+- If the context holds the person's answers or facts they approved, say in the summary how they
+  line up with what the data shows ("this coincided with the travel you mentioned"), never as a
+  cause. Cite evidence the context already lists instead of recomputing it.
+- If the person tells you something lasting about themselves (a routine, goal, preference or
+  context, such as night shifts), call propose_fact once so they can choose to have it remembered.
 
 Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
@@ -446,6 +451,7 @@ def answer(
     context: str = "",
     evidence: dict[str, Evidence] | None = None,
     guard: Guard | None = None,
+    extra_tools: list[ExtraTool] = (),
 ) -> AgentResult:
     """Answers a person's question about their data, with verified claims.
 
@@ -454,7 +460,15 @@ def answer(
     toolbox = Toolbox(frame, metrics or list(frame.columns))
     toolbox.evidence.update(evidence or {})
     task = answer_task(toolbox, question, today, context)
-    return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt, guard=guard)
+    return run_agent(
+        llm,
+        toolbox,
+        task,
+        budget=budget,
+        system_prompt=system_prompt,
+        guard=guard,
+        extra_tools=list(extra_tools),
+    )
 
 
 def answer_task(

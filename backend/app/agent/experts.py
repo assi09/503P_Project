@@ -342,6 +342,7 @@ def ask_expert(
     owners: dict[str, str] | None = None,
     guard: Guard | None = None,
     needs: Iterable[str] = (),
+    extra_tools: list[ExtraTool] = (),
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -365,7 +366,7 @@ def ask_expert(
     borrowed: dict[str, str] = dict(owners or {})
     consults = _Consults(llm, frame, expert, toolbox, budget, today, allowed, borrowed, [])
     consultable = consults.experts()
-    extras = [consults.tool()] if consultable else []
+    extras = ([consults.tool()] if consultable else []) + list(extra_tools)
     prompt = system_prompt(expert, frame, consultable)
     result = run_agent(
         llm,
