@@ -53,6 +53,7 @@ Writing for the person (the summary and every claim's text are shown to them as 
   sleep_minutes.
 - Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
   "12%"), and dates as "Aug 15".
+- Never write evidence ids in the text: they go in evidence_ids only.
 
 Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
