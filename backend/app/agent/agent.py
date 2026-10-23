@@ -59,8 +59,9 @@ Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
   an association says whether it goes up or down.
 - Quote only numbers, times and dates that appear in the cited evidence.
-- Only claim a change or an association when the evidence is significant. Say "no clear change"
-  otherwise.
+- Only claim a change or an association when the evidence is significant. When it is not, that is
+  a finding too: make it a no_change claim citing that evidence ("no clear change", "did not
+  clearly go with"), never a change or association claim.
 - The tools show change and association, not cause: write "went with" or "coincided with", never
   "caused", "because of" or "due to".
 - Describe patterns in the person's data. Never diagnose or give medical advice, and never reason
