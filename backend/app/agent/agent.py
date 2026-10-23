@@ -18,10 +18,20 @@ from datetime import date
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
+from app.agent.guard import REASON as ADVICE_REASON
+from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
 from app.agent.present import column, metric_list
 from app.agent.tools import Toolbox, evidence_payload
-from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, text_problems, verify
+from app.agent.verifier import (
+    Claim,
+    Hypothesis,
+    Rejection,
+    Submission,
+    Verdict,
+    text_problems,
+    verify,
+)
 from app.analysis.evidence import Evidence
 from app.analysis.screen import screen
 
@@ -163,6 +173,7 @@ def run_agent(
     role: Role = Role.SMALL,
     extra_tools: list[ExtraTool] = (),
     claim_check: Callable[[Claim], list[str]] | None = None,
+    guard: Guard | None = None,
 ) -> AgentResult:
     budget = budget or Budget()
     result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
@@ -223,6 +234,7 @@ def run_agent(
                 repairs_left,
                 extras,
                 claim_check,
+                guard,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -243,6 +255,7 @@ def _handle(
     repairs_left: int,
     extras: dict[str, ExtraTool],
     claim_check: Callable[[Claim], list[str]] | None,
+    guard: Guard | None,
 ) -> tuple[str, bool]:
     """Runs one tool call; returns what the model reads and whether the run is finished."""
     if call.name == HYPOTHESES:
@@ -269,6 +282,10 @@ def _handle(
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
+        if guard:
+            verdict, summary_problems = _guarded(
+                guard, verdict, submission.summary, summary_problems, result
+            )
         result.summary = submission.summary
         result.hypotheses = submission.hypotheses
         result.claims = list(verdict.accepted)
@@ -310,6 +327,41 @@ def _handle(
         step["error"] = outcome.error
     result.trace.append(step)
     return outcome.content, False
+
+
+def _guarded(
+    guard: Guard, verdict: Verdict, summary: str, summary_problems: list[str], result: AgentResult
+) -> tuple[Verdict, list[str]]:
+    """Puts what passed the deterministic checks to the guard; flagged sentences are rejected.
+
+    Only sentences that would otherwise be shown are checked. When the guard is unavailable, the
+    word checks alone apply and the trace says so."""
+    claims = list(verdict.accepted)
+    texts = [c.text for c in claims] + ([summary] if summary and not summary_problems else [])
+    if not texts:
+        return verdict, summary_problems
+    try:
+        judgement = guard.judge(texts)
+    except GuardError as exc:
+        result.trace.append({"type": "guard", "error": str(exc)})
+        return verdict, summary_problems
+    flags = judgement.flagged
+    result.trace.append(
+        {
+            "type": "guard",
+            "checked": len(texts),
+            "flagged": [text for text, flag in zip(texts, flags, strict=True) if flag],
+            "latency_s": round(judgement.latency_s, 3),
+            "cost_usd": judgement.cost_usd,
+        }
+    )
+    accepted = tuple(c for c, flag in zip(claims, flags, strict=False) if not flag)
+    rejected = verdict.rejected + tuple(
+        Rejection(c, (ADVICE_REASON,)) for c, flag in zip(claims, flags, strict=False) if flag
+    )
+    if len(texts) > len(claims) and flags[-1]:  # the summary was checked last
+        summary_problems = [*summary_problems, ADVICE_REASON]
+    return Verdict(accepted, rejected), summary_problems
 
 
 def _describe_range(toolbox: Toolbox) -> str:
@@ -366,6 +418,7 @@ def answer(
     system_prompt: str = SYSTEM_PROMPT,
     context: str = "",
     evidence: dict[str, Evidence] | None = None,
+    guard: Guard | None = None,
 ) -> AgentResult:
     """Answers a person's question about their data, with verified claims.
 
@@ -374,7 +427,7 @@ def answer(
     toolbox = Toolbox(frame, metrics or list(frame.columns))
     toolbox.evidence.update(evidence or {})
     task = answer_task(toolbox, question, today, context)
-    return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt)
+    return run_agent(llm, toolbox, task, budget=budget, system_prompt=system_prompt, guard=guard)
 
 
 def answer_task(
