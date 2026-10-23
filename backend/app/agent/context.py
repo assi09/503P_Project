@@ -16,13 +16,13 @@ or dropped is returned for the trace.
 """
 
 import json
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from app.agent.experts import owner
 from app.agent.present import label
 from app.agent.router import MAX_EARLIER
+from app.agent.sanitize import clean, reads_like_instruction
 from app.agent.tools import evidence_payload
 from app.analysis.evidence import Evidence
 
@@ -31,18 +31,6 @@ TOKEN_BUDGET = 1_500
 CHARS_PER_TOKEN = 4  # a rough count, enough to keep the block small
 MAX_TEXT_CHARS = 500
 MAX_EVIDENCE = 8  # re-attached evidence records, newest turns first
-
-CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
-# Text that reads like an instruction to the model, or points elsewhere, is not kept as context.
-INSTRUCTION_LIKE = re.compile(
-    r"ignore (?:all |any )?(?:the )?(?:previous|prior|above|earlier) (?:instructions|messages)"
-    r"|disregard (?:all |the )?(?:previous|prior|above)"
-    r"|system prompt|developer message|you are now|new instructions"
-    r"|^\s*(?:system|assistant|developer|user)\s*:"
-    r"|<\|?/?(?:system|im_start|im_end)"
-    r"|https?://|www\.",
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 @dataclass(frozen=True)
@@ -100,7 +88,7 @@ def turns_from(messages: Iterable) -> list[Turn]:
 
 
 def _clean(text: str) -> str:
-    return CONTROL.sub(" ", text or "").strip()[:MAX_TEXT_CHARS]
+    return clean(text, MAX_TEXT_CHARS)
 
 
 def _tokens(item) -> int:
@@ -121,7 +109,7 @@ def build(
     for index, turn in enumerate(turns):
         if turn.refused:
             dropped.append({"turn": index, "reason": "refused"})
-        elif any(INSTRUCTION_LIKE.search(t) for t in _texts(turn)):
+        elif any(reads_like_instruction(t) for t in _texts(turn)):
             dropped.append({"turn": index, "reason": "reads like an instruction"})
         else:
             kept.append((index, turn))

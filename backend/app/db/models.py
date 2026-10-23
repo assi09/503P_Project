@@ -150,3 +150,111 @@ class EvidenceRecord(Base):
     tool: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict] = mapped_column(JSON)  # the whole Evidence, as JSON
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# Fixed menus: the person chooses, nobody types, so nothing free-form enters memory from here.
+CHECKIN_TAGS = ("hard_training", "alcohol", "late_meal", "stress", "travel", "feeling_sick")
+CONTEXT_OPTIONS = (
+    "travel",
+    "work_or_exam_schedule",
+    "more_training",
+    "less_training",
+    "illness",
+    "new_device",
+    "other",
+    "rather_not_say",
+)
+QUESTION_STATUSES = ("asked", "answered", "dismissed")
+FACT_KINDS = ("routine", "goal", "preference", "context")
+FACT_STATUSES = ("proposed", "approved", "declined")
+
+
+class Finding(Base):
+    """A verified change or association from an investigation run (episodic memory).
+
+    A newer finding on the same metric supersedes the older one; findings are kept 90 days.
+    """
+
+    __tablename__ = "findings"
+    __table_args__ = (Index("ix_findings_user_metric_created", "user_id", "metric", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    run_id: Mapped[str] = mapped_column(String(32))
+    metric: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))  # change or association
+    direction: Mapped[str | None] = mapped_column(String(8), default=None)
+    text: Mapped[str] = mapped_column(Text)  # the verified claim, as shown
+    evidence_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    window_start: Mapped[date] = mapped_column(Date)  # the dates the evidence covers
+    window_end: Mapped[date] = mapped_column(Date)
+    effect: Mapped[float | None] = mapped_column(Float, default=None)  # |Cliff's delta| or |rho|
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class ContextQuestion(Base):
+    """A question the agent asked about an unexplained change, and the person's answer.
+
+    The prompt comes from a template and the options from a fixed menu; answers are kept 180 days.
+    """
+
+    __tablename__ = "context_questions"
+    __table_args__ = (
+        CheckConstraint(f"status IN {QUESTION_STATUSES}", name="ck_context_questions_status"),
+        Index("ix_context_questions_user_asked", "user_id", "asked_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    run_id: Mapped[str | None] = mapped_column(String(32), default=None)
+    metric: Mapped[str] = mapped_column(String(64))
+    prompt: Mapped[str] = mapped_column(Text)
+    window_start: Mapped[date] = mapped_column(Date)
+    window_end: Mapped[date] = mapped_column(Date)
+    options: Mapped[list[str]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), default="asked")
+    answer: Mapped[str | None] = mapped_column(String(32), default=None)
+    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class CheckIn(Base):
+    """The morning "how do you feel today?" rating (1 to 5) with fixed tags; kept 365 days."""
+
+    __tablename__ = "checkins"
+    __table_args__ = (CheckConstraint("rating BETWEEN 1 AND 5", name="ck_checkins_rating"),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    rating: Mapped[int]
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class MemoryFact(Base):
+    """A short fact or preference (semantic memory), proposed by the agent and kept only once the
+    person approves it. Not retrieved after 60 days unused."""
+
+    __tablename__ = "memory_facts"
+    __table_args__ = (
+        CheckConstraint(f"kind IN {FACT_KINDS}", name="ck_memory_facts_kind"),
+        CheckConstraint(f"status IN {FACT_STATUSES}", name="ck_memory_facts_status"),
+        Index("ix_memory_facts_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(String(120))
+    metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="proposed")
+    source_run_id: Mapped[str | None] = mapped_column(String(32), default=None)  # provenance
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    uses: Mapped[int] = mapped_column(default=0)

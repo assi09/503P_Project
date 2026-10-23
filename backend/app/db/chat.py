@@ -38,9 +38,37 @@ def add_answer(
 ) -> ChatMessage:
     """Stores an answer, its verified claims, and the evidence they cite (once per id)."""
     cited = {i for claim in claims for i in claim.get("evidence_ids", [])}
+    store_evidence(session, user_id, run_id, evidence, cited)
+    message = ChatMessage(
+        user_id=user_id,
+        role="assistant",
+        text=text,
+        claims=claims,
+        evidence_ids=sorted(cited),
+        answered_by=answered_by,
+        routed=routed,
+        consulted=consulted,
+        refused=refused,
+        run_id=run_id,
+    )
+    session.add(message)
+    session.flush()
+    return message
+
+
+def store_evidence(
+    session: Session,
+    user_id: uuid.UUID,
+    run_id: str | None,
+    evidence: Iterable[Evidence],
+    cited: set[str],
+) -> None:
+    """Stores the cited evidence, once per id; raises `ValueError` if any of it was not given."""
     records = [e for e in evidence if e.id in cited]
     if missing := cited - {e.id for e in records}:
         raise ValueError(f"claims cite evidence that was not given: {', '.join(sorted(missing))}")
+    if not records:
+        return
     stored = set(
         session.scalars(
             select(EvidenceRecord.id).where(
@@ -59,21 +87,6 @@ def add_answer(
         for e in records
         if e.id not in stored
     )
-    message = ChatMessage(
-        user_id=user_id,
-        role="assistant",
-        text=text,
-        claims=claims,
-        evidence_ids=sorted(cited),
-        answered_by=answered_by,
-        routed=routed,
-        consulted=consulted,
-        refused=refused,
-        run_id=run_id,
-    )
-    session.add(message)
-    session.flush()
-    return message
 
 
 def history(session: Session, user_id: uuid.UUID, limit: int | None = None) -> list[ChatMessage]:
