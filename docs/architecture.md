@@ -39,7 +39,7 @@ verifier rejects statements it cannot match to one.
 | General agent, verifier, readable findings | `backend/app/agent/` | done |
 | Experts and consult | `backend/app/agent/experts.py` | sleep, recovery, activity; nutrition defined, waiting for its columns |
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
-| Router | `backend/app/agent/` | planned, see [product.md](product.md#routing) |
+| Router and the ask flow | `backend/app/agent/router.py`, `ask.py` | Jev with keyword fallback; LLM router for the evaluation |
 | API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
 | Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
 | Evaluation suite | `eval/` | planned |
@@ -100,8 +100,8 @@ numbers all come from its evidence. It is what the app shows until the agent exi
 
 ### Agent
 
-`backend/app/agent/`. The general agent (`agent.py`) and the experts (`experts.py`) are built;
-the router is next.
+`backend/app/agent/`: the general agent (`agent.py`), the experts (`experts.py`), the router
+(`router.py`) and the ask flow that joins them (`ask.py`).
 A run starts either from the screen's changes (`investigate`; when nothing changed, no model is
 called) or from a question (`answer`). The model records hypotheses, tests them with the toolbox
 (`tools.py`: validated calls over the analysis tools, limited to the metrics in scope), and calls
@@ -112,14 +112,27 @@ cap; `ScriptedLLM` stands in for the model in tests. Each run keeps a trace of e
 **Experts** run the same loop with their own prompt and a toolbox over the metrics they own plus
 the ones they read ([product.md](product.md#experts)); wear time is shared. One rule is added to
 the verifier: **only the owner makes claims about a metric**. A claim about another expert's metric
-passes only when all its evidence came from that expert through `consult`. `consult` exists in
-*deep* answers only: it runs the other expert as a *quick* answer on a budget carved out of the
-lead's (leaving the lead enough calls to submit and repair), at most twice per answer and once per
-expert, and lends the lead the evidence behind its verified claims. Consulted experts cannot
+passes only when all its evidence came from that expert through `consult`. The router decides
+which experts may be consulted; `consult` runs one as a *quick* answer on a budget carved out of
+the lead's (leaving the lead enough calls to submit and repair), at most twice per answer and once
+per expert, and lends the lead the evidence behind its verified claims. Consulted experts cannot
 consult. An expert with no data (nutrition, for now) answers without calling the model. Budgets:
-quick 6 model calls, 8 tool calls, $0.02; deep 16, 24, $0.06; a consult at most 5, 6, $0.015.
+quick 6 model calls, 8 tool calls, $0.02; deep 12, 20, $0.05; each allowed consult adds 5 model
+calls and $0.015.
 
-Planned: the router, and the evaluation comparing the experts with the general agent.
+**Router** (`router.py`). One Jev call asks a *choice* (the topic: an expert, general or out of
+scope) and one *yes/no* per expert (does answering need its data). `decide` turns them into an
+action with fixed thresholds: out of scope at 0.5 or more is refused, even when the person picked
+the expert; a lead below 0.4 (or `general` on top) goes to the general agent; other experts needed
+at 0.5 or more are consulted. Jev is called over `httpx2` with a 2 s timeout and no retries; on any
+failure the keyword rule answers and the reason is kept. Only the cleaned question text (control
+characters removed, at most 500 characters) is sent, and error bodies are never kept, since they
+may repeat it. An LLM router with the same output exists only for the evaluation's comparison.
+`ask` routes, then refuses without a model call, or runs the general agent or the expert, and
+records the routing decision as the first step of the trace.
+
+Planned: the evaluation comparing the experts with the general agent, and the routers with each
+other on a labeled question set.
 
 ### Verifier
 

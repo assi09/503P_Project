@@ -92,15 +92,17 @@ Wear time and data coverage are shared: every expert must account for low-wear d
 
 ## Routing
 
-A fast classifier (Jev, a typed decision model) labels each question with one of: sleep,
-recovery, activity, nutrition, general, out of scope. It returns a probability per label, and code
-decides what to do with them:
+A fast classifier (Jev, a typed decision model) answers two things about each question, in one
+call. Its **topic**: a probability for each of sleep, recovery, activity, nutrition, general and
+out of scope. And, separately for each expert, whether answering **needs** that expert's data
+(yes/no, as a probability). A single topic distribution cannot mark a question as cross-domain: its
+spare probability is uncertainty, not a second topic. Code decides what to do with the answers:
 
-- **One clear label:** that expert answers.
-- **Several likely labels** (a cross-domain question such as *"did my late nights hurt my
-  recovery?"*): the most likely expert leads and consults the others as tools; one answer, one
-  owner, verified once.
-- **Low confidence:** the general agent answers, or the app asks the user to clarify.
+- **Clear topic:** that expert leads.
+- **Needs other experts' data** (a cross-domain question such as *"did my late nights hurt my
+  recovery?"*): the lead consults those experts as tools; one answer, one owner, verified once.
+  **Consulting is the router's decision**, not the depth's and not the lead's.
+- **Low confidence:** the general agent answers.
 - **Out of scope** (medical questions, requests unrelated to the user's data): refused without
   calling the LLM.
 
@@ -114,12 +116,12 @@ first message is sent. The input has three controls:
 
 - **Expert:** *Auto* by default, which routes as above. A user who already knows the topic can pick
   an expert, and the question goes straight to it. The scope check still runs on every message,
-  so picking an expert cannot get around the refusal of medical questions. An expert asked about
-  another expert's metrics consults that expert instead of guessing. Nutrition is listed but
-  disabled until nutrition data exists.
-- **Depth:** *Quick* (the default) gives the expert a small tool budget and no consultations;
-  *Deep* lets it test more windows and consult other experts. This is the latency and cost
-  trade-off made visible, and both settings are measured in the evaluation.
+  so picking an expert cannot get around the refusal of medical questions, and the router still
+  decides which other experts it consults. Nutrition is listed but disabled until nutrition data
+  exists.
+- **Depth:** *Quick* (the default) gives the expert a small tool budget; *Deep* lets it test more
+  windows. Consults the router allows add their own budget at either depth. This is the latency
+  and cost trade-off made visible, and both settings are measured in the evaluation.
 - **Attach:** a recent finding or a metric, shown above the input, which decides the topic.
 
 Every answer says which expert gave it, whether the router or the user chose that expert, and

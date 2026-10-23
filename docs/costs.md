@@ -28,7 +28,7 @@ Measured on 2026-10-21 where noted; otherwise from published prices.
 | Simple chat question | `gpt-5.4-mini` | ~$0.005–0.01 |
 | Expert answer with a consult | `gpt-5.4-mini` | ~$0.01–0.03 |
 | Write-up with the large model, one call | `gpt-5.5` | ~$0.04–0.05 |
-| Routing one question | Jev | ~$0.00001–0.00003 |
+| Routing one question | Jev | ~$0.00003 (measured: topic plus four yes/no questions, median 0.21 s) |
 
 Prices used for cost accounting are in `backend/app/agent/llm.py` (`PRICES`; per million tokens:
 `gpt-5.4-mini` $0.75 in / $4.50 out, `gpt-5.5` $5 / $30). The model list on 2026-10-21
@@ -57,3 +57,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Recovery expert, deep, synthetic person (4 model calls, 22 tool calls; all claims rejected: ids in the text) | $0.0217 |
 | 2026-10-23 | Sleep expert, deep, same person after the fix (7 model calls, 16 tool calls; 3 verified claims, no consult) | $0.0152 |
 | 2026-10-23 | Sleep expert, deep, after listing other experts' metrics (10 model calls, 17 tool calls; consulted recovery, 4 verified claims) | $0.0247 |
+| 2026-10-23 | Jev routing checks, 16 made-up questions: topic only (14/16), then topic and per-expert needs (16/16 on the lead, 14/16 exact), 50 calls in all | $0.0013 |
