@@ -19,7 +19,7 @@ agent and its evaluation are the priority.
 |---|---|
 | `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 57) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo) |
+| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
 | `docker-compose.yml` | local Postgres on port 5433 |
 

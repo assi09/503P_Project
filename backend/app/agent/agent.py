@@ -19,7 +19,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
-from app.agent.present import metric_list
+from app.agent.present import column, metric_list
 from app.agent.tools import Toolbox, evidence_payload
 from app.agent.verifier import Claim, Hypothesis, Rejection, Submission, text_problems, verify
 from app.analysis.evidence import Evidence
@@ -59,8 +59,9 @@ Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
   an association says whether it goes up or down.
 - Quote only numbers, times and dates that appear in the cited evidence.
-- Only claim a change or an association when the evidence is significant. Say "no clear change"
-  otherwise.
+- Only claim a change or an association when the evidence is significant. When it is not, that is
+  a finding too: make it a no_change claim citing that evidence ("no clear change", "did not
+  clearly go with"), never a change or association claim.
 - The tools show change and association, not cause: write "went with" or "coincided with", never
   "caused", "because of" or "due to".
 - Describe patterns in the person's data. Never diagnose or give medical advice, and never reason
@@ -209,9 +210,19 @@ def run_agent(
             break
 
         submitted = False
+        # The budget is charged for the whole turn at once; calls run in order until it is spent,
+        # so a turn with too many calls loses only the ones past the limit.
+        used = budget.tool_calls - len(completion.tool_calls)
         for call in completion.tool_calls:
+            used += 1
             content, done = _handle(
-                call, toolbox, result, budget, repairs_left, extras, claim_check
+                call,
+                toolbox,
+                result,
+                used > budget.max_tool_calls,
+                repairs_left,
+                extras,
+                claim_check,
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
             # A verified submission sent back for repair uses up the repair round.
@@ -228,7 +239,7 @@ def _handle(
     call: ToolCall,
     toolbox: Toolbox,
     result: AgentResult,
-    budget: Budget,
+    over_budget: bool,
     repairs_left: int,
     extras: dict[str, ExtraTool],
     claim_check: Callable[[Claim], list[str]] | None,
@@ -250,7 +261,12 @@ def _handle(
             message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
             result.trace.append({"type": "submit", "error": message})
             return json.dumps({"error": f"Invalid submission: {message}"}), False
-        verdict = verify(submission.claims, toolbox.evidence, claim_check)
+        # Models sometimes name the metric as people do ("bedtime"); the checks need the column.
+        claims = [
+            c.model_copy(update={"metric": column(c.metric)}) if c.metric else c
+            for c in submission.claims
+        ]
+        verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))
         result.summary = submission.summary
@@ -276,7 +292,7 @@ def _handle(
             result.summary = verdict.accepted[0].text if verdict.accepted else ""
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 
-    if budget.tool_calls > budget.max_tool_calls:
+    if over_budget:
         message = f"The tool budget is spent; call {SUBMIT} now with what you have."
         result.trace.append({"type": "tool", "name": call.name, "error": message})
         return json.dumps({"error": message}), False

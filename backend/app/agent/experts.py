@@ -5,12 +5,15 @@ a toolbox over the metrics it owns plus the ones it reads to explain them, and o
 **only the owner makes claims about a metric**. A claim about another expert's metric passes only
 when every evidence it cites was produced by that expert, through `consult`.
 
-`consult` (deep answers only) runs another expert on a narrower question with a smaller budget and
-hands back its verified claims and their evidence, which the lead may then cite. Consulted experts
+`consult` runs another expert on a narrower question with a smaller budget and hands back its
+verified claims and their evidence, which the lead may then cite. **The router decides who may be
+consulted** (the other likely topics of a cross-domain question), not the depth and not the lead;
+depth only sets the lead's budget, and each allowed consult adds its own on top. Consulted experts
 cannot consult in turn, so a question costs at most one lead run and a few short ones.
 """
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
@@ -20,7 +23,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer_task, run_agent
 from app.agent.llm import LLM, Budget
-from app.agent.present import label
+from app.agent.present import label, metric_list
 from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
 from app.agent.verifier import Claim
 
@@ -31,8 +34,8 @@ LEAD_RESERVE_CALLS = 3
 
 
 class Depth(StrEnum):
-    QUICK = "quick"  # a small tool budget, no consultations
-    DEEP = "deep"  # more tool calls, and other experts may be consulted
+    QUICK = "quick"  # a small tool budget
+    DEEP = "deep"  # more model and tool calls, to test more windows
 
 
 @dataclass(frozen=True)
@@ -113,9 +116,20 @@ SHARED = ALWAYS_VISIBLE
 
 BUDGETS = {
     Depth.QUICK: Budget(max_calls=6, max_tool_calls=8, max_cost_usd=0.02),
-    Depth.DEEP: Budget(max_calls=16, max_tool_calls=24, max_cost_usd=0.06),
+    Depth.DEEP: Budget(max_calls=12, max_tool_calls=20, max_cost_usd=0.05),
 }
 CONSULT_BUDGET = Budget(max_calls=5, max_tool_calls=6, max_cost_usd=0.015)
+
+
+def lead_budget(depth: Depth, consults: int) -> Budget:
+    """The depth's budget, with room for each consult the router allowed."""
+    base = BUDGETS[depth]
+    return replace(
+        base,
+        max_calls=base.max_calls + consults * CONSULT_BUDGET.max_calls,
+        max_tool_calls=base.max_tool_calls + consults,  # the consult calls themselves
+        max_cost_usd=base.max_cost_usd + consults * CONSULT_BUDGET.max_cost_usd,
+    )
 
 
 def owner(metric: str) -> Expert | None:
@@ -137,16 +151,17 @@ def _names(metrics) -> str:
     return ", ".join(label(m) for m in metrics) or "none"
 
 
-def system_prompt(expert: Expert, frame: pd.DataFrame, depth: Depth, consultable: list[str]) -> str:
+def system_prompt(expert: Expert, frame: pd.DataFrame, consultable: list[str]) -> str:
     owned = [m for m in expert.owns if m in frame.columns]
     read = [m for m in visible_metrics(expert) if m in frame.columns and m not in expert.owns]
     lines = [
         SYSTEM_PROMPT,
         f"You are the {expert.name} expert.",
-        f"- You make claims only about your metrics: {_names(owned)}. Every claim's metric must "
-        "be one of these, or wear time when data quality matters.",
+        f"- You make claims only about your metrics: {metric_list(owned)}. Every claim's metric "
+        "field must be one of these names before the parentheses, or wear_minutes when data "
+        "quality matters.",
         f"- You may use these to explain changes in yours, but not make claims about them: "
-        f"{_names(read)}.",
+        f"{metric_list(read) or 'none'}.",
         f"- {expert.focus}",
     ]
     if expert.notes:
@@ -158,13 +173,12 @@ def system_prompt(expert: Expert, frame: pd.DataFrame, depth: Depth, consultable
         + "; ".join(f"{e.name}: {_names(m for m in e.owns if m in frame.columns)}" for e in others)
         + "."
     )
-    if depth is Depth.DEEP and consultable:
+    if consultable:
         lines.append(
-            f"- When the question is about a metric you cannot see, call {CONSULT} with the "
-            "expert that owns it and a short question before you answer; never describe a "
-            "metric no evidence in this run covers. You may cite the evidence a consult "
-            f"returns, including in claims about that expert's metrics. Consult at most "
-            f"{MAX_CONSULTS} times."
+            f"- This question also concerns {', '.join(consultable)}: call {CONSULT} with "
+            "that expert and a short question before you answer; never describe a metric no "
+            "evidence in this run covers. You may cite the evidence a consult returns, "
+            "including in claims about that expert's metrics."
         )
     else:
         lines.append(
@@ -188,10 +202,10 @@ def ownership_check(expert: Expert, borrowed: dict[str, str]):
         metric_owner = owner(metric)
         if metric_owner and all(borrowed.get(i) == metric_owner.name for i in claim.evidence_ids):
             return []
-        whose = f"the {metric_owner.name} expert's" if metric_owner else "not one of your"
+        whose = f"the {metric_owner.name} expert's metric" if metric_owner else "not your metric"
         return [
-            f"{label(metric)} is {whose} metric: claim only what its owner's evidence shows, "
-            "or leave it out"
+            f"{label(metric)} is {whose}: claim only what its owner's evidence shows, or leave "
+            "it out"
         ]
 
     return check
@@ -212,14 +226,15 @@ class _Consults:
     toolbox: Toolbox  # the lead's: consulted evidence is added so it can be cited
     budget: Budget  # the lead's: consults are charged to it
     today: date | None
+    allowed: tuple[str, ...]  # chosen by the router
     borrowed: dict[str, str]
     consulted: list[str]
 
     def experts(self) -> list[str]:
         return [
             name
-            for name, e in EXPERTS.items()
-            if name != self.lead.name and available(e, self.frame)
+            for name in self.allowed
+            if name != self.lead.name and name in EXPERTS and available(EXPERTS[name], self.frame)
         ]
 
     def tool(self) -> ExtraTool:
@@ -244,8 +259,6 @@ class _Consults:
             return self._refuse("Give an expert and a short question.")
         if args.expert not in self.experts():
             return self._refuse(f"Consult one of: {', '.join(self.experts())}.")
-        if len(self.consulted) >= MAX_CONSULTS:
-            return self._refuse(f"You have consulted {MAX_CONSULTS} times; submit now.")
         if args.expert in self.consulted:
             return self._refuse(f"You already consulted the {args.expert} expert.")
         calls_left = self.budget.max_calls - self.budget.calls - LEAD_RESERVE_CALLS
@@ -302,12 +315,16 @@ def ask_expert(
     question: str,
     *,
     depth: Depth = Depth.QUICK,
+    consult: Iterable[str] = (),
     today: date | None = None,
     budget: Budget | None = None,
 ) -> AgentResult:
-    """Has one expert answer a question about the person's data, with verified claims."""
+    """Has one expert answer a question about the person's data, with verified claims.
+
+    `consult` lists the experts the router allows it to consult, at most `MAX_CONSULTS`."""
     expert = EXPERTS[name]
-    budget = budget or replace(BUDGETS[depth])
+    allowed = tuple(dict.fromkeys(c for c in consult if c != name))[:MAX_CONSULTS]
+    budget = budget or lead_budget(depth, len(allowed))
     if not available(expert, frame):
         return AgentResult(
             run_id="",
@@ -318,9 +335,10 @@ def ask_expert(
         )
     toolbox = Toolbox(frame, visible_metrics(expert))
     borrowed: dict[str, str] = {}
-    consults = _Consults(llm, frame, expert, toolbox, budget, today, borrowed, [])
-    extras = [consults.tool()] if depth is Depth.DEEP and consults.experts() else []
-    prompt = system_prompt(expert, frame, depth, consults.experts() if extras else [])
+    consults = _Consults(llm, frame, expert, toolbox, budget, today, allowed, borrowed, [])
+    consultable = consults.experts()
+    extras = [consults.tool()] if consultable else []
+    prompt = system_prompt(expert, frame, consultable)
     result = run_agent(
         llm,
         toolbox,

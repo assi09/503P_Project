@@ -4,6 +4,7 @@ import pytest
 
 from app.agent.present import (
     clock,
+    column,
     display,
     duration,
     format_change,
@@ -50,6 +51,13 @@ def test_labels_are_what_people_call_metrics():
     assert label("bedtime_hour") == "bedtime"
     assert label("something_new") == "something new"
     assert metric_list(["hrv_ms"]) == "hrv_ms (heart rate variability (HRV))"
+
+
+def test_a_metric_named_as_people_call_it_finds_its_column():
+    assert column("bedtime") == "bedtime_hour"
+    assert column("Heart rate variability (HRV)") == "hrv_ms"
+    assert column("sleep_minutes") == "sleep_minutes"
+    assert column("mood") == "mood"  # unknown names are left for the checks to reject
 
 
 def test_dates_read_short():

@@ -26,9 +26,10 @@ Measured on 2026-10-21 where noted; otherwise from published prices.
 | Daily check when nothing changed | none: the screen is deterministic | $0 |
 | Investigating a change (general agent) | `gpt-5.4-mini` | ~$0.02–0.03 (measured: $0.024, 8 model calls, 14 tool calls, 27 s) |
 | Simple chat question | `gpt-5.4-mini` | ~$0.005–0.01 |
-| Expert answer with a consult | `gpt-5.4-mini` | ~$0.01–0.03 |
+| Expert answer, quick, no consult | `gpt-5.4-mini` | ~$0.01 (measured: $0.0086–0.0134, 4–6 model calls, about 10 s) |
+| Expert answer with a consult | `gpt-5.4-mini` | ~$0.02 (measured: $0.0169–0.0261, 7–11 model calls, about 19 s) |
 | Write-up with the large model, one call | `gpt-5.5` | ~$0.04–0.05 |
-| Routing one question | Jev | ~$0.00001–0.00003 |
+| Routing one question | Jev | ~$0.00003 (measured: topic plus four yes/no questions, median 0.21 s) |
 
 Prices used for cost accounting are in `backend/app/agent/llm.py` (`PRICES`; per million tokens:
 `gpt-5.4-mini` $0.75 in / $4.50 out, `gpt-5.5` $5 / $30). The model list on 2026-10-21
@@ -57,3 +58,8 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-23 | Recovery expert, deep, synthetic person (4 model calls, 22 tool calls; all claims rejected: ids in the text) | $0.0217 |
 | 2026-10-23 | Sleep expert, deep, same person after the fix (7 model calls, 16 tool calls; 3 verified claims, no consult) | $0.0152 |
 | 2026-10-23 | Sleep expert, deep, after listing other experts' metrics (10 model calls, 17 tool calls; consulted recovery, 4 verified claims) | $0.0247 |
+| 2026-10-23 | Jev routing checks, 16 made-up questions: topic only (14/16), then topic and per-expert needs (16/16 on the lead, 14/16 exact), 50 calls in all | $0.0013 |
+| 2026-10-23 | Routed answer end to end, quick, synthetic person: Jev led with recovery and consulted sleep; all claims rejected (display names in the claims' metric field) | $0.0204 |
+| 2026-10-23 | Same after the name fix: routing right again, 0 claims (null result written as an association; the consult's tool calls all refused by a budget bug) | $0.0207 |
+| 2026-10-23 | Same after both fixes: 4 verified claims, consult used | $0.0188 |
+| 2026-10-23 | Consult policy A vs B: 4 questions × 2 variants × 2 runs ([experiments.md](experiments.md#consult-policy-a-vs-b-2026-10-23)) | $0.2435 |

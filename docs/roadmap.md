@@ -48,17 +48,20 @@ deterministic tools in `backend/app/analysis/tools.py` (`describe`, `coverage`,
 server-side and per user. Each expert sees only the tools and metrics it owns (+ read-only
 access to others' via consult).
 
-**Experts** (`backend/app/agent/experts/`): Sleep, Recovery, Activity, Nutrition, each = system
-prompt + owned metrics (from `docs/product.md`) + tool subset + guardrails (no medical advice;
-calories-burned low-confidence; no energy-balance claims). `consult(expert, question)` is a tool
-that runs another expert with a smaller budget and returns its verified claims.
+**Experts** (`backend/app/agent/experts.py`, built): Sleep, Recovery, Activity, Nutrition, each =
+system prompt + owned metrics (from `docs/product.md`) + the metrics it reads + guardrails (no
+medical advice; calories-burned low-confidence; no energy-balance claims); only the owner makes
+claims about a metric. `consult(expert, question)` is a tool that runs another expert with a
+smaller budget and returns its verified claims and their evidence; the router decides who may be
+consulted.
 
 **General agent** (baseline): same loop, all tools, no routing, no consults.
 
-**Router** (`backend/app/agent/router.py`): Jev typed choice over {sleep, recovery, activity,
-nutrition, general, out_of_scope} with per-label probabilities → code thresholds decide single
-expert / lead + consult / general / refuse. Fallback chain on failure: keyword rule → LLM router.
-Only the question text leaves the server.
+**Router** (`backend/app/agent/router.py`, built): one Jev call with a choice over {sleep,
+recovery, activity, nutrition, general, out_of_scope} and a yes/no per expert (does the question
+need its data) → code thresholds decide lead + consults / general / refuse. On failure the keyword
+rule routes; the LLM router is kept for the evaluation's comparison. Only the question text leaves
+the server.
 
 **Investigation loop** (hypothesis-test): state = {change, hypotheses[], evidence[], budget}.
 1. Screen owned metrics (reuse `backend/app/analysis/screen.py`).
@@ -98,7 +101,9 @@ are still three weeks to recover. Each item is its own PR per AGENTS.md; risky i
    analysis (+ change points, weekday split, lagged correlation, check-ins, memory lookup).
 2. Days 2–3: general agent with the hypothesis loop; verifier; local JSON traces. **Milestone:**
    explains a planted change on a synthetic person, and a real change on live data.
-3. Days 3–4: four experts, consult tool, router (Jev + keyword + LLM fallbacks).
+3. Days 3–4: four experts, consult tool, router (Jev + keyword + LLM fallbacks). **Done**
+   (PRs #28, #29); results and open issues in [experiments.md](experiments.md) and
+   [status.md](status.md#open-issues).
 4. Days 4–5: memory, findings and check-in tables; "worth asking" questions.
 5. Days 5–7: API serves live data from the DB; `/reports`, `/chat`, `/checkins`, `/sync`
    endpoints; the app's Today, findings, Ask and Data screens move off mock data.

@@ -20,12 +20,12 @@ priority**; the UI and data plumbing exist to serve them.
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
 | Storage | Postgres in Docker with the first migration (users, Google connections, daily metrics, sync runs); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
-| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; first real run on a synthetic person explained the planted change correctly for $0.024; **experts** (sleep, recovery, activity; nutrition waiting for data) with ownership of claims and `consult` in deep answers |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, ~160 backend and ~50 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 327 backend and ~50 mobile tests |
 
-**Not built yet:** router and memory, the recovery score, nutrition
+**Not built yet:** the context builder and memory, the recovery score, nutrition
 columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
@@ -78,6 +78,23 @@ To let someone else sign in, add their Google account as a test user in the cons
   (sleep, recovery, activity, later nutrition); cross-domain questions are led by the owner of the
   metric asked about, which consults the others as tools. Whether this beats one general agent is
   measured. See [product.md](product.md).
+- **Experts see their own metrics and the ones they read** (sleep reads activity; recovery reads
+  sleep and activity; activity reads recovery and sleep); wear time is shared. **Only the owner
+  makes claims about a metric**: a claim about another expert's metric passes only on evidence
+  that expert produced through `consult`, so the lead can cite what it was told.
+- **Consulting is the router's decision**, not the depth's and not the lead's. Jev answers, in one
+  call, the topic (which expert leads, or general, or out of scope) and, per expert, whether the
+  question needs its data; a single topic distribution could not mark cross-domain questions
+  ([experiments.md](experiments.md#router-pr-29-2026-10-23)). Depth only sets the budget; each
+  allowed consult adds its own.
+- **Routing thresholds** (hand-set, to be tuned by the router evaluation): refuse when out of scope
+  is at least 0.5, even if the person picked an expert; the general agent answers when no expert
+  reaches 0.4; consult experts needed at 0.5 or more.
+- **Jev is called with our own small `httpx2` client** rather than TypeSafe's SDK: a 2 s timeout
+  with no retries so a slow call falls back to the keyword rule, error bodies (which may repeat the
+  question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.
+- **Nutrition waits for Sprint 2**: the expert exists but answers "no data yet" until the sync
+  maps nutrition columns (only the API has them; Takeout's are "N/A").
 - **Platform:** OpenAI for the LLM; Railway (backend and Postgres) and Vercel (web) when deploying;
   Langfuse for agent traces and Prometheus/Grafana for API metrics; iOS TestFlight undecided.
 
@@ -91,8 +108,51 @@ four experts with consult and the router, memory, live data and the agent served
 and experiments, tracing, accounts, deployment and the first evaluation; November after that is
 buffer and hardening.
 
-Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings and the
-experts with consult are done. The memory and context design (kinds, scope, lifetime, retrieval, write path, injection
-defenses, evaluation) is in [architecture.md](architecture.md#memory-and-context-designed-not-built).
-Next, in order: the Jev router and the context builder (chat history and attachments); then the memory tables and write path; then live data and the agent
-served through the API to the app.
+Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
+experts with consult (PR #28) and the router (PR #29) are done. The memory and context design
+(kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
+[architecture.md](architecture.md#memory-and-context-designed-not-built). Next, in order:
+
+1. The verifier rule for text that mentions a metric no evidence in the run covers (open issue 1).
+2. The context builder (chat history and attachments), then the memory tables and write path.
+3. Live data and the agent served through the API to the app.
+
+## What has been tested
+
+Unit and scenario tests run in CI with the scripted model and fake HTTP transports, so they never
+spend money. Real runs, all on synthetic people, are logged with their findings in
+[experiments.md](experiments.md); in short:
+
+- **Experts:** three real runs; the third consulted another expert and passed every claim. Two
+  bugs found and fixed on the way (evidence ids in text, experts not knowing who owns what).
+- **Router:** Jev picked the right lead on 16 of 16 made-up questions in a median 0.21 s for about
+  $0.00003 a question; the keyword fallback 14 of 16.
+- **Routed answers end to end:** three runs; routing was right every time, and the third passed all
+  four claims after three fixes (display names in claims, the tool-budget bug, null results).
+- **Consult policy:** 16 runs comparing consulting as routed (A) with skipping consults of experts
+  the lead already reads (B): B is about half the cost and time, A states the question's premise
+  and has fewer rejected claims. Undecided.
+
+Spent so far on real runs: about $0.40 of OpenAI and $0.002 of Jev ([costs.md](costs.md)).
+
+## Open issues
+
+1. **Text can mention a metric no evidence covers.** The verifier checks numbers, dates and wording
+   but not which metrics a sentence talks about; a summary described HRV with no HRV evidence. Next
+   PR.
+2. **Consult policy A vs B** is undecided ([experiments.md](experiments.md#consult-policy-a-vs-b-2026-10-23));
+   A stays until the evaluation compares both on the full scenario set.
+3. **False positives across many tests.** The screen corrects for testing many metrics, but tool
+   calls within an agent run do not: one run reported an association that was not planted. Needs a
+   per-run correction or a stricter bar for associations; to be measured in the evaluation.
+4. **Answers do not always address the question asked.** "Does exercising more change how I
+   sleep?" got correct sleep findings but no statement about exercise either way.
+5. **Routing thresholds are hand-set**, and Jev's probabilities vary a little between calls for the
+   same question; the router evaluation needs a labeled question set (not the 16 used while
+   designing).
+6. **Evaluation scenarios must be detectable.** A planted 8 ms HRV drop came out as 3 ms in the
+   data (not significant); each scenario's planted effect should be checked with the deterministic
+   tools before it is used to grade the agent.
+7. **Cosmetic:** the model sometimes wraps quoted values in quote marks ("6 h 57 min").
+8. **Not wired yet:** the API and the app do not call `ask()`; the app's Ask screen still uses the
+   mock.
