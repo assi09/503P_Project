@@ -23,6 +23,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from app.agent.facts import FACT_KINDS
+
 # Where a day's numbers came from. A history is read from one source only: the legacy export's
 # sleep comes from an older algorithm than the API's, so mixing them would fake a change.
 SOURCES = ("google_health", "takeout")
@@ -165,7 +167,6 @@ CONTEXT_OPTIONS = (
     "rather_not_say",
 )
 QUESTION_STATUSES = ("asked", "answered", "dismissed")
-FACT_KINDS = ("routine", "goal", "preference", "context")
 FACT_STATUSES = ("proposed", "approved", "declined")
 
 

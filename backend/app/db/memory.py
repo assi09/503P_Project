@@ -20,14 +20,14 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from app.agent.context import MemoryItem
+from app.agent.facts import FactRejected, validate_fact
 from app.agent.present import METRICS, label, short_date
-from app.agent.sanitize import clean, reads_like_instruction
 from app.analysis.evidence import Evidence
-from app.db.chat import store_evidence
+from app.db.chat import load_evidence, store_evidence
 from app.db.models import (
     CHECKIN_TAGS,
     CONTEXT_OPTIONS,
-    FACT_KINDS,
     CheckIn,
     ContextQuestion,
     Finding,
@@ -39,7 +39,6 @@ FINDING_DAYS = 90
 ANSWER_DAYS = 180
 CHECKIN_DAYS = 365
 FACT_UNUSED_DAYS = 60  # approved facts unused this long are no longer retrieved
-MAX_FACT_CHARS = 120
 # After this many dismissals within the window, no new question for a while.
 BACKOFF_DISMISSALS, BACKOFF_WINDOW_DAYS, BACKOFF_QUIET_DAYS = 2, 30, 14
 DECLINED = "rather_not_say"  # an answer, but counted like a dismissal
@@ -267,18 +266,10 @@ def propose_fact(
     run_id: str | None = None,
 ) -> MemoryFact | None:
     """Stores the agent's proposal for the person to approve; None if they declined it before."""
-    if kind not in FACT_KINDS:
-        raise MemoryRejected(f"A fact is one of: {', '.join(FACT_KINDS)}.")
-    cleaned = clean(text, 10 * MAX_FACT_CHARS)
-    if not cleaned:
-        raise MemoryRejected("A fact needs text.")
-    if len(cleaned) > MAX_FACT_CHARS:
-        raise MemoryRejected(f"A fact is at most {MAX_FACT_CHARS} characters.")
-    if reads_like_instruction(cleaned):
-        raise MemoryRejected("This reads like an instruction, so it is not kept as a fact.")
-    concerned = list(dict.fromkeys(metrics))
-    if unknown := [m for m in concerned if m not in METRICS]:
-        raise MemoryRejected(f"Unknown metrics: {', '.join(unknown)}.")
+    try:
+        cleaned, concerned = validate_fact(kind, text, metrics)
+    except FactRejected as exc:
+        raise MemoryRejected(str(exc)) from exc
     same = [
         fact
         for fact in session.scalars(select(MemoryFact).where(MemoryFact.user_id == user_id))
@@ -347,3 +338,105 @@ def expire(session: Session, user_id: uuid.UUID, now: datetime | None = None) ->
     )
     removed["checkins"] = result.rowcount
     return removed
+
+
+# Retrieval: rows as the context builder ranks them
+
+OPTION_TEXT = {
+    "travel": "travel",
+    "work_or_exam_schedule": "their work or exam schedule",
+    "more_training": "more training",
+    "less_training": "less training",
+    "illness": "being ill",
+    "new_device": "a new device",
+    "other": "something else",
+}
+
+
+def memory_items(
+    session: Session, user_id: uuid.UUID, now: datetime | None = None
+) -> list[MemoryItem]:
+    """This person's memory that may still be retrieved: current findings with their evidence,
+    answers from the last 180 days (not "rather not say"), and approved facts used or decided in
+    the last 60 days."""
+    now = now or _now()
+    items: list[MemoryItem] = []
+    findings = current_findings(session, user_id, now)
+    evidence = load_evidence(session, user_id, {i for f in findings for i in f.evidence_ids})
+    for finding in findings:
+        items.append(
+            MemoryItem(
+                kind="finding",
+                id=str(finding.id),
+                text=finding.text,
+                metrics=(finding.metric,),
+                created=_aware(finding.created_at),
+                importance=finding.effect or 0.0,
+                start=finding.window_start,
+                end=finding.window_end,
+                evidence=tuple(evidence[i] for i in finding.evidence_ids if i in evidence),
+            )
+        )
+    answered = session.scalars(
+        select(ContextQuestion).where(
+            ContextQuestion.user_id == user_id,
+            ContextQuestion.status == "answered",
+            ContextQuestion.asked_at >= now - timedelta(days=ANSWER_DAYS),
+        )
+    )
+    for question in answered:
+        if question.answer not in OPTION_TEXT:
+            continue  # "rather not say" tells nothing
+        items.append(
+            MemoryItem(
+                kind="answer",
+                id=str(question.id),
+                text=(
+                    f"Asked what was going on when their {label(question.metric)} changed "
+                    f"around {short_date(question.window_start)}, the person said: "
+                    f"{OPTION_TEXT[question.answer]}."
+                ),
+                metrics=(question.metric,),
+                created=_aware(question.answered_at),
+                importance=1.0,
+                start=question.window_start,
+                end=question.window_end,
+            )
+        )
+    for fact in session.scalars(
+        select(MemoryFact).where(MemoryFact.user_id == user_id, MemoryFact.status == "approved")
+    ):
+        last = _aware(fact.last_used_at or fact.decided_at or fact.created_at)
+        if now - last > timedelta(days=FACT_UNUSED_DAYS):
+            continue  # unused facts fade out
+        items.append(
+            MemoryItem(
+                kind="preference" if fact.kind == "preference" else "fact",
+                id=str(fact.id),
+                text=fact.text,
+                metrics=tuple(fact.metrics),
+                created=_aware(fact.decided_at or fact.created_at),
+                importance=1.0,
+            )
+        )
+    return items
+
+
+def mark_used(
+    session: Session, user_id: uuid.UUID, ids: Iterable[str], now: datetime | None = None
+) -> None:
+    """Records that these facts went into a run, so facts that keep mattering stay retrievable."""
+    wanted = []
+    for value in ids:
+        try:
+            wanted.append(uuid.UUID(value))
+        except ValueError:
+            continue
+    if not wanted:
+        return
+    for fact in session.scalars(
+        select(MemoryFact).where(MemoryFact.user_id == user_id, MemoryFact.id.in_(wanted))
+    ):
+        fact.last_used_at = now or _now()
+        fact.uses += 1
+    session.flush()
