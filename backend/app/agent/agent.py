@@ -29,6 +29,7 @@ from app.agent.verifier import (
     Rejection,
     Submission,
     Verdict,
+    run_adjusted,
     text_problems,
     verify,
 )
@@ -69,6 +70,8 @@ Rules for claims:
 - Each claim cites the evidence_ids it rests on, says which metric it is about, and for a change or
   an association says whether it goes up or down.
 - Quote only numbers, times and dates that appear in the cited evidence.
+- Significance is judged after correcting for every test you run, so test what the question
+  needs rather than everything you can.
 - Only claim a change or an association when the evidence is significant. When it is not, that is
   a finding too: make it a no_change claim citing that evidence ("no clear change", "did not
   clearly go with"), never a change or association claim.
@@ -279,6 +282,10 @@ def _handle(
             c.model_copy(update={"metric": column(c.metric)}) if c.metric else c
             for c in submission.claims
         ]
+        # The run's own tests are judged together; evidence from the screen, a consult or an
+        # earlier answer keeps the correction of the run that made it.
+        own = [toolbox.evidence[i] for i in toolbox.produced]
+        toolbox.evidence.update({e.id: e for e in run_adjusted(own)})
         verdict = verify(claims, toolbox.evidence, claim_check)
         # The summary is shown too: it may only use what the run's evidence holds.
         summary_problems = text_problems(submission.summary, list(toolbox.evidence.values()))

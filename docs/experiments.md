@@ -131,3 +131,25 @@ comes with the attack suite.
 4 to 5 sentences each, nothing flagged, about $0.0001; 4 verified claims per turn. It also showed a
 summary saying sleep score was "somewhat lower on weekends" where its claim said no clear
 difference (open issue 11).
+
+## Correcting a run's tests together (PR #34), 2026-10-24
+
+**Simulation** (`eval/multiple_testing.py`, free, no model): the 16 tests an agent typically runs
+when asked about sleep (6 window comparisons, 3 change points, 5 correlations with possible drivers,
+2 weekday splits) on 200 synthetic people with nothing planted and 200 with bedtime 1 h later and
+sleep shorter from day 45, sleep following bedtime.
+
+| Rule | Calm person: runs reporting something false | Sleep change found | Bedtime change found | Association found |
+|---|---|---|---|---|
+| Each test alone (before) | 56% | 98% | 99% | 99% |
+| **BH over the run's tests** (chosen) | **6%** | 92% | 96% | 98% |
+| BH per family (changes, associations) | 9% | 92% | 96% | 98% |
+| BH on associations only | 46% | 98% | 99% | 98% |
+
+**Real runs** (synthetic person: bedtime 1 h later, sleep 45 min shorter from Aug 15):
+
+| Run | Result |
+|---|---|
+| Two-turn conversation | the turn-1 sleep drop was **lost**: the model dated changes with 6 change-point tests only, and sleep's p = 0.048 became 0.096 after correction ($0.0159) |
+| Turn 1 again, traced | same; the repair round resubmitted without running a stronger test ($0.0101) |
+| Turn 1 after the repair hint | **sleep drop found** (compare_windows p = 0.014, corrected 0.028), 3 verified claims; but the model ran compare_windows before submitting, so the hint was not what found it; the one claim that got the hint (time in bed) was dropped, not confirmed ($0.0111) |
