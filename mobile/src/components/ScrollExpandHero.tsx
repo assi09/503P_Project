@@ -20,6 +20,7 @@ import { radius, useColors } from '@/theme';
 
 interface Props {
   image: ImageSourcePropType;
+  background?: ImageSourcePropType; // behind the card; without one, a blurred copy of `image`
   title: [string, string]; // two lines that slide apart as the image grows
   eyebrow?: string;
   hint?: string;
@@ -32,7 +33,15 @@ interface Props {
  * The hero stays pinned while it grows; scrolling is never hijacked, so it behaves the same with
  * touch, a wheel or a trackpad, on phones and in the browser.
  */
-export function ScrollExpandHero({ image, title, eyebrow, hint, header, children }: Props) {
+export function ScrollExpandHero({
+  image,
+  background,
+  title,
+  eyebrow,
+  hint,
+  header,
+  children,
+}: Props) {
   const colors = useColors();
   const { width, height } = useWindowDimensions();
   const distance = height * 0.9; // how far to scroll for the image to fill the screen
@@ -82,7 +91,12 @@ export function ScrollExpandHero({ image, title, eyebrow, hint, header, children
       <View style={{ height: height + distance }}>
         <Animated.View style={[{ height, overflow: 'hidden' }, pinned]}>
           <Animated.View style={[StyleSheet.absoluteFill, backdrop]}>
-            <Image source={image} blurRadius={24} resizeMode="cover" style={styles.fill} />
+            <Image
+              source={background ?? image}
+              blurRadius={background ? 0 : 24}
+              resizeMode="cover"
+              style={styles.fill}
+            />
             <View style={[StyleSheet.absoluteFill, styles.backdropShade]} />
           </Animated.View>
 

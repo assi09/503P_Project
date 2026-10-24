@@ -57,6 +57,7 @@ export default function Welcome() {
       <StatusBar style="light" />
       <ScrollExpandHero
         image={require('../../assets/landing/hero.jpg')}
+        background={require('../../assets/landing/background.jpg')}
         eyebrow="Your Fitbit, explained"
         title={['Know your', 'patterns']}
         hint="Scroll to explore"
@@ -102,7 +103,7 @@ export default function Welcome() {
             give medical advice.
           </Text>
           <Text variant="caption" color="faint" style={styles.note}>
-            EECE 503P · Fall 2026 · Photo from Pixabay
+            EECE 503P · Fall 2026 · Photos from Pixabay
           </Text>
         </View>
       </ScrollExpandHero>
