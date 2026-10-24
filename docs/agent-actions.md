@@ -41,6 +41,14 @@ execute anything. The first phase handles one entry at a time; photos and inferr
 not accepted by these proposal tools. The first workout types are running, walking, biking and
 aerobic workout; unsupported activities must not be substituted with another type.
 
+Entries must be plausible before anyone can confirm them, checked the same way in the app and the
+API: one food entry at most 5,000 kcal and 500 g of each macronutrient; one workout at most 24 hours
+and 300 km, at most 25 km/h running, 10 km/h walking or 80 km/h biking over the active time; nothing
+dated more than 15 minutes in the future. A draft saved under looser rules is refused at
+confirmation before any write. Distance goes to Google in whole millimetres. The review card shows
+entries in plain words ("Lunch · Chicken salad", "Sat 24 Oct, 13:00 · 550 kcal · P 40 g") and edits
+them with type chips, a date, a time and a duration, in the entry's own time zone.
+
 Real Google writes remain off by default. Fake-provider end-to-end tests and UI click-throughs
 pass; two real synthetic model runs prepared drafts without Google writes, with the final run
 submitting in two calls. Real create/delete validation and reconciliation of pending operations

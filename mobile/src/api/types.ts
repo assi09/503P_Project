@@ -184,28 +184,30 @@ export interface ApiClient {
   getDataStatus(): Promise<DataStatus>;
 }
 
-export type HealthLog = {
-  kind: 'food';
-  foodName: string;
-  consumedAt: ISODateTime;
-  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
-  energyKcal?: number | null;
-  proteinG?: number | null;
-  carbohydrateG?: number | null;
-  fatG?: number | null;
-  provenance: 'user_entered';
-} | {
-  kind: 'workout';
-  exerciseType: 'RUNNING' | 'WALKING' | 'BIKING' | 'AEROBIC_WORKOUT';
-  startTime: ISODateTime;
-  endTime: ISODateTime;
-  activeSeconds: number;
-  distanceKm?: number | null;
-  provenance: 'user_entered';
-};
+export type HealthLog =
+  | {
+      kind: 'food';
+      foodName: string;
+      consumedAt: ISODateTime;
+      mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+      energyKcal?: number | null;
+      proteinG?: number | null;
+      carbohydrateG?: number | null;
+      fatG?: number | null;
+      provenance: 'user_entered';
+    }
+  | {
+      kind: 'workout';
+      exerciseType: 'RUNNING' | 'WALKING' | 'BIKING' | 'AEROBIC_WORKOUT';
+      startTime: ISODateTime;
+      endTime: ISODateTime;
+      activeSeconds: number;
+      distanceKm?: number | null;
+      provenance: 'user_entered';
+    };
 
-export type HealthActionStatus = 'draft' | 'executing' | 'succeeded' | 'failed' | 'unknown'
-  | 'cancelled' | 'undoing' | 'undone';
+export type HealthActionStatus =
+  'draft' | 'executing' | 'succeeded' | 'failed' | 'unknown' | 'cancelled' | 'undoing' | 'undone';
 
 export interface HealthAction {
   id: string;

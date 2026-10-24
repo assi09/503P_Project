@@ -81,7 +81,9 @@ export const MessageBubble = memo(function MessageBubble({
         ) : (
           <Text>{message.text}</Text>
         )}
-        {message.actionIds?.map((id) => <LogDraftCard key={id} id={id} />)}
+        {message.actionIds?.map((id) => (
+          <LogDraftCard key={id} id={id} />
+        ))}
         {message.evidenceIds.length > 0 && (
           <View style={styles.chips}>
             {message.evidenceIds.map((id) => (

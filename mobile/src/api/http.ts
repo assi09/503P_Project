@@ -88,13 +88,19 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     ...fallback,
     getActions: () => request<HealthAction[]>(baseUrl, '/actions'),
     getAction: (id) => request<HealthAction>(baseUrl, `/actions/${encodeURIComponent(id)}`),
-    proposeAction: (requestKey, log) => post<HealthAction>(baseUrl, '/actions', { requestKey, log }),
+    proposeAction: (requestKey, log) =>
+      post<HealthAction>(baseUrl, '/actions', { requestKey, log }),
     reviseAction: (id, version, log) =>
       post<HealthAction>(baseUrl, `/actions/${encodeURIComponent(id)}/revise`, { version, log }),
     cancelAction: (id, version) =>
       post<HealthAction>(baseUrl, `/actions/${encodeURIComponent(id)}/cancel`, { version }),
     confirmAction: (id, version) =>
-      post<HealthAction>(baseUrl, `/actions/${encodeURIComponent(id)}/confirm`, { version }, 30_000),
+      post<HealthAction>(
+        baseUrl,
+        `/actions/${encodeURIComponent(id)}/confirm`,
+        { version },
+        30_000,
+      ),
     undoAction: (id, version) =>
       post<HealthAction>(baseUrl, `/actions/${encodeURIComponent(id)}/undo`, { version }, 30_000),
     signUp: (credentials: Credentials) => post<SignedIn>(baseUrl, '/auth/signup', credentials),
@@ -112,7 +118,8 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getEvidence: (id) => request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`),
     getChat: () => request<ChatMessage[]>(baseUrl, '/chat'),
     getGoogleStatus: () => request<GoogleStatus>(baseUrl, '/google/status'),
-    connectGoogle: (capability) => post<{ url: string }>(baseUrl, '/google/connect', capability ? { capability } : undefined),
+    connectGoogle: (capability) =>
+      post<{ url: string }>(baseUrl, '/google/connect', capability ? { capability } : undefined),
     syncGoogle: () => post<GoogleStatus>(baseUrl, '/google/sync'),
     disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
     sendMessage: (text, { expert, depth, attachment }) =>

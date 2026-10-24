@@ -92,8 +92,8 @@ export default function DataScreen() {
               </Card>
 
               <Text variant="caption" color="faint" style={styles.privacy}>
-                Your data supports your own patterns and the entries you choose to log. Profile and account details
-                from the export are never read.
+                Your data supports your own patterns and the entries you choose to log. Profile and
+                account details from the export are never read.
               </Text>
             </>
           );
