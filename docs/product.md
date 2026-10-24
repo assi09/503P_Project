@@ -27,8 +27,10 @@ to a computed statistic.
 ## Agent-assisted logging (core planned capability)
 
 The agent helps the person record workouts and food through conversation, alongside analysing
-patterns. Activity owns workout proposals; Nutrition owns food proposals. This is planned work,
-not a capability currently available in the app.
+patterns. Activity owns workout proposals; Nutrition owns food proposals. The first local
+implementation supports supplied-value food/workout drafts through Auto, review/edit/confirm
+cards, cancellation and undo, plus saved entries on Data. Real Google writes stay disabled
+until explicitly validated. Food lookup, telemetry summaries and photos remain planned.
 
 The shared flow is **collect missing details → propose → review/edit → confirm → execute → undo**.
 The agent cannot grant approval or write to Google directly. Each confirmation applies to one
@@ -211,3 +213,26 @@ All four experts (sleep, recovery, activity, nutrition) are part of the demo.
   carry no nutrient values at all.
 - **When the agent runs:** after each upload, on a schedule, or on demand.
 - **History:** whether past reports and findings are browsable, or only the latest.
+
+## Recorded routes and regions (optional, planned)
+
+An extra after the logging flow: show where GPS-recorded walks/runs happened, or coarse map
+regions, using Google Health exercise routes. This is not a reconstruction of every daily step.
+A daily count alone carries no location. Fitbit Air uses the phone's connected GPS during
+recorded exercise; without recorded coordinates the app must show location as unavailable.
+
+Google exposes route coordinates through `exportExerciseTcx` (TCX), with separate
+`googlehealth.location.readonly` consent in addition to activity access. The existing app does
+not request this permission or sync routes. Start with recorded workout routes; only show step
+counts for a route/region when the recorded session or a valid time-aligned step stream supports
+that attribution. Keep the unlocated remainder explicit, and never distribute a daily total
+across map regions by guessing.
+
+Keep this optional and separate from the core agent milestone. Prefer coarse regions initially;
+precise coordinates stay out of prompts and traces. Do not add continuous phone tracking or a
+geocoding provider as part of this proposal. Validate GPS availability, gaps, denied permission,
+time alignment and per-user access before implementing map UI.
+
+Sources checked 2026-10-24: [Google workout routes](https://developers.google.com/health/data-types/workouts),
+[TCX export](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/exportExerciseTcx),
+[Fitbit Air connected GPS](https://support.google.com/googlehealth/answer/14225688?hl=en).

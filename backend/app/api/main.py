@@ -9,9 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
-from app.api import auth, chat, data, google, reports
+from app.api import actions, auth, chat, data, google, reports
 from app.api.errors import ApiError
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
@@ -36,6 +37,16 @@ def create_app() -> FastAPI:
     )
 
     # Every error has the same shape: {"error": {"code": ..., "message": ...}}.
+    @app.exception_handler(SQLAlchemyError)
+    async def storage_error(_: Request, exc: SQLAlchemyError) -> JSONResponse:
+        # SQL errors can embed bound health payloads and credentials. Keep details out of logs.
+        logger.error("A database operation failed")
+        return _error(
+            503,
+            "storage_unavailable",
+            "Data is temporarily unavailable. Refresh before trying again.",
+        )
+
     @app.exception_handler(IngestError)
     async def ingest_error(_: Request, exc: IngestError) -> JSONResponse:
         logger.warning("Data unavailable: %s", exc)
@@ -62,6 +73,7 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.include_router(actions.router)
     app.include_router(auth.router)
     app.include_router(chat.router)
     app.include_router(google.router)

@@ -158,13 +158,15 @@ phone.
 Added 2026-10-24 at the user's request: workout and food logging are core agent capabilities,
 with human confirmation and undo, not optional demo polish. See the
 [product flow](product.md#agent-assisted-logging-core-planned-capability) and
-[execution design](architecture.md#confirmed-action-execution-planned).
+[execution design](architecture.md#confirmed-action-execution).
 
 Local-first sequence (confirmed 2026-10-24; tool research and details in
 [agent-actions.md](agent-actions.md)):
 
-1. Confirm provider formats, permissions and reconciliation semantics; build persistent action
-   proposals, confirmation/version checks, execution audit, idempotency and undo with fake Google.
+1. **First local slice built:** intent-gated food/workout proposal tools, durable drafts,
+   clarification follow-ups, versioned review/edit/confirm cards, cancellation, audit, duplicate
+   protection, gated Google create/undo writer and optional write consent. Tested with fake Google;
+   real-account create/delete and unknown-operation reconciliation are next.
 2. Workout logging through Activity: missing-detail conversation, intraday evidence summaries,
    review/edit/confirm cards, Google execution and sync reconciliation.
 3. Food logging through Nutrition with supplied values or food-database serving calculations;
@@ -179,3 +181,8 @@ Local development of this workstream now precedes deployment, per the user: use 
 first. Phone OAuth still needs a public backend before phone testing. Deliver focused PRs;
 keep recovery, tracing and held-out agent evaluation on the schedule. Do not enable real Google
 writes or run paid vision calls merely to validate the plan.
+
+Optional extra, after core logging: [recorded routes/regions](product.md#recorded-routes-and-regions-optional-planned).
+Research supports GPS-recorded exercise routes with separate location permission, not the location
+of every daily step. No map implementation, new location consent or continuous tracking is in the
+current logging workstream.

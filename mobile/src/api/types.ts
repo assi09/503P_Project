@@ -81,6 +81,7 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
+  actionIds?: string[]; // owned logging drafts to review; never statistical evidence
   evidenceIds: string[]; // what the assistant's statements are based on
   attachment?: Attachment; // what a user message asked about, if anything
   answeredBy?: Expert | 'general'; // assistant only; absent on refusals
@@ -154,6 +155,13 @@ export interface GoogleStatus {
 }
 
 export interface ApiClient {
+  getActions(): Promise<HealthAction[]>;
+  getAction(id: string): Promise<HealthAction>;
+  proposeAction(requestKey: string, log: HealthLog): Promise<HealthAction>;
+  reviseAction(id: string, version: number, log: HealthLog): Promise<HealthAction>;
+  cancelAction(id: string, version: number): Promise<HealthAction>;
+  confirmAction(id: string, version: number): Promise<HealthAction>;
+  undoAction(id: string, version: number): Promise<HealthAction>;
   signUp(credentials: Credentials): Promise<SignedIn>;
   logIn(credentials: Credentials): Promise<SignedIn>;
   logOut(): Promise<void>;
@@ -161,7 +169,7 @@ export interface ApiClient {
   getAccessRequests(): Promise<AccessRequest[]>; // admins only
   decideAccessRequest(id: string, approve: boolean): Promise<Account>; // admins only
   getGoogleStatus(): Promise<GoogleStatus>;
-  connectGoogle(): Promise<{ url: string }>; // Google's sign-in page; it returns to /data
+  connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /data
   syncGoogle(): Promise<GoogleStatus>;
   disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;
@@ -174,4 +182,38 @@ export interface ApiClient {
   getNotificationSettings(): Promise<NotificationSettings>;
   updateNotificationSettings(settings: NotificationSettings): Promise<NotificationSettings>;
   getDataStatus(): Promise<DataStatus>;
+}
+
+export type HealthLog = {
+  kind: 'food';
+  foodName: string;
+  consumedAt: ISODateTime;
+  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+  energyKcal?: number | null;
+  proteinG?: number | null;
+  carbohydrateG?: number | null;
+  fatG?: number | null;
+  provenance: 'user_entered';
+} | {
+  kind: 'workout';
+  exerciseType: 'RUNNING' | 'WALKING' | 'BIKING' | 'AEROBIC_WORKOUT';
+  startTime: ISODateTime;
+  endTime: ISODateTime;
+  activeSeconds: number;
+  distanceKm?: number | null;
+  provenance: 'user_entered';
+};
+
+export type HealthActionStatus = 'draft' | 'executing' | 'succeeded' | 'failed' | 'unknown'
+  | 'cancelled' | 'undoing' | 'undone';
+
+export interface HealthAction {
+  id: string;
+  version: number;
+  status: HealthActionStatus;
+  log: HealthLog;
+  error: string | null;
+  pendingOperation: 'create' | 'delete' | null;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 }

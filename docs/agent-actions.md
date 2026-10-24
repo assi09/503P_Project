@@ -1,6 +1,6 @@
 # Agent-assisted logging: tools and intent
 
-Planned core capability, agreed 2026-10-24. Build locally first. Food photos remain part of the
+Core capability, agreed 2026-10-24; the first local slice is implemented. Build locally first. Food photos remain part of the
 intended demo, with editable estimates and provenance. Workout and food logging come first;
 hydration is feasible and retained as a later small extension, not a prerequisite. Choose tools
 for problems people actually bring to the agent, then evaluate task completion.
@@ -31,15 +31,27 @@ recognise explicit requests; ambiguous statements and follow-ups remain unclear.
 security boundary. Proposal eligibility also needs the current message, owned draft state and
 server-side validation, not just the inferred intent.
 
-**Implemented first slice:** `backend/app/agent/intent.py`, router integration (Jev, keyword and
-LLM baseline), intent probabilities and decision in the answer trace, and fake-service tests.
-Intent is currently observational: existing answer dispatch is unchanged, and no proposal UI,
-action storage or Google writes are enabled by this change. Do not describe logging as working.
-The next slice is a persistent proposal lifecycle and confirmation API before exposing draft tools.
+**Implemented locally:** intent gating; supplied-value food/workout proposal tools; persistent owned
+and versioned drafts; confirmation/cancellation/undo APIs; immutable audit snapshots; duplicate
+entry identities; durable execution claims; Google create/delete payloads and checked operations;
+optional write consent; chat review cards; Data's saved entries; and matching mock behavior.
+Logging can work without historical metric data. A pending clarification belongs to the user and
+next reply for at most 24 hours; read-only topic changes stop it. General chat confirmations never
+execute anything. The first phase handles one entry at a time; photos and inferred values are
+not accepted by these proposal tools. The first workout types are running, walking, biking and
+aerobic workout; unsupported activities must not be substituted with another type.
+
+Real Google writes remain off by default. Fake-provider end-to-end tests and UI click-throughs
+pass; two real synthetic model runs prepared drafts without Google writes, with the final run
+submitting in two calls. Real create/delete validation and reconciliation of pending operations
+or process crashes remain prerequisites to enabling writes. A refresh reads the saved status;
+it does not currently poll Google operations. Nutrition history/mapping, food lookup, serving
+arithmetic, workout telemetry summaries, photo input and hydration are still planned.
 
 ## Tools to build around user tasks
 
-Names below are proposed capabilities, not existing public API contracts.
+The table includes implemented proposal/review capabilities and the planned read/estimation
+extensions. `propose_food_log` and `propose_workout_log` exist; execution is outside model tools.
 
 | User problem | Tool/capability | Why and boundary |
 |---|---|---|
@@ -96,15 +108,17 @@ Sources: [Google nutrition/hydration guide](https://developers.google.com/health
 
 ## Implementation and evaluation sequence
 
-1. Intent routing and a task-based tool plan (this slice). Scripted tests cover independent topic
+1. **Built:** intent routing and a task-based tool plan. Scripted tests cover independent topic
    and intent, read-only questions, ambiguous meal/photo statements, mixed requests, explicit
    cancellation/undo, malformed classifier outputs, fallback and medical refusal.
-2. Durable owned drafts, versioning, confirmation, cancellation, execution claims and audit, with
+2. **Built with fake-provider validation:** durable owned drafts, versioning, confirmation,
+   cancellation, execution claims and audit, with
    migration and additive backend/mobile contract. Fake provider exercises concurrency, restart
    and ambiguous outcomes before any model can propose a remote action.
-3. Workout and supplied-value food proposals and clarification in chat, with review cards and
+3. **Built:** workout and supplied-value food proposals and clarification in chat, with review cards and
    local fake-provider execution. Logging must work even when an expert has no historical data.
-4. Google capability consent, actual writes/undo, operation completion, intraday summary evidence,
+4. **Partly built:** capability consent and a gated create/undo writer; actual Google validation,
+   operation reconciliation, intraday summary evidence,
    nutrition sync and duplicate reconciliation. Real account writes need explicit approval of
    the exact test record and cleanup.
 5. Photo input and estimates via the same drafts: consent, validation, retention/deletion, no

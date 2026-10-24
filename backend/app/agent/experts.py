@@ -29,6 +29,21 @@ from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
 from app.agent.verifier import Claim
 from app.analysis.evidence import Evidence
 
+LOGGING_PROMPT = (
+    "\nYou can prepare log drafts even with no historical data. Use only values the "
+    "person explicitly supplied; ask for missing date, time, timezone and other details. "
+    "Proposals are not statistics or verified claims. Never infer calories/macros or "
+    "measurements. A prepared draft is not logged or sent to Google. Tell the person "
+    "it needs review and confirmation; never claim execution. Keep draft values in the "
+    "tool result, not in statistical claims or the summary. For mixed requests, analyse "
+    "existing history separately; an unconfirmed draft is not in that history. "
+    "For a logging-only request, do not run statistical investigations. After a successful "
+    "proposal, immediately call submit_findings with a short, number-free summary saying "
+    "the draft needs review, claims=[], and no hypotheses. If details are missing, call "
+    "submit_findings with the clarification question as summary and claims=[] instead. "
+    "Do not finish with a plain-text message; the app reads the submission tool."
+)
+
 CONSULT = "consult"
 MAX_CONSULTS = 2
 # Model calls a consult must leave the lead, so it can still submit and repair once.
@@ -343,6 +358,7 @@ def ask_expert(
     guard: Guard | None = None,
     needs: Iterable[str] = (),
     extra_tools: list[ExtraTool] = (),
+    allow_logging: bool = False,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -353,7 +369,7 @@ def ask_expert(
     expert = EXPERTS[name]
     allowed = tuple(dict.fromkeys(c for c in consult if c != name))[:MAX_CONSULTS]
     budget = budget or lead_budget(depth, len(allowed))
-    if not available(expert, frame):
+    if not available(expert, frame) and not allow_logging:
         return AgentResult(
             run_id="",
             stop_reason="unavailable",
@@ -368,6 +384,8 @@ def ask_expert(
     consultable = consults.experts()
     extras = ([consults.tool()] if consultable else []) + list(extra_tools)
     prompt = system_prompt(expert, frame, consultable)
+    if allow_logging:
+        prompt += LOGGING_PROMPT
     result = run_agent(
         llm,
         toolbox,

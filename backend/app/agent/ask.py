@@ -15,11 +15,12 @@ from datetime import date, datetime
 
 import pandas as pd
 
-from app.agent.agent import AgentResult, ExtraTool, answer
+from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer
 from app.agent.context import Attachment, Context, MemoryItem, Turn, build, earlier_questions
 from app.agent.experts import (
     BUDGETS,
     EXPERTS,
+    LOGGING_PROMPT,
     Depth,
     ask_expert,
     available,
@@ -28,6 +29,7 @@ from app.agent.experts import (
 )
 from app.agent.facts import FACT_KINDS, FactRejected, validate_fact
 from app.agent.guard import Guard, JevGuard
+from app.agent.intent import Intent
 from app.agent.jev import JevClient, JevError
 from app.agent.llm import LLM
 from app.agent.router import (
@@ -182,6 +184,8 @@ def ask(
     guard: Guard | None = None,
     memory: Sequence[MemoryItem] = (),
     now: datetime | None = None,
+    action_tools: dict[str, list[ExtraTool]] | None = None,
+    continuing_log: str | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -191,6 +195,22 @@ def ask(
     if choice == "auto" and attachment and (attached := owner(attachment.metric)):
         choice = attached.name  # the attachment decides the topic
     route = decide(router.classify(question, earlier_questions(history)), choice)
+    continuing = (
+        (continuing_log in (action_tools or {}) or continuing_log == "general")
+        and (
+            choice in ("auto", continuing_log)
+            or (continuing_log == "general" and choice in (action_tools or {}))
+        )
+        and route.classification.intent == Intent.CLARIFY
+        and route.action != "refuse"
+    )
+    if continuing:
+        # This state comes from the server's unfinished clarification, not earlier text alone.
+        if continuing_log == "general":
+            if route.expert not in (action_tools or {}):
+                route = Route("general", None, (), True, route.classification)
+        else:
+            route = Route("expert", continuing_log, (), choice == "auto", route.classification)
     context = build(
         history,
         stored_evidence or {},
@@ -201,8 +221,37 @@ def ask(
     )
     proposals: list[dict] = []
     tools = [_propose_tool(proposals)]
+    logging_tools = []
+    if (
+        route.classification.intent in (Intent.LOG, Intent.MIXED) or continuing
+    ) and route.action != "refuse":
+        if route.action == "general":
+            logging_tools = [tool for group in (action_tools or {}).values() for tool in group]
+        else:
+            logging_tools = (action_tools or {}).get(route.expert, [])
+    tools += logging_tools
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
+    elif action_tools and route.classification.intent == Intent.MANAGE:
+        result = AgentResult(
+            run_id=uuid.uuid4().hex[:12],
+            stop_reason="action_controls",
+            summary="Use the entry card to edit or cancel a draft. To remove a logged entry, "
+            "choose Undo and confirm the removal. Chat messages cannot confirm Google writes.",
+        )
+    elif (
+        action_tools
+        and route.classification.intent_probabilities
+        and route.classification.intent == Intent.CLARIFY
+        and route.expert in ("nutrition", "activity")
+        and not continuing
+    ):
+        result = AgentResult(
+            run_id=uuid.uuid4().hex[:12],
+            stop_reason="clarification",
+            expert=route.expert,
+            summary="Would you like to prepare a logging draft, or ask about your existing data?",
+        )
     elif route.action == "general":
         result = answer(
             llm,
@@ -210,6 +259,7 @@ def ask(
             question,
             today=today,
             budget=replace(BUDGETS[depth]),
+            system_prompt=SYSTEM_PROMPT + (LOGGING_PROMPT if logging_tools else ""),
             context=context.block,
             evidence=context.evidence,
             guard=guard,
@@ -230,7 +280,10 @@ def ask(
             guard=guard,
             needs=(route.expert, *route.consult),
             extra_tools=tools,
+            allow_logging=bool(logging_tools),
         )
         result.notes += _notes(frame, route, result)
     result.trace[:0] = [_context_step(context), _route_step(route)]
+    if continuing:
+        result.trace[1]["continuing_log_expert"] = continuing_log
     return Answer(route, result, context, proposals)

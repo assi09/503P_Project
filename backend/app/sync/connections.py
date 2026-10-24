@@ -18,7 +18,7 @@ import threading
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 from urllib.parse import urlencode
@@ -97,13 +97,14 @@ class GoogleOAuth:
 
     client: OAuthClient
     redirect_uri: str
+    scopes: tuple[str, ...] = SCOPES
 
     def authorization_url(self, state: str, challenge: str) -> str:
         params = {
             "client_id": self.client.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "scope": " ".join(SCOPES),
+            "scope": " ".join(self.scopes),
             "access_type": "offline",
             "prompt": "consent",  # always return a refresh token, even when connecting again
             "state": state,
@@ -114,7 +115,7 @@ class GoogleOAuth:
 
     def exchange(self, code: str, verifier: str) -> Credentials:
         flow = Flow.from_client_config(
-            self.client.config(), scopes=list(SCOPES), redirect_uri=self.redirect_uri
+            self.client.config(), scopes=list(self.scopes), redirect_uri=self.redirect_uri
         )
         flow.fetch_token(code=code, code_verifier=verifier)
         return flow.credentials
@@ -125,6 +126,7 @@ class _Pending:
     user_id: uuid.UUID
     verifier: str
     expires: datetime
+    scopes: tuple[str, ...] = SCOPES
 
 
 class SignIns:
@@ -134,7 +136,9 @@ class SignIns:
         self._pending: dict[str, _Pending] = {}
         self._lock = threading.Lock()
 
-    def start(self, oauth: OAuth, user_id: uuid.UUID, now: datetime) -> str:
+    def start(
+        self, oauth: OAuth, user_id: uuid.UUID, now: datetime, scopes: tuple[str, ...] = SCOPES
+    ) -> str:
         state = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48)
         challenge = (
@@ -144,7 +148,9 @@ class SignIns:
         )
         with self._lock:
             self._pending = {k: p for k, p in self._pending.items() if p.expires > now}
-            self._pending[state] = _Pending(user_id, verifier, now + STATE_TTL)
+            self._pending[state] = _Pending(user_id, verifier, now + STATE_TTL, scopes)
+        if isinstance(oauth, GoogleOAuth):
+            oauth = replace(oauth, scopes=scopes)
         return oauth.authorization_url(state, challenge)
 
     def finish(self, state: str, now: datetime) -> _Pending | None:

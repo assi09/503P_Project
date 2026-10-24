@@ -19,7 +19,9 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -148,6 +150,9 @@ class ChatMessage(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(16))
+    action_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+    # An unfinished clarification, usable only by the next reply within 24 hours.
+    pending_log_expert: Mapped[str | None] = mapped_column(String(16), default=None)
     text: Mapped[str] = mapped_column(Text)
     # What a user turn asked about: {"kind": "finding", "id": ...} or {"kind": "metric", ...}.
     attachment: Mapped[dict | None] = mapped_column(JSON, default=None)
@@ -287,3 +292,71 @@ class MemoryFact(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     uses: Mapped[int] = mapped_column(default=0)
+
+
+ACTION_STATUSES = (
+    "draft",
+    "executing",
+    "succeeded",
+    "failed",
+    "unknown",
+    "cancelled",
+    "undoing",
+    "undone",
+)
+
+
+class HealthAction(Base):
+    """The exact reviewed payload and durable execution claim for a health-record write."""
+
+    __tablename__ = "health_actions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "request_key", name="uq_health_actions_request"),
+        Index(
+            "uq_health_actions_active_payload",
+            "user_id",
+            "fingerprint",
+            unique=True,
+            sqlite_where=text("status NOT IN ('cancelled', 'undone')"),
+            postgresql_where=text("status NOT IN ('cancelled', 'undone')"),
+        ),
+        CheckConstraint("kind IN ('food', 'workout')", name="ck_health_actions_kind"),
+        CheckConstraint("version > 0", name="ck_health_actions_version"),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in ACTION_STATUSES)})",
+            name="ck_health_actions_status",
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    request_key: Mapped[str] = mapped_column(String(64))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))
+    payload: Mapped[dict] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(default=1)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    provider_name: Mapped[str | None] = mapped_column(String(512), default=None)
+    operation_name: Mapped[str | None] = mapped_column(String(512), default=None)
+    pending_operation: Mapped[str | None] = mapped_column(String(16), default=None)
+    error: Mapped[str | None] = mapped_column(String(160), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class HealthActionEvent(Base):
+    """Append-only snapshots: revision, confirmation and outcome, never model authorization."""
+
+    __tablename__ = "health_action_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    action_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("health_actions.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column()
+    event: Mapped[str] = mapped_column(String(32))
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

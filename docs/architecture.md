@@ -177,12 +177,32 @@ health? A flagged sentence is rejected like any other. If Jev is down, the word 
 and the trace says so. Consulted runs are not checked, since only the lead's text is shown. The
 Jev HTTP client (`jev.py`) is shared by the router and the guard.
 
-## Confirmed action execution (planned)
+## Confirmed action execution
 
-Local-first delivery and researched tools: [agent-actions.md](agent-actions.md). The router now
-classifies read/log/mixed/manage/clarify intent in its existing Jev call and records it in the
-trace. Intent is observational in this first slice: proposal tools and execution are not exposed.
-Experts will collect details and prepare drafts; intent labels never authorize writes.
+Local-first delivery and researched tools: [agent-actions.md](agent-actions.md). The router
+classifies read/log/mixed/manage/clarify intent in its existing Jev call. Read-only requests get
+no proposal tools. Log/mixed requests can prepare one food or workout draft for the owning expert;
+the general agent uses the same logging instructions if the topic is unclear. A server-held
+unfinished clarification can continue on the next reply for up to 24 hours, without treating
+older questions or a conversational confirmation as execution permission. Manage requests point
+to the entry's controls rather than letting the model delete anything.
+
+**Implemented:** `backend/app/actions/` validates supplied-value food/workout logs, builds provider
+payloads and prepares owned drafts. `/actions` exposes review, revision, cancellation, confirmation
+and undo; the app contract, HTTP client and mock match it. Chat returns `actionIds` for review
+cards, and Data lists saved entries so a lost answer cannot orphan a draft. Migration 0006 adds
+`health_actions`, append-only application audit snapshots and chat state. Draft values are inputs
+with provenance, not statistical claims or Evidence.
+
+Execution commits a version/status compare-and-set before any remote request. It preserves Google
+record/operation IDs, checks the granted write scope, prevents duplicate entry identities (food
+name/time or workout type/interval), and never blindly retries a create. Food names and timestamps
+are not put in proposal-tool trace metadata; SQL errors are handled without logging bound values.
+Unknown/pending operations and interrupted execution stay blocked; automatic reconciliation is
+still planned. The provider writer is validated with fake HTTP only. Real writes are gated by
+`FA_GOOGLE_WRITES_ENABLED`, off by default, and need explicit real-account validation.
+
+The following requirements also cover the remaining capabilities:
 
 Workout and nutrition logging are a core planned extension; see
 [product.md](product.md#agent-assisted-logging-core-planned-capability). Reuse accounts, expert
@@ -323,8 +343,9 @@ Every stored item keeps its provenance (who wrote it, which run, when).
   characters.
 - Text that reads like an instruction ("ignore previous instructions", role tags, URLs) is dropped
   from memory candidates and logged.
-- The agent's tools only read statistics; nothing in the model's reach can write memory, change
-  settings or reach another user's data.
+- Analysis tools only read statistics. Logging tools can prepare owned drafts but cannot confirm,
+  execute or undo Google writes. Nothing in the model's reach can approve memory, change settings
+  or reach another user's data.
 - The router (Jev) receives the question text only, never data or memory.
 
 ### How it is evaluated

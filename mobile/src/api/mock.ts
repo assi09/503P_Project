@@ -1,4 +1,5 @@
 // In-memory stand-in for the backend, used until the API exists. All values are made up.
+import { logSignature, validateLog } from '@/lib/actionLog';
 import { expertForMetric } from '@/lib/experts';
 import { shortDate } from '@/lib/format';
 
@@ -17,6 +18,8 @@ import type {
   Expert,
   Finding,
   GoogleStatus,
+  HealthAction,
+  HealthLog,
   ISODate,
   NotificationSettings,
   Point,
@@ -362,7 +365,59 @@ function startMockSync() {
   }, 3000);
 }
 
+const logDrafts: { owner: string; requestKey: string; first: string; action: HealthAction }[] = [];
+let nextDraft = 0;
+
+function actionAccount() {
+  const account = currentAccount();
+  if (account.status !== 'approved') throw new ApiError('Your account is waiting for approval.', 'not_approved', 403);
+  return account;
+}
+
+function ownedDraft(id: string, version?: number) {
+  const owner = actionAccount().id;
+  const record = logDrafts.find((d) => d.owner === owner && d.action.id === id);
+  if (!record) throw new ApiError('No such logging draft.', 'not_found', 404);
+  if (version !== undefined && record.action.version !== version) throw new ApiError('This draft changed. Review it again.', 'stale_action', 409);
+  return record;
+}
+
+function transition(id: string, version: number, from: string[], to: HealthAction['status']) {
+  const record = ownedDraft(id, version);
+  if (!from.includes(record.action.status)) throw new ApiError('This action is no longer available.', 'stale_action', 409);
+  record.action = { ...record.action, status: to, updatedAt: new Date().toISOString() };
+  return { ...record.action, log: { ...record.action.log } };
+}
+
 export const mockClient: ApiClient = {
+  getActions: () => later(() => { const owner = actionAccount().id; return logDrafts.filter((d) => d.owner === owner).map((d) => ({ ...d.action, log: { ...d.action.log } })); }),
+  getAction: (id) => later(() => { const { action } = ownedDraft(id); return { ...action, log: { ...action.log } }; }),
+  proposeAction: (requestKey, log) => later(() => {
+    validateLog(log);
+    const owner = actionAccount().id;
+    const existing = logDrafts.find((d) => d.owner === owner && d.requestKey === requestKey);
+    if (existing) {
+      if (existing.first !== JSON.stringify(log)) throw new ApiError('Request key already used.', 'request_conflict', 409);
+      return { ...existing.action, log: { ...existing.action.log } };
+    }
+    if (logDrafts.some((d) => d.owner === owner && !['cancelled', 'undone'].includes(d.action.status) && logSignature(d.action.log) === logSignature(log))) throw new ApiError('This entry already has a draft or a logged record.', 'duplicate_log', 409);
+    const now = new Date().toISOString();
+    const action: HealthAction = { id: `draft_${++nextDraft}`, version: 1, status: 'draft', log: { ...log }, error: null, pendingOperation: null, createdAt: now, updatedAt: now };
+    logDrafts.push({ owner, requestKey, first: JSON.stringify(log), action });
+    return { ...action, log: { ...action.log } };
+  }),
+  reviseAction: (id, version, log: HealthLog) => later(() => {
+    validateLog(log);
+    const record = ownedDraft(id, version);
+    if (log.kind !== record.action.log.kind) throw new ApiError('Start a new draft to change the log type.', 'invalid_log', 422);
+    if (logDrafts.some((d) => d.owner === record.owner && d.action.id !== id && !['cancelled', 'undone'].includes(d.action.status) && logSignature(d.action.log) === logSignature(log))) throw new ApiError('This entry already has a draft or a logged record.', 'duplicate_log', 409);
+    transition(id, version, ['draft', 'failed'], 'draft');
+    record.action = { ...record.action, log: { ...log }, version: version + 1, error: null };
+    return { ...record.action, log: { ...record.action.log } };
+  }),
+  cancelAction: (id, version) => later(() => transition(id, version, ['draft', 'failed'], 'cancelled')),
+  confirmAction: (id, version) => later(() => transition(id, version, ['draft', 'succeeded'], 'succeeded')),
+  undoAction: (id, version) => later(() => transition(id, version, ['succeeded', 'undone'], 'undone')),
   signUp: ({ email, password }) =>
     later(() => {
       const normalized = email.trim().toLowerCase();

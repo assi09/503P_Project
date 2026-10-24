@@ -1,6 +1,6 @@
 # Project status
 
-The page to read first when picking the project up. Updated 2026-10-24.
+The page to read first when picking the project up. Updated 2026-10-25.
 
 ## Objective
 
@@ -18,35 +18,46 @@ priority**; the UI and data plumbing exist to serve them.
 | Area | State |
 |---|---|
 | Data | Takeout import (legacy layout); **live Google Health API** client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)); each person connects their own Google account from the app (encrypted token, background sync of the whole history) |
-| Storage | Postgres in Docker, five migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer); `python -m app.sync pull` stores live days |
+| Storage | Postgres in Docker, six migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer; logging drafts, audit events and clarification state); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** on the Data tab (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 559 backend and 66 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 610 backend and 71 mobile tests |
 
 **Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
 check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
 proposes, tracing and metrics, the evaluation suite, the failure matrix and threat model.
 
-## Newly planned core capability: agent-assisted logging
+## Core logging: first local implementation
 
-Added 2026-10-24: conversation-based workout and food logging, with review/edit, explicit approval,
-Google Health write-back and undo. This is not implemented. Activity owns workouts; Nutrition owns
-food. Proposed phases are a shared persistent action layer, workouts with deterministic intraday
-summaries, supplied-value food logging, then photo/weight estimates with explicit provenance.
-The user chose local development first, retained photo logging for the demo, and asked for tool
-research. Hydration stays a later extension. The hybrid design uses Jev for topic and intent,
-experts for draft preparation and a deterministic executor for confirmed actions. The first code
-slice adds intent routing and trace metadata only; answer dispatch is unchanged and no logging
-UI or writes exist yet. See [agent-actions.md](agent-actions.md) for research and the next slice.
+Supplied-value food and workout logging now run through Auto in chat: Jev separates intent from
+its topic; the expert asks for missing details and can prepare a persistent draft even with no
+historical data. The next reply can continue an owned unfinished clarification for up to 24 hours;
+a read-only topic change clears it. Read-only questions do not receive proposal tools.
 
-Details and acceptance gates: [product.md](product.md#agent-assisted-logging-core-planned-capability),
-[architecture.md](architecture.md#confirmed-action-execution-planned),
-[roadmap.md](roadmap.md#agent-assisted-logging-workstream-planned).
-Current Google connections remain read-only; console permissions and real account records are
-unchanged. Estimate provenance, durable confirmation/idempotency, source reconciliation and undo
-are requirements before enabling writes.
+The app shows review cards with edit, version-specific confirmation, cancellation and confirmed
+undo. Data → Logging entries recovers saved drafts independently of the chat. `/actions` provides
+owned draft/history/revise/cancel/confirm/undo endpoints. Migration 0006 adds the records, audit
+snapshots and chat references, and has been applied to local project Postgres. Writes use a separate executor: committed execution claims,
+entry-identity duplicate protection, scope checks, no blind retry, and unknown-outcome states.
+Google consent can request just food or workout logging while preserving analysis access.
+
+**Real Google writes remain disabled by default** (`FA_GOOGLE_WRITES_ENABLED=false`). No Google
+record has been created or deleted in validation. A real test needs approval of the exact entry
+and cleanup, granted write permission and the flag enabled. Pending Google operations or crashes
+remain blocked for reconciliation; automatic provider reconciliation/polling is not built yet.
+
+Validated with fake Google and a scripted model end to end, browser review/edit/confirm/undo and
+unknown/cancel states in light/dark on desktop/mobile widths, and two paid synthetic draft checks.
+The second created one draft and submitted in two model calls. Both together cost about $0.0086.
+
+Still planned: food lookup and serving arithmetic, intraday workout summaries, nutrition sync and
+provider deduplication, photo estimates (kept for the demo), and hydration. The optional
+[recorded routes/regions extra](product.md#recorded-routes-and-regions-optional-planned) needs GPS
+exercise data and separate location consent; daily step totals cannot reconstruct locations.
+See [agent-actions.md](agent-actions.md), [architecture.md](architecture.md#confirmed-action-execution)
+and [roadmap.md](roadmap.md#agent-assisted-logging-workstream-planned).
 
 ## Local setup
 
@@ -164,9 +175,9 @@ derived value (#39, #46).
 
 Next, in order (local logging foundation moved first at the user's request):
 
-1. **Agent-assisted logging, locally first:** intent routing is implemented as trace metadata;
-   next build durable owned proposals and confirmation, then workout/food tools and review cards.
-   Research and provider constraints are in [agent-actions.md](agent-actions.md).
+1. **Agent-assisted logging, locally first:** the draft/review/executor foundation works with
+   fakes. Next validate explicitly approved Google writes and reconciliation, then food lookup,
+   nutrition mapping and workout summaries. See [agent-actions.md](agent-actions.md).
 2. **Try connecting Google with a real sign-in** (the owner, from the browser): the flow is tested
    with a fake Google and reaches Google's page, but no real sign-in has gone through yet.
 3. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
