@@ -43,7 +43,7 @@ class Hypothesis(BaseModel):
 class Submission(BaseModel):
     """What the agent hands in at the end of a run."""
 
-    summary: str = Field(max_length=400)
+    summary: str = Field(max_length=700)
     claims: list[Claim] = Field(max_length=5)
     hypotheses: list[Hypothesis] = Field(default_factory=list, max_length=12)
 
@@ -140,7 +140,8 @@ MENTIONS = {
         "moderately_active_minutes": r"moderate activity",
         "very_active_minutes": r"vigorous activity",
         "wear_minutes": r"wear time",
-        "sleep_minutes": r"time asleep",
+        # "You slept less" is about time asleep as much as "time asleep" is.
+        "sleep_minutes": r"time asleep|\bslept\b|sleep duration|hours of sleep",
         "time_in_bed": r"time in bed",
         "sleep_efficiency": r"sleep efficiency",
         "sleep_score": r"sleep score",
@@ -483,6 +484,13 @@ NEGATED = re.compile(
 )
 SHIFT_WORDS = re.compile(r"\b(later|earlier|shift\w*)\b", re.IGNORECASE)
 CLAUSES = re.compile(r"[.;!?]|,|\b(?:while|but|whereas|although)\b", re.IGNORECASE)
+SENTENCES = re.compile(r"(?<=[.!?])\s+")
+HEDGED = re.compile(
+    r"\b(could (?:just )?be (?:normal |natural |day-to-day )?(?:variation|chance|noise)|"
+    r"within (?:the )?normal (?:range|variation)|may be (?:chance|noise)|"
+    r"not (?:a )?clear(?:ly)?|too small to (?:say|be sure))\b",
+    re.IGNORECASE,
+)
 
 
 def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
@@ -490,19 +498,26 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
 
     Claims are checked against their kind; the summary has none, so each clause that names a
     metric with a direction word ("lower", "dropped", "later") needs a significant test of that
-    metric among the run's evidence. Clauses saying nothing clearly changed are skipped."""
+    metric among the run's evidence. Clauses saying nothing clearly changed are skipped. A
+    sentence that hedges ("could be normal variation") may give a direction for a metric the run
+    tested, significant or not: that is the honest way to describe a borderline result."""
     supported = {
         metric for e in evidence if e.tool in TEST_TOOLS and _significant(e) for metric in e.metrics
     }
+    tested = {metric for e in evidence if e.tool in TEST_TOOLS for metric in e.metrics}
     flagged: list[str] = []
-    for clause in CLAUSES.split(summary):
-        if not clause or NEGATED.search(clause):
-            continue
-        if not (UP_WORDS.search(clause) or DOWN_WORDS.search(clause) or SHIFT_WORDS.search(clause)):
-            continue
-        for metric, pattern in MENTIONS.items():
-            if pattern.search(clause) and metric not in supported and metric not in flagged:
-                flagged.append(metric)
+    for sentence in SENTENCES.split(summary):
+        allowed = tested if HEDGED.search(sentence) else supported
+        for clause in CLAUSES.split(sentence):
+            if not clause or NEGATED.search(clause):
+                continue
+            if not (
+                UP_WORDS.search(clause) or DOWN_WORDS.search(clause) or SHIFT_WORDS.search(clause)
+            ):
+                continue
+            for metric, pattern in MENTIONS.items():
+                if pattern.search(clause) and metric not in allowed and metric not in flagged:
+                    flagged.append(metric)
     if not flagged:
         return []
     names = ", ".join(label(m) for m in flagged)

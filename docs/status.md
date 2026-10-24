@@ -273,7 +273,9 @@ Spent so far on real runs: about $0.59 of OpenAI and $0.004 of Jev ([costs.md](c
 14. **"No clear change" can hide a real one.** After the per-run correction rejected a real but
     borderline sleep drop, the model claimed "time asleep did not clearly change", which the
     verifier allows on non-significant evidence. Honest in statistical terms, misleading in plain
-    words; the evaluation's planted scenarios will measure how often it happens.
+    words; the evaluation's planted scenarios will measure how often it happens. Improved in PR #54:
+    a hedged sentence may say "a little less, though that could be normal variation", and the
+    evidence card explains when a result is not clear once the answer's checks are counted.
 15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
     since August", it did not call `propose_fact` in either real run, the second after the prompt
     asked it to. Proposals work in the scripted tests.
@@ -290,3 +292,11 @@ Spent so far on real runs: about $0.59 of OpenAI and $0.004 of Jev ([costs.md](c
     reload shows the "connected" notice again.
 19. **No screen yet for facts the agent proposes**; they are stored as proposed. Jev's routing and
     guard costs (about $0.00007 a question) are not added to the stored cost of an answer.
+20. **A verdict depends on how many tests the agent chose to run.** The same time-asleep drop on the
+    same data was "no clear change" after 6 tests (adjusted p 0.096) and "a small real dip" after 5
+    (0.04). The correction is right for each run, but the answer should not hinge on how many
+    extra tests the model happened to run; options are a fixed family per question type or
+    reporting borderline results as such. To be measured in the evaluation.
+21. **The access log records Google's sign-in code.** The callback's address, code included, is
+    written to the server's request log. The code works once and is used immediately, but the
+    callback should be left out of request logging.

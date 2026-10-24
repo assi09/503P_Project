@@ -31,7 +31,10 @@ from app.analysis.evidence import Evidence
 
 LOGGING_PROMPT = (
     "\nYou can prepare log drafts even with no historical data. Use only values the "
-    "person explicitly supplied; ask for missing date, time, timezone and other details. "
+    "person explicitly supplied. Resolve times like 'just now', 'this morning' or 'yesterday "
+    "at lunch' from the current local time and UTC offset at the top of the task, and write "
+    "them with that offset; ask only when the time is truly unclear, and for any other "
+    "missing detail. "
     "Proposals are not statistics or verified claims. Never infer calories/macros or "
     "measurements. A prepared draft is not logged or sent to Google. Tell the person "
     "it needs review and confirmation; never claim execution. Keep draft values in the "

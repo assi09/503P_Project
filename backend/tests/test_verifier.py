@@ -321,6 +321,23 @@ def test_each_clause_is_judged_on_its_own():
     assert "time in bed" in overstated(summary, evidence)[0]
 
 
+def test_a_hedged_direction_is_allowed_for_a_tested_metric():
+    from app.agent.verifier import overstated
+
+    # From a real answer: time asleep's drop was significant alone (p 0.016) but not after the
+    # run's correction. Saying so with a hedge is honest; without one it overstates.
+    evidence = [_test_evidence("sleep_minutes", 0.096), _test_evidence("bedtime_hour", 0.57)]
+    hedged = (
+        "You slept a little less in the last month, though with this many checks that could "
+        "be normal variation. Your bedtime held steady."
+    )
+    assert overstated(hedged, evidence) == []
+    assert "time asleep" in overstated("You slept a little less in the last month.", evidence)[0]
+    # A hedge does not license a metric the run never tested.
+    untested = "Your HRV was a little lower, though that could be normal variation."
+    assert "HRV" in overstated(untested, evidence)[0]
+
+
 def test_saying_nothing_clearly_changed_is_not_an_overstatement():
     from app.agent.verifier import overstated
 

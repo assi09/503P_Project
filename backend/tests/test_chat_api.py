@@ -134,7 +134,8 @@ def test_a_question_is_answered_with_verified_claims_and_stored(client, engine, 
     question, answer = response.json()
     assert question["role"] == "user" and question["text"] == "How did I sleep?"
     assert answer["role"] == "assistant"
-    assert "Your time asleep held steady." in answer["text"]
+    # The summary is the answer; the claim backs it as evidence, not as repeated text.
+    assert answer["text"] == "Here is what I found."
     assert answer["answeredBy"] == "sleep" and answer["routed"] is True
     assert len(answer["evidenceIds"]) == 1
     assert "refused" not in answer  # absent rather than false, like the mock
@@ -204,10 +205,51 @@ def test_a_failed_run_is_stored_as_a_plain_apology(client, engine, agent):
     assert question["text"] == "How did I sleep?"
 
 
-def test_the_answer_text_lists_the_summary_claims_and_notes_once():
-    text = answer_text("Here is what I found.", ["A.", "Here is what I found.", "B."], ["Note."])
-    assert text == "Here is what I found.\n\nA.\n\nB.\n\nNote."
+def test_the_answer_text_is_the_summary_then_the_notes():
+    text = answer_text("Your sleep held steady.", ["A.", "B."], ["Note."])
+    assert text == "Your sleep held steady.\n\nNote."
+    # Without a summary, the claims are read out as one paragraph, capitalized.
+    assert answer_text("", ["time asleep held steady.", "Bedtime too."], []) == (
+        "Time asleep held steady. Bedtime too."
+    )
     assert answer_text("", [], []) == chat.FAILED
+
+
+def test_the_agent_gets_the_local_time_not_the_last_day_of_data(client, engine, agent):
+    agent.llm.turns.append(submission("Nothing stood out."))
+    ask(client, signed_in(client, engine))
+    task = agent.llm.requests[0]["messages"][1]["content"]
+    assert task.startswith("It is now ") and "UTC" in task
+
+
+def test_a_reply_to_a_logging_question_is_given_with_its_request(client, engine, agent):
+    from app.agent.intent import Intent
+
+    headers = signed_in(client, engine)
+    # The agent asks for the time instead of preparing a draft.
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"nutrition": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent},
+    )
+    agent.llm.turns.append(submission("When did you eat it?"))
+    ask(client, headers, "Log a snack: an apple, 95 kcal")
+    # The reply alone is unclear; it continues the logging request.
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"nutrition": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.CLARIFY) for i in Intent},
+    )
+    agent.llm.turns.append(submission("Noted."))
+    ask(client, headers, "at 10:30")
+    task = agent.llm.requests[-1]["messages"][1]["content"]
+    assert "Earlier request: Log a snack: an apple, 95 kcal" in task
+    assert "You asked: When did you eat it?" in task
+    assert "Their reply: at 10:30" in task
+    # What is stored and shown stays the person's own words.
+    assert client.get("/chat", headers=headers).json()[-2]["text"] == "at 10:30"
 
 
 # Attachments

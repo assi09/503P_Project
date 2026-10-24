@@ -13,7 +13,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
@@ -58,9 +58,17 @@ How to work:
    correlate. Every tool returns evidence with an evidence_id.
 3. Call submit_findings once, with a short summary, your claims and each hypothesis's status.
 
-Writing for the person (the summary and every claim's text are shown to them as written):
-- At most 4 claims, the ones that matter most, each one plain sentence. The summary is one or two
-  sentences.
+Writing for the person:
+- The summary is the answer they read, so write it as a short, natural reply: two to four connected
+  sentences that lead with the direct answer to their question, then what matters most. Group
+  metrics that behaved alike ("your bedtime, time in bed and sleep efficiency held steady") rather
+  than one sentence per metric, and start each sentence with a capital letter.
+- Claims are the checked facts behind the summary. The person sees them as evidence links, not as
+  text: at most 4, the ones that matter most, each one short plain sentence.
+- When a test is significant on its own but not after correcting for the run's tests (a repair
+  message says so), you may give its direction in the summary only with a hedge in the same
+  sentence ("you slept a little less, though with this many checks that could be normal
+  variation"), and its claim is a no_change claim.
 - Call metrics by the names in the task ("time asleep", "bedtime"), never by tool names such as
   sleep_minutes.
 - Quote values as they appear under `display` in the evidence ("7 h 12 min", "23:30", "45 min",
@@ -337,8 +345,8 @@ def _handle(
                 list(verdict.rejected), len(verdict.accepted), summary_problems, uncovered
             )
             return message, False
-        if summary_problems:  # still wrong after the repair: show a verified claim instead
-            result.summary = verdict.accepted[0].text if verdict.accepted else ""
+        if summary_problems:  # still wrong after the repair: show the verified claims instead
+            result.summary = " ".join(c.text for c in verdict.accepted)
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 
     if over_budget:
@@ -474,7 +482,15 @@ def answer(
 def answer_task(
     toolbox: Toolbox, question: str, today: date | None = None, context: str = ""
 ) -> str:
-    when = f"Today is {today}. " if today else ""
+    """The task the model reads. `today` may be a timezone-aware datetime: the person's local
+    time, so it can place "just now" or "this morning" without asking."""
+    if isinstance(today, datetime) and today.tzinfo is not None:
+        offset = today.strftime("%z")
+        zone = getattr(today.tzinfo, "key", None)
+        where = f"{zone}, UTC{offset[:3]}:{offset[3:]}" if zone else f"UTC{offset[:3]}:{offset[3:]}"
+        when = f"It is now {today:%A %d %b %Y, %H:%M} ({where}). "
+    else:
+        when = f"Today is {today}. " if today else ""
     earlier = f"\n\n{context}" if context else ""
     return f"{when}{_describe_range(toolbox)}{earlier}\n\nThe person asks: {question}"
 

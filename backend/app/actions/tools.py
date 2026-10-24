@@ -66,9 +66,11 @@ def proposal_tools(
 
         return ExtraTool(
             f"propose_{'food' if expert == 'nutrition' else 'workout'}_log",
-            "Prepare one draft per message, using supplied values. Ask for missing fields "
-            "first, including timezone-aware times. Never estimate nutrients, invent measurements "
-            "or claim it was logged. This tool cannot confirm, execute or delete a Google record.",
+            "Prepare one draft per message, using supplied values. Write times with the UTC "
+            "offset given at the top of the task: 'just now' is the current local time there, "
+            "and 'this morning' or 'yesterday at lunch' are worked out from it. Ask only for "
+            "details that are truly missing. Never estimate nutrients, invent measurements or "
+            "claim it was logged. This tool cannot confirm, execute or delete a Google record.",
             schema,
             run,
         )

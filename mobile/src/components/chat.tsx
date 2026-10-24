@@ -12,20 +12,23 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { ChatMessage, Evidence, ExpertChoice } from '@/api/types';
+import { useEvidence } from '@/api/hooks';
 import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
-import { metricLabel, toolLabel } from '@/lib/format';
+import { evidenceLabel, metricLabel } from '@/lib/format';
 import { radius, spacing, useColors } from '@/theme';
 
 const ENTER = FadeInDown.duration(260);
 
-/** Short label for an evidence chip, e.g. "Compared two periods · Bedtime". */
-function chipLabel(id: string, known: Record<string, Evidence>): string {
-  const evidence = known[id];
-  if (!evidence) return 'Evidence';
-  return `${toolLabel(evidence.tool)} · ${evidence.metrics.map(metricLabel).join(', ')}`;
+/** A chip for evidence the report may not hold (a chat answer's): fetched to name it. */
+function AnswerEvidenceChip({ id, known }: { id: string; known?: Evidence }) {
+  const fetched = useEvidence(id, !known);
+  const evidence = known ?? fetched.data;
+  // Evidence about many metrics takes the accent color rather than its first metric's.
+  const metric = evidence && evidence.metrics.length <= 2 ? evidence.metrics[0] : undefined;
+  return <EvidenceChip id={id} label={evidenceLabel(evidence)} metric={metric} />;
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -87,12 +90,7 @@ export const MessageBubble = memo(function MessageBubble({
         {message.evidenceIds.length > 0 && (
           <View style={styles.chips}>
             {message.evidenceIds.map((id) => (
-              <EvidenceChip
-                key={id}
-                id={id}
-                label={chipLabel(id, knownEvidence)}
-                metric={knownEvidence[id]?.metrics[0]}
-              />
+              <AnswerEvidenceChip key={id} id={id} known={knownEvidence[id]} />
             ))}
           </View>
         )}

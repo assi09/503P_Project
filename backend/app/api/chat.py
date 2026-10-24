@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as WaitTimeout
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
@@ -168,12 +168,16 @@ def _attachment(data: LoadedData, given: AttachmentIn | None) -> Attachment | No
 
 
 def answer_text(summary: str, claims: list[str], notes: list[str]) -> str:
-    """What the person reads: the summary, then each verified claim, then any fixed notes."""
+    """What the person reads: the summary as the answer, then any fixed notes.
+
+    The verified claims back the summary and are shown as evidence links, not repeated as text;
+    they are read out only when there is no summary."""
+    body = summary.strip() or " ".join(c.strip() for c in claims if c.strip())
     paragraphs: list[str] = []
-    for part in (summary, *claims, *notes):
+    for part in (body, *notes):
         part = part.strip()
         if part and part not in paragraphs:
-            paragraphs.append(part)
+            paragraphs.append(part[0].upper() + part[1:])
     return "\n\n".join(paragraphs) or FAILED
 
 
@@ -203,6 +207,18 @@ def _answer(
             if timedelta(0) <= now - created <= timedelta(hours=24):
                 continuing_log = last.pending_log_expert
         frame = data.daily.frame
+        # The agent gets the person's local time, so "just now" or "this morning" needs no
+        # question; the data range is in the task separately.
+        local_now = now.astimezone(ZoneInfo(settings.timezone))
+        question = body.text
+        if continuing_log and len(earlier) >= 2 and earlier[-2].role == "user":
+            # A reply to the agent's logging question only makes sense with the request it
+            # answers, so the agent gets all three, not the bare reply.
+            question = (
+                f"Earlier request: {earlier[-2].text}\n"
+                f"You asked: {earlier[-1].text}\n"
+                f"Their reply: {body.text}"
+            )
         prepared: list[str] = []
         draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared)
         try:
@@ -210,10 +226,10 @@ def _answer(
                 agent.llm,
                 agent.router,
                 frame,
-                body.text,
+                question,
                 choice=body.expert,
                 depth=Depth(body.depth),
-                today=frame.index.max().date() if len(frame) else date.today(),
+                today=local_now,
                 history=turns,
                 stored_evidence=cited,
                 attachment=attachment,
