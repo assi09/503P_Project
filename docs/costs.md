@@ -78,3 +78,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-24 | Same after explicit logging-completion instruction: one draft, submitted in 2 calls; OpenAI $0.002841150, Jev router/guard $0.000066948; no Google writes | $0.002908098 |
 | 2026-10-25 | First real Google write, owner's app session: "log a snack" (asked for the time), the time reply (misread as a sleep question), the same in one message (draft) | $0.0166 |
 | 2026-10-25 | Answer and time fixes, owner's data: the sleep question again (one natural reply, 4 claims), "log a snack… just now" (still asked for the time: the tool's own description said to) | $0.0140 |
+| 2026-10-25 | "Log a snack… eaten just now" after the tool-description fix: draft at the current local time with no question back (draft cancelled) | $0.0076 |

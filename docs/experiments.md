@@ -257,4 +257,5 @@ counts as time asleep; chips name their metric; the card shows units, the p-valu
 judged on and a plain verdict. A rerun of the sleep question ($0.0098) gave one natural paragraph.
 That rerun ran 5 tests instead of 6, so the same drop came out significant (0.04) and was called a
 small real dip: open issue 20. "Log a snack… just now" still asked for the time ($0.0042), because
-the logging tool's own description told the model to ask; fixed, not yet rerun.
+the logging tool's own description told the model to ask. After fixing that, the same message
+($0.0076) gave a draft at the current local time (UTC+02:00) with no question back.
