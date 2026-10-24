@@ -9,8 +9,9 @@ import {
   TextInput,
   View,
   useWindowDimensions,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
+  type HostInstance,
+  type TextInputInstance,
+  type TextInputKeyPressEvent,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -76,7 +77,7 @@ export function Composer({
   maxLength,
 }: ComposerProps) {
   const colors = useColors();
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   // Set when a control is pressed, so the blur that the press causes does not close the input.
   const keepOpen = useRef(false);
   const [focused, setFocused] = useState(false);
@@ -142,7 +143,7 @@ export function Composer({
     }, 150);
   }
 
-  function handleKeyPress(event: NativeSyntheticEvent<TextInputKeyPressEventData>) {
+  function handleKeyPress(event: TextInputKeyPressEvent) {
     // On the web, Enter sends and Shift+Enter adds a line; phones use the send button.
     const shift = (event.nativeEvent as unknown as { shiftKey?: boolean }).shiftKey;
     if (Platform.OS === 'web' && event.nativeEvent.key === 'Enter' && !shift) {
@@ -332,7 +333,7 @@ function ExpertPicker({
   const colors = useColors();
   const color = useExpertColor(value);
   const info = expertInfo(value);
-  const button = useRef<View>(null);
+  const button = useRef<HostInstance>(null);
   const window = useWindowDimensions();
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
 
