@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from app.api import auth, chat, data, reports
+from app.api import auth, chat, data, google, reports
 from app.api.errors import ApiError
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(chat.router)
+    app.include_router(google.router)
     app.include_router(data.router)
     app.include_router(reports.router)
     return app
