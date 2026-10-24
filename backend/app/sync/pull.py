@@ -22,7 +22,8 @@ def get_or_create_user(session: Session, email: str) -> User:
     email = email.strip().lower()
     user = session.scalar(select(User).where(User.email == email))
     if user is None:
-        user = User(email=email)
+        # Whoever runs the sync on this machine owns the data, so there is nothing to approve.
+        user = User(email=email, status="approved")
         session.add(user)
         session.flush()
     return user

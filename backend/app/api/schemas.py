@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -83,3 +83,26 @@ class Report(ApiModel):
     findings: list[Finding]
     questions: list[ContextQuestion]
     evidence: dict[str, Evidence]
+
+
+class Credentials(ApiModel):
+    # Loose limits here; the account rules give the person a specific message.
+    email: str = Field(max_length=1000)
+    password: str = Field(max_length=1000)
+
+
+class Account(ApiModel):
+    email: str
+    status: Literal["pending", "approved", "rejected"]
+    is_admin: bool
+
+
+class SignedIn(ApiModel):
+    token: str
+    account: Account
+
+
+class AccessRequest(ApiModel):
+    id: str
+    email: str
+    requested_at: datetime

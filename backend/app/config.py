@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     typesafe_api_key: SecretStr | None = None
     typesafe_model: str = "jev-latest"
     typesafe_base_url: str = "https://api.typesafe.ai"
+    # Accounts: who may approve sign-ups, and how long a device stays signed in.
+    admin_emails: list[str] = []
+    session_days: int = 30
     # Hard cap on model spending by this process, in US dollars.
     llm_spend_cap_usd: float = 20.0
 
