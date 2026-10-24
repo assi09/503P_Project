@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as WaitTimeout
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
@@ -25,10 +25,12 @@ from pydantic import Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.actions.tools import proposal_tools
 from app.agent.ask import ask, default_guard, default_router
 from app.agent.context import Attachment, turns_from
-from app.agent.experts import Depth
+from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
+from app.agent.intent import Intent
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
 from app.api import schemas
@@ -109,6 +111,7 @@ def _message(row: ChatMessage) -> schemas.ChatMessage:
         role=row.role,
         text=row.text,
         evidence_ids=list(row.evidence_ids or []),
+        action_ids=list(row.action_ids or []) or None,
         attachment=row.attachment,
         answered_by=row.answered_by if row.role == "assistant" else None,
         routed=row.routed if row.role == "assistant" else None,
@@ -191,7 +194,17 @@ def _answer(
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
             remembered = memory.memory_items(db, user_id, now)
+        last = earlier[-1] if earlier and earlier[-1].role == "assistant" else None
+        continuing_log = None
+        if last and last.pending_log_expert:
+            created = (
+                last.created_at if last.created_at.tzinfo else last.created_at.replace(tzinfo=UTC)
+            )
+            if timedelta(0) <= now - created <= timedelta(hours=24):
+                continuing_log = last.pending_log_expert
         frame = data.daily.frame
+        prepared: list[str] = []
+        draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared)
         try:
             reply = ask(
                 agent.llm,
@@ -207,6 +220,8 @@ def _answer(
                 guard=agent.guard,
                 memory=remembered,
                 now=now,
+                action_tools=draft_tools,
+                continuing_log=continuing_log,
             )
         except Exception:
             logger.exception("Answering failed")
@@ -228,6 +243,18 @@ def _answer(
                 )
                 return [question, answer]
             result = reply.result
+            if prepared:
+                note = "A logging draft is ready for review. It has not been sent to Google Health."
+                if reply.route.classification.intent == Intent.LOG or any(
+                    step.get("continuing_log_expert") for step in result.trace
+                ):
+                    result.summary, result.claims = note, []
+                elif reply.route.expert == "nutrition" and not available(
+                    EXPERTS["nutrition"], frame
+                ):
+                    result.summary = "No nutrition history is available yet. " + note
+                else:
+                    result.notes.append(note)
             refused = reply.route.action == "refuse"
             memory.mark_used(db, user_id, reply.context.memory_used, now)
             for fact in reply.proposed_facts:
@@ -245,6 +272,15 @@ def _answer(
                 refused=refused,
                 run_id=result.run_id,
                 cost_usd=result.budget.cost_usd,
+                action_ids=prepared or None,
+                pending_log_expert=(reply.route.expert or "general")
+                if not prepared
+                and (reply.route.expert in draft_tools or reply.route.action == "general")
+                and (
+                    reply.route.classification.intent == Intent.LOG
+                    or (any(step.get("continuing_log_expert") for step in result.trace))
+                )
+                else None,
             )
             logger.info(
                 "Answered run %s: %s, %d claims, $%.4f",

@@ -7,15 +7,16 @@ browser back to the app. `POST /google/sync` refreshes the data; `GET /google/st
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 
+from app.actions.schemas import WRITE_SCOPES
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.chat import Sessions, get_sessions
@@ -25,7 +26,7 @@ from app.db.models import GoogleConnection, User
 from app.sync import connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
-from app.sync.google_auth import OAuthClient, SyncError
+from app.sync.google_auth import SCOPES, OAuthClient, SyncError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/google", tags=["google"])
@@ -80,9 +81,23 @@ def google_status(db: Db, user: Person) -> schemas.GoogleStatus:
     return _status(db, user)
 
 
+class ConnectOptions(schemas.ApiModel):
+    capability: Literal["food_logging", "workout_logging"]
+
+
 @router.post("/connect", response_model=schemas.ConnectStart)
-def connect(user: Person, google: Google, clock: Now) -> schemas.ConnectStart:
-    return schemas.ConnectStart(url=sign_ins.start(google.oauth, user.id, clock))
+def connect(
+    user: Person, google: Google, clock: Now, db: Db, body: ConnectOptions | None = None
+) -> schemas.ConnectStart:
+    scopes = set(SCOPES)
+    connection = db.get(GoogleConnection, user.id)
+    if connection is not None:
+        scopes.update(set(connection.scopes) & set(WRITE_SCOPES.values()))
+    if body is not None:
+        scopes.add(WRITE_SCOPES["food" if body.capability == "food_logging" else "workout"])
+    return schemas.ConnectStart(
+        url=sign_ins.start(google.oauth, user.id, clock, tuple(sorted(scopes)))
+    )
 
 
 @router.get("/callback", include_in_schema=False)
@@ -107,7 +122,10 @@ def callback(
     if error or not code:
         return back("cancelled")  # the person said no on Google's page
     try:
-        credentials = google.oauth.exchange(code, pending.verifier)
+        oauth = google.oauth
+        if isinstance(oauth, connections.GoogleOAuth):
+            oauth = replace(oauth, scopes=pending.scopes)
+        credentials = oauth.exchange(code, pending.verifier)
         connections.save_connection(db, google.box, pending.user_id, credentials)
     except Exception:
         logger.exception("Connecting Google Health failed")

@@ -13,6 +13,7 @@ import Animated, {
 
 import type { ChatMessage, Evidence, ExpertChoice } from '@/api/types';
 import { EvidenceChip } from '@/components/evidence';
+import { LogDraftCard } from '@/components/LogDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { metricLabel, toolLabel } from '@/lib/format';
@@ -80,6 +81,9 @@ export const MessageBubble = memo(function MessageBubble({
         ) : (
           <Text>{message.text}</Text>
         )}
+        {message.actionIds?.map((id) => (
+          <LogDraftCard key={id} id={id} />
+        ))}
         {message.evidenceIds.length > 0 && (
           <View style={styles.chips}>
             {message.evidenceIds.map((id) => (

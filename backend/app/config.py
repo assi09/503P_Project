@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     token_key: SecretStr | None = None
     public_url: str = "http://127.0.0.1:8000"
     app_url: str = "http://localhost:8081"
+    # Opt-in only after the confirmed-action path and Google write scopes are configured.
+    google_writes_enabled: bool = False
     # The database: Postgres from docker-compose.yml locally, a managed Postgres when deployed.
     database_url: str = (
         "postgresql+psycopg://fitbit_agent:local-dev-only@localhost:5433/fitbit_agent"

@@ -8,6 +8,7 @@ import type { DataStatus, MetricCoverage } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { GoogleHealthCard } from '@/components/GoogleHealthCard';
+import { LogEntries } from '@/components/LogEntries';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { Button, Card, SectionTitle } from '@/components/ui';
@@ -91,8 +92,8 @@ export default function DataScreen() {
               </Card>
 
               <Text variant="caption" color="faint" style={styles.privacy}>
-                Your data is only used to analyze your own patterns. Profile and account details
-                from the export are never read.
+                Your data supports your own patterns and the entries you choose to log. Profile and
+                account details from the export are never read.
               </Text>
             </>
           );
@@ -107,6 +108,9 @@ export default function DataScreen() {
         title="Upload a new Takeout export"
         detail="Uploading from the app is coming next."
       />
+
+      <SectionTitle>Logging entries</SectionTitle>
+      <LogEntries />
 
       <SectionTitle>Appearance</SectionTitle>
       <AppearanceSwitch />

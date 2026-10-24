@@ -113,6 +113,7 @@ class ChatMessage(ApiModel):
     role: Literal["user", "assistant"]
     text: str
     evidence_ids: list[str]
+    action_ids: list[str] | None = None  # owned drafts, never statistical evidence
     attachment: dict[str, Any] | None = None  # what a question asked about
     answered_by: str | None = None  # an expert or "general"; absent on refusals
     routed: bool | None = None  # true if the router chose the expert

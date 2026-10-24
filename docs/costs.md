@@ -74,3 +74,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-24 | Memory retrieval and fact proposals: two runs with stored memory | $0.0226 |
 | 2026-10-24 | Chat API end to end on the owner's live data (quick, routed to sleep by Jev, 4 verified claims, 11.3 s) | $0.0113 |
 | 2026-10-24 | Request-intent routing: one synthetic mixed nutrition log/analysis message, Jev (Nutrition + mixed, 0.351 s; no Google writes or OpenAI calls) | $0.000048342 |
+| 2026-10-24 | Logging tools, synthetic meal with no history: draft prepared, but model finished without submission (5 calls); OpenAI $0.005649, Jev router/guard $0.000067410; no Google writes | $0.005716410 |
+| 2026-10-24 | Same after explicit logging-completion instruction: one draft, submitted in 2 calls; OpenAI $0.002841150, Jev router/guard $0.000066948; no Google writes | $0.002908098 |

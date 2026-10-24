@@ -203,3 +203,33 @@ mixed requests, edit/cancel/undo, bare confirmations, topic/intent independence,
 invalid/non-finite probabilities and malformed Jev responses falling back without echoing input.
 Remaining work: owned durable proposals and confirmation, context from an active draft, task-level
 held-out evaluation, and the actual logging tools/UI/executor. The 0.7 intent threshold is hand-set.
+
+## Confirmed logging foundation (2026-10-24–25)
+
+Built food/workout proposal tools, versioned owned drafts and audit, review/edit/confirm/cancel/undo
+APIs and cards, saved entries on Data, a gated Google writer and optional write consent. Model
+intent is no longer only metadata: read-only requests get no proposal tools; explicit logging
+can prepare drafts without metric history. A pending clarification can continue on the next
+reply within 24 hours; read-only topic changes clear it. No model tool can execute Google writes.
+
+**Two paid runs, both synthetic and with no Google writes:** the first prepared one valid food
+draft, but finished in plain text instead of submitting (5 model calls, OpenAI $0.005649 and Jev
+$0.000067410). Added an explicit instruction to finish log-only tasks through `submit_findings`,
+without statistical investigations or numeric claims. The second prepared one draft and submitted
+in 2 calls (OpenAI $0.002841150 and Jev $0.000066948). Combined estimated spend: $0.008624508.
+The reproducible smoke check is `python eval/logging_smoke.py --run-paid`, never run by CI.
+
+**Free checks:** migrated SQLite tests cover ownership, stale versions, duplicate request keys
+and entry identities, concurrent confirmation, persisted unknown outcomes, consent state, invalid
+fields/units/timezones, missing-detail follow-ups, topic changes/expiry, and errors without health
+payloads in logs. Scripted chat produces a saved draft and chat reference without executing it. The final local checks pass 610 backend and 71 mobile tests,
+all 21 Expo Doctor checks, lint/type/format checks and the web export. Migration 0006 was applied
+to the local project Postgres without reading or changing health records.
+Playwright on synthetic data and a fake writer clicked draft/edit/validation/confirm/two-step
+undo/unknown/cancel in light/dark at desktop/mobile widths, with no browser console errors.
+
+**Limits:** this is not an intent/extraction accuracy evaluation or proof of provider behavior.
+Actual Google create/delete, asynchronous operation reconciliation, existing-provider entry
+matching, nutrition sync/deduplication, workout telemetry and photo estimates remain unvalidated
+or unbuilt. `FA_GOOGLE_WRITES_ENABLED` stays false. Real account test entries and cleanup need
+explicit approval. Expo Doctor's unrelated SDK 57 patch mismatch was fixed separately in PR #51.
