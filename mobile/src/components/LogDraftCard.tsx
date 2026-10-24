@@ -51,12 +51,30 @@ export function StatusPill({ status }: { status: HealthAction['status'] }) {
   );
 }
 
-/** One logging entry. Only its buttons can send it to Google; nothing the model says can. */
-export function LogDraftCard({ id }: { id: string }) {
+/**
+ * One logging entry. Only its buttons can send it to Google; nothing the model says can.
+ * `collapsible` shows only the summary until it is tapped, then the actions in the same card.
+ */
+export function LogDraftCard({
+  id,
+  initial,
+  collapsible = false,
+}: {
+  id: string;
+  initial?: HealthAction; // from a list already loaded, so the card does not fetch it again
+  collapsible?: boolean;
+}) {
   const colors = useColors();
   const client = useQueryClient();
   const key = ['health-action', id];
-  const query = useQuery({ queryKey: key, queryFn: () => api.getAction(id) });
+  const query = useQuery({
+    queryKey: key,
+    queryFn: () => api.getAction(id),
+    initialData: initial,
+    // A list refresh brings newer data than an entry loaded earlier.
+    initialDataUpdatedAt: initial ? Date.parse(initial.updatedAt) : undefined,
+  });
+  const [expanded, setExpanded] = useState(!collapsible);
   const [form, setForm] = useState<{ version: number; fields: LogForm } | null>(null);
   const [formError, setFormError] = useState<string>();
   const [confirmingUndo, setConfirmingUndo] = useState(false);
@@ -107,8 +125,14 @@ export function LogDraftCard({ id }: { id: string }) {
   }
 
   return (
-    <Card style={styles.card}>
-      <View style={styles.header}>
+    <Card style={[styles.card, !collapsible && styles.inChat]}>
+      <Pressable
+        accessibilityRole={collapsible ? 'button' : undefined}
+        accessibilityState={collapsible ? { expanded } : undefined}
+        disabled={!collapsible}
+        onPress={() => setExpanded(!expanded)}
+        style={styles.header}
+      >
         <View style={[styles.icon, { backgroundColor: colors.accentSoft }]}>
           <Ionicons name={logIcon(row.log)} size={18} color={colors.accent} />
         </View>
@@ -121,9 +145,17 @@ export function LogDraftCard({ id }: { id: string }) {
           </Text>
         </View>
         <StatusPill status={row.status} />
-      </View>
+        {collapsible && (
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.faint}
+            style={styles.chevron}
+          />
+        )}
+      </Pressable>
 
-      {form && (
+      {expanded && form && (
         <EditForm
           log={row.log}
           fields={form.fields}
@@ -133,99 +165,104 @@ export function LogDraftCard({ id }: { id: string }) {
         />
       )}
 
-      {row.status === 'failed' && row.error && (
-        <Text variant="caption" color="danger">
-          {row.error}
-        </Text>
-      )}
-      {['executing', 'undoing', 'unknown'].includes(row.status) && (
-        <Text variant="caption" color="muted">
-          Google has not confirmed this yet. Check again in a moment; do not log it a second time.
-        </Text>
-      )}
-      {(formError || action.error) && (
-        <Text variant="caption" color="danger">
-          {formError ?? action.error?.message}
-        </Text>
-      )}
-      {code === 'write_scope_needed' && (
-        <Button
-          label="Allow logging in Google"
-          icon="logo-google"
-          disabled={allow.isPending}
-          onPress={() => allow.mutate(row.log.kind)}
-        />
-      )}
-
-      <View style={styles.actions}>
-        {form ? (
-          <>
-            <Button label={busy ? 'Saving…' : 'Save'} disabled={busy} onPress={save} />
+      {expanded && (
+        <>
+          {row.status === 'failed' && row.error && (
+            <Text variant="caption" color="danger">
+              {row.error}
+            </Text>
+          )}
+          {['executing', 'undoing', 'unknown'].includes(row.status) && (
+            <Text variant="caption" color="muted">
+              Google has not confirmed this yet. Check again in a moment; do not log it a second
+              time.
+            </Text>
+          )}
+          {(formError || action.error) && (
+            <Text variant="caption" color="danger">
+              {formError ?? action.error?.message}
+            </Text>
+          )}
+          {code === 'write_scope_needed' && (
             <Button
-              label="Discard"
-              variant="secondary"
-              disabled={busy}
-              onPress={() => setForm(null)}
+              label="Allow logging in Google"
+              icon="logo-google"
+              disabled={allow.isPending}
+              onPress={() => allow.mutate(row.log.kind)}
             />
-          </>
-        ) : row.status === 'draft' || row.status === 'failed' ? (
-          <>
-            {row.status === 'draft' && (
-              <Button
-                label={busy ? 'Logging…' : 'Log it'}
-                icon="checkmark"
-                disabled={busy}
-                onPress={() => run(() => api.confirmAction(id, row.version))}
-              />
-            )}
-            <Button
-              label="Edit"
-              variant="secondary"
-              disabled={busy}
-              onPress={() => {
-                action.reset();
-                setFormError(undefined);
-                setForm({ version: row.version, fields: formFromLog(row.log) });
-              }}
-            />
-            <TextButton
-              label="Cancel"
-              disabled={busy}
-              onPress={() => run(() => api.cancelAction(id, row.version))}
-            />
-          </>
-        ) : row.status === 'succeeded' ? (
-          confirmingUndo ? (
-            <>
-              <Text variant="caption" style={styles.question}>
-                Remove it from Google Health?
-              </Text>
-              <Button
-                label="Remove"
-                disabled={busy}
-                onPress={() => run(() => api.undoAction(id, row.version))}
-              />
-              <Button
-                label="Keep"
-                variant="secondary"
-                disabled={busy}
-                onPress={() => setConfirmingUndo(false)}
-              />
-            </>
-          ) : (
-            <TextButton label="Undo" onPress={() => setConfirmingUndo(true)} />
-          )
-        ) : ['executing', 'undoing', 'unknown'].includes(row.status) ? (
-          <Button label="Check again" variant="secondary" onPress={() => query.refetch()} />
-        ) : null}
-      </View>
+          )}
 
-      {row.status === 'draft' && !form && (
-        <Text variant="caption" color="faint">
-          {usingMock
-            ? 'Demo: logging is only simulated.'
-            : 'Log it adds this entry to Google Health, with the values you gave.'}
-        </Text>
+          <View style={styles.actions}>
+            {form ? (
+              <>
+                <Button label={busy ? 'Saving…' : 'Save'} disabled={busy} onPress={save} />
+                <Button
+                  label="Discard"
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={() => setForm(null)}
+                />
+              </>
+            ) : row.status === 'draft' || row.status === 'failed' ? (
+              <>
+                {row.status === 'draft' && (
+                  <Button
+                    label={busy ? 'Logging…' : 'Log it'}
+                    icon="checkmark"
+                    disabled={busy}
+                    onPress={() => run(() => api.confirmAction(id, row.version))}
+                  />
+                )}
+                <Button
+                  label="Edit"
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={() => {
+                    action.reset();
+                    setFormError(undefined);
+                    setForm({ version: row.version, fields: formFromLog(row.log) });
+                  }}
+                />
+                <TextButton
+                  label="Cancel"
+                  disabled={busy}
+                  onPress={() => run(() => api.cancelAction(id, row.version))}
+                />
+              </>
+            ) : row.status === 'succeeded' ? (
+              confirmingUndo ? (
+                <>
+                  <Text variant="caption" style={styles.question}>
+                    Remove it from Google Health?
+                  </Text>
+                  <Button
+                    label="Remove"
+                    disabled={busy}
+                    onPress={() => run(() => api.undoAction(id, row.version))}
+                  />
+                  <Button
+                    label="Keep"
+                    variant="secondary"
+                    disabled={busy}
+                    onPress={() => setConfirmingUndo(false)}
+                  />
+                </>
+              ) : (
+                <TextButton label="Undo" onPress={() => setConfirmingUndo(true)} />
+              )
+            ) : ['executing', 'undoing', 'unknown'].includes(row.status) ? (
+              <Button label="Check again" variant="secondary" onPress={() => query.refetch()} />
+            ) : null}
+          </View>
+
+          {row.status === 'draft' && !form && (
+            <Text variant="caption" color="faint">
+              {usingMock
+                ? 'Demo: logging is only simulated.'
+                : 'Log it adds this entry to Google Health, with the values you gave.'}
+            </Text>
+          )}
+        </>
       )}
     </Card>
   );
@@ -334,8 +371,10 @@ function EditForm({
 }
 
 const styles = StyleSheet.create({
-  card: { gap: spacing.md, marginTop: spacing.sm },
+  card: { gap: spacing.md },
+  inChat: { marginTop: spacing.sm }, // below the answer's text
   header: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  chevron: { marginTop: 4 },
   headerText: { flex: 1, gap: 2 },
   icon: {
     width: 36,
