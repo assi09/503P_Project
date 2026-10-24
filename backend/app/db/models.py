@@ -30,6 +30,9 @@ from app.agent.facts import FACT_KINDS
 SOURCES = ("google_health", "takeout")
 SYNC_STATUSES = ("running", "succeeded", "failed")
 CHAT_ROLES = ("user", "assistant")
+# A sign-up waits for the owner's approval: the Google Health app is in Testing mode, so each
+# person must also be added as a test user by hand before they can connect their data.
+USER_STATUSES = ("pending", "approved", "rejected")
 
 
 def _now() -> datetime:
@@ -42,10 +45,33 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in USER_STATUSES)})", name="ck_users_status"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # scrypt hash; None for the local owner created by `python -m app.sync pull`.
+    password_hash: Mapped[str | None] = mapped_column(String(256), default=None)
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class AuthSession(Base):
+    """A signed-in device. Only the token's hash is stored: a database leak signs no one in."""
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class GoogleConnection(Base):
