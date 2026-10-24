@@ -21,7 +21,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
-| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; still one Takeout export, served to the owner only, others get `no_data`); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
+| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, 455 backend and 51 mobile tests |
 
@@ -76,7 +76,7 @@ To let someone else sign in, add their Google account as a test user in the cons
   `python -m app.auth set-password <email>` (asked without echo), which also replaces a
   forgotten or leaked password until there is a reset.
   The app shows each phase's screens only (signed out, waiting, approved), so a deep link cannot
-  skip sign-in or approval. Until data is stored per person, only the owner sees the Takeout data.
+  skip sign-in or approval. Each person sees only their own data.
 - **Never mix sources in one history.** The API's sleep is Google's v2 algorithm; the legacy
   export's is v1, about 38 minutes a night apart. Daily metrics are stored per source.
 - **The API lacks** readiness, Fitbit's sleep score and cardio load; its sedentary periods do not
@@ -125,7 +125,10 @@ experts with consult (PR #28), the router (PR #29), the verifier's metric check 
 (kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
 [architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
 
-1. Live data and the agent served through the API to the app (Sprint 1, item 5).
+1. Live data and the agent served through the API to the app (Sprint 1, item 5). Decided: each
+   person's live data (the owner falls back to Takeout only without any), `POST /chat` waits for
+   the answer up to 60 s, and spending is capped per person per day and in total per day. New
+   people get their whole history on the first sync (the API has no lookback limit).
 2. Check-ins as data the tools can analyse, with the recovery score (Sprint 2).
 
 ## What has been tested

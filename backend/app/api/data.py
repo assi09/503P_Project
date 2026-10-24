@@ -30,7 +30,7 @@ def data_status(data: Annotated[LoadedData, Depends(get_data)]) -> schemas.DataS
     stats = coverage(frame, window).stats
     present = stats["fraction_present"]
     return schemas.DataStatus(
-        source="takeout",
+        source=data.source,
         last_sync=data.loaded_at,
         range=schemas.Window(start=window.start, end=window.end),
         coverage=[
