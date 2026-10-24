@@ -72,3 +72,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-24 | Per-run correction: conversation, a traced rerun of turn 1, and turn 1 after the repair hint | $0.0371 |
 | 2026-10-24 | Coverage and summary checks: exercise question, two-turn conversation, exercise question again | $0.0551 |
 | 2026-10-24 | Memory retrieval and fact proposals: two runs with stored memory | $0.0226 |
+| 2026-10-24 | Chat API end to end on the owner's live data (quick, routed to sleep by Jev, 4 verified claims, 11.3 s) | $0.0113 |

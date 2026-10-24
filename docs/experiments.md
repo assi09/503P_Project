@@ -174,3 +174,13 @@ has my sleep dropped?"
 |---|---|
 | 1 | both memory items retrieved (260 tokens, the finding's evidence attached); 4 verified claims, correct. But the answer used neither memory item nor the night shifts, did not propose a fact, and recomputed the drop instead of citing the attached evidence ($0.0095) |
 | 2, after two prompt lines (relate answers and facts to the data; propose a stated lasting fact) | the summary now relates the change to "the night-shift period you mentioned", not as a cause. Still no fact proposed, and still recomputed: the drop, re-dated with 4 change-point tests, did not survive the per-run correction and was lost, although citing the stored, verified evidence would have passed (open issues 9, 15) ($0.0131) |
+
+## Chat through the API (PR #45), 2026-10-24
+
+**Tested:** one question, "How has my sleep changed over the last month?", sent to `POST /chat` as
+the owner, on their live Google Health data (117 days), quick depth, expert left to the router.
+**Showed:** Jev routed it to the sleep expert; the answer came back in 11.3 s, inside the 55 s the
+request waits, with 4 verified claims citing 4 pieces of evidence, for $0.0113, and was stored
+with its cost. Only aggregates are recorded here; the answer is in the owner's chat.
+**Changed:** nothing; the scripted tests had covered the plumbing, and the real run confirmed the
+OpenAI and Jev wiring through the worker thread.
