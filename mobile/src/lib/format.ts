@@ -66,6 +66,82 @@ export function formatValue(metric: string, value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: digits });
 }
 
+// Metrics counted in minutes: sleep reads best as hours and minutes, activity as minutes.
+const SLEEP_MINUTES = new Set([
+  'sleep_minutes',
+  'time_in_bed',
+  'deep_sleep_minutes',
+  'light_sleep_minutes',
+  'rem_sleep_minutes',
+  'awake_in_bed_minutes',
+  'wear_minutes',
+  'sedentary_minutes',
+]);
+const ACTIVE_MINUTES = new Set([
+  'active_zone_minutes',
+  'lightly_active_minutes',
+  'moderately_active_minutes',
+  'very_active_minutes',
+]);
+const UNITS: Record<string, string> = {
+  sleep_efficiency: '%',
+  resting_hr: ' bpm',
+  hrv_ms: ' ms',
+  respiratory_rate: ' breaths/min',
+  distance_km: ' km',
+  skin_temp_variation_c: ' °C',
+  calories: ' kcal',
+};
+
+/** A value with its unit, for reading on its own: 451 min -> "7 h 31 min", 96.6 -> "96.6%". */
+export function formatWithUnit(metric: string, value: number): string {
+  if (SLEEP_MINUTES.has(metric) && Math.abs(value) >= 60) {
+    const minutes = Math.round(Math.abs(value));
+    const text = `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+    return value < 0 ? `-${text}` : text;
+  }
+  if (SLEEP_MINUTES.has(metric) || ACTIVE_MINUTES.has(metric)) {
+    return `${formatValue(metric, value)} min`;
+  }
+  return `${formatValue(metric, value)}${UNITS[metric] ?? ''}`;
+}
+
+// Tools that test something; their p-value decides whether a result is clear.
+const TESTS = new Set(['compare_windows', 'trend', 'correlate', 'change_point', 'weekday_split']);
+
+export interface Verdict {
+  text: string;
+  clear: boolean;
+}
+
+/**
+ * What a test's result means in plain words. It is judged on the p-value the answer was checked
+ * against: corrected for all the tests in that answer when there were several.
+ */
+export function verdict(evidence: Evidence): Verdict | null {
+  if (!TESTS.has(evidence.tool)) return null;
+  if (!evidence.sufficient) return { text: 'Too few days to tell', clear: false };
+  const s = evidence.stats;
+  const num = (key: string) => (typeof s[key] === 'number' ? (s[key] as number) : null);
+  const judged = num('p_value_run_adjusted') ?? num('p_value_adjusted') ?? num('p_value');
+  if (judged === null) return null;
+  const relation = evidence.tool === 'correlate';
+  if (judged < 0.05) {
+    return { text: relation ? 'A clear relationship' : 'A clear change', clear: true };
+  }
+  const raw = num('p_value');
+  const tests = num('tests_in_run');
+  if (raw !== null && raw < 0.05 && tests) {
+    return {
+      text:
+        `Not clear once all ${tests} checks in this answer are counted: ` +
+        'a difference this size can happen by chance',
+      clear: false,
+    };
+  }
+  return { text: relation ? 'No clear relationship' : 'No clear change', clear: false };
+}
+
 const TOOL_LABELS: Record<string, string> = {
   describe: 'Summary',
   coverage: 'Data coverage',
@@ -109,14 +185,22 @@ export function keyStats(evidence: Evidence): StatLine[] {
     const recent = num('mean_recent');
     const baseline = num('mean_baseline');
     const delta = num('cliffs_delta');
-    if (recent !== null) lines.push({ label: 'Recent average', value: formatValue(metric, recent) });
-    if (baseline !== null) lines.push({ label: 'Earlier average', value: formatValue(metric, baseline) });
+    if (recent !== null) {
+      lines.push({ label: 'Recent average', value: formatWithUnit(metric, recent) });
+    }
+    if (baseline !== null) {
+      lines.push({ label: 'Earlier average', value: formatWithUnit(metric, baseline) });
+    }
     if (delta !== null) lines.push({ label: 'Effect size', value: `${delta.toFixed(2)} (${strength(delta)})` });
   } else if (evidence.tool === 'trend') {
     const slope = num('slope_per_day');
     const change = num('change_over_window');
-    if (slope !== null) lines.push({ label: 'Change per day', value: formatValue(metric, slope) });
-    if (change !== null) lines.push({ label: 'Change over period', value: formatValue(metric, change) });
+    if (slope !== null) {
+      lines.push({ label: 'Change per day', value: formatWithUnit(metric, slope) });
+    }
+    if (change !== null) {
+      lines.push({ label: 'Change over period', value: formatWithUnit(metric, change) });
+    }
   } else if (evidence.tool === 'correlate') {
     const rho = num('rho');
     const lag = num('best_lag');
@@ -124,11 +208,18 @@ export function keyStats(evidence: Evidence): StatLine[] {
     if (lag !== null) lines.push({ label: 'Delay', value: lag === 0 ? 'same day' : `${lag} day${lag > 1 ? 's' : ''}` });
   }
 
-  // Show the adjusted p-value when there is one: it is the one the finding was judged on.
-  const adjusted = num('p_value_adjusted');
-  const p = adjusted ?? num('p_value');
-  if (p !== null) {
-    lines.push({ label: adjusted !== null ? 'p-value (adjusted)' : 'p-value', value: formatP(p) });
+  // Show the p-value the result was judged on: corrected for the answer's own tests, or for the
+  // report's, when there were several; the raw value alongside, since both matter.
+  const raw = num('p_value');
+  const run = num('p_value_run_adjusted');
+  const tests = num('tests_in_run');
+  const adjusted = run ?? num('p_value_adjusted');
+  if (adjusted !== null && raw !== null && adjusted !== raw) {
+    const across = run !== null && tests ? ` (${tests} checks)` : ' (adjusted)';
+    lines.push({ label: `p-value${across}`, value: formatP(adjusted) });
+    lines.push({ label: 'p-value on its own', value: formatP(raw) });
+  } else if (adjusted !== null || raw !== null) {
+    lines.push({ label: 'p-value', value: formatP((adjusted ?? raw) as number) });
   }
   lines.push({ label: 'Days of data', value: String(evidence.n) });
   return lines;

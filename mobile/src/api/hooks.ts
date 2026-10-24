@@ -18,8 +18,8 @@ export function useReport() {
   return useQuery({ queryKey: keys.report, queryFn: api.getLatestReport });
 }
 
-export function useEvidence(id: string) {
-  return useQuery({ queryKey: ['evidence', id], queryFn: () => api.getEvidence(id) });
+export function useEvidence(id: string, enabled = true) {
+  return useQuery({ queryKey: ['evidence', id], queryFn: () => api.getEvidence(id), enabled });
 }
 
 export function useAnswerQuestion() {

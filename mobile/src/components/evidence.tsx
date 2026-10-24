@@ -7,7 +7,7 @@ import type { Evidence } from '@/api/types';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { Card } from '@/components/ui';
-import { keyStats, metricLabel, toolLabel, windowLabel } from '@/lib/format';
+import { keyStats, metricLabel, toolLabel, verdict, windowLabel } from '@/lib/format';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
 
 const TOOL_ICONS = {
@@ -24,6 +24,7 @@ export function EvidenceCard({ evidence }: { evidence: Evidence }) {
   const [showRaw, setShowRaw] = useState(false);
   const icon = TOOL_ICONS[evidence.tool as keyof typeof TOOL_ICONS] ?? 'calculator-outline';
   const stats = keyStats(evidence);
+  const result = verdict(evidence);
 
   return (
     <Card>
@@ -48,6 +49,16 @@ export function EvidenceCard({ evidence }: { evidence: Evidence }) {
       <Text variant="caption" color="faint">
         {evidence.windows.map(windowLabel).join('  vs  ')}
       </Text>
+      {result && (
+        <View style={styles.verdict}>
+          <View
+            style={[styles.dot, { backgroundColor: result.clear ? color : colors.faint }]}
+          />
+          <Text variant="caption" style={{ flex: 1 }}>
+            {result.text}
+          </Text>
+        </View>
+      )}
       <View style={[styles.stats, { borderColor: colors.border }]}>
         {stats.map((line, i) => (
           <View
@@ -121,6 +132,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   warning: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  verdict: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   stats: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: spacing.xs },
   statRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
   rawToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },

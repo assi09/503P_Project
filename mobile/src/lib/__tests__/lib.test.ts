@@ -3,7 +3,16 @@ import type { Evidence, Point } from '@/api/types';
 import { chartGeometry } from '../chart';
 import { EXPERTS, expertForMetric, expertInfo } from '../experts';
 import { heroFrame } from '../hero';
-import { formatP, formatValue, keyStats, shortDate, strength, timeAgo } from '../format';
+import {
+  formatP,
+  formatValue,
+  formatWithUnit,
+  keyStats,
+  shortDate,
+  strength,
+  timeAgo,
+  verdict,
+} from '../format';
 
 const points = (values: (number | null)[]): Point[] =>
   values.map((value, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, value }));
@@ -96,8 +105,8 @@ describe('keyStats', () => {
       stats: { mean_recent: 86.1, mean_baseline: 91.6, cliffs_delta: -0.71, p_value: 0.0008 },
     };
     expect(keyStats(evidence)).toEqual([
-      { label: 'Recent average', value: '86.1' },
-      { label: 'Earlier average', value: '91.6' },
+      { label: 'Recent average', value: '86.1%' },
+      { label: 'Earlier average', value: '91.6%' },
       { label: 'Effect size', value: '-0.71 (large)' },
       { label: 'p-value', value: '< 0.001' },
       { label: 'Days of data', value: '27' },
@@ -112,6 +121,57 @@ describe('keyStats', () => {
     };
     expect(keyStats(evidence)).toContainEqual({ label: 'p-value (adjusted)', value: '0.004' });
     expect(keyStats(evidence)).toContainEqual({ label: 'Delay', value: '1 day' });
+  });
+
+  it('shows the p-value an answer was judged on, after its own checks, and the raw one', () => {
+    // From a real answer: time asleep, significant alone but not after 6 checks.
+    const evidence: Evidence = {
+      ...base,
+      metrics: ['sleep_minutes'],
+      tool: 'compare_windows',
+      stats: {
+        mean_recent: 451,
+        mean_baseline: 460,
+        cliffs_delta: -0.36,
+        p_value: 0.0159,
+        p_value_run_adjusted: 0.0956,
+        tests_in_run: 6,
+      },
+    };
+    expect(keyStats(evidence)).toEqual([
+      { label: 'Recent average', value: '7 h 31 min' },
+      { label: 'Earlier average', value: '7 h 40 min' },
+      { label: 'Effect size', value: '-0.36 (medium)' },
+      { label: 'p-value (6 checks)', value: '0.096' },
+      { label: 'p-value on its own', value: '0.016' },
+      { label: 'Days of data', value: '27' },
+    ]);
+    expect(verdict(evidence)).toEqual({
+      text:
+        'Not clear once all 6 checks in this answer are counted: ' +
+        'a difference this size can happen by chance',
+      clear: false,
+    });
+    const clear = { ...evidence, stats: { ...evidence.stats, p_value_run_adjusted: 0.04 } };
+    expect(verdict(clear)).toEqual({ text: 'A clear change', clear: true });
+  });
+
+  it('says plainly when there is no clear result or too few days', () => {
+    const steady: Evidence = { ...base, tool: 'compare_windows', stats: { p_value: 0.57 } };
+    expect(verdict(steady)?.text).toBe('No clear change');
+    expect(verdict({ ...steady, sufficient: false })?.text).toBe('Too few days to tell');
+    const link: Evidence = { ...base, tool: 'correlate', stats: { p_value: 0.01 } };
+    expect(verdict(link)?.text).toBe('A clear relationship');
+    expect(verdict({ ...base, tool: 'describe', stats: {} })).toBeNull();
+  });
+
+  it('formats values with their units', () => {
+    expect(formatWithUnit('sleep_minutes', 451)).toBe('7 h 31 min');
+    expect(formatWithUnit('sleep_minutes', 45)).toBe('45 min');
+    expect(formatWithUnit('very_active_minutes', 72)).toBe('72 min');
+    expect(formatWithUnit('resting_hr', 58.3)).toBe('58.3 bpm');
+    expect(formatWithUnit('bedtime_hour', 1.2)).toBe('01:12');
+    expect(formatWithUnit('steps', 8234.6)).toBe('8,235');
   });
 
   it('skips statistics that are missing', () => {
