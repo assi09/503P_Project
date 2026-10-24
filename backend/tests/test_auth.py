@@ -356,3 +356,110 @@ def test_the_owner_sees_their_data(client, engine, owner_data):
     assert report.status_code == 200
     evidence_id = next(iter(owner_data.evidence))
     assert client.get(f"/evidence/{evidence_id}", headers=headers(token)).status_code == 200
+
+
+# Each person's own live data
+
+
+def store_live(engine, email: str, start, days: int, seed: int = 0) -> None:
+    from app.db.daily import save_daily
+    from app.synthetic import generate
+
+    frame = generate(start, days, seed=seed).frame
+    with session_scope(engine) as session:
+        user = session.scalar(select(User).where(User.email == email))
+        save_daily(session, user.id, "google_health", frame)
+
+
+def approve(engine, email: str) -> None:
+    with session_scope(engine) as session:
+        session.scalar(select(User).where(User.email == email)).status = "approved"
+
+
+def test_an_approved_person_sees_their_own_live_data(client, engine, owner_data):
+    from datetime import date
+
+    token = sign_up(client, "person@example.com")["token"]
+    approve(engine, "person@example.com")
+    store_live(engine, "person@example.com", date(2026, 8, 1), 40)
+
+    status = client.get("/data/status", headers=headers(token)).json()
+    assert status["source"] == "google_health"
+    assert status["range"] == {"start": "2026-08-01", "end": "2026-09-09"}
+    assert client.get("/reports/latest", headers=headers(token)).status_code == 200
+
+
+def test_two_people_never_see_each_others_data(client, engine, owner_data):
+    from datetime import date
+
+    first = sign_up(client, "first@example.com")["token"]
+    second = sign_up(client, "second@example.com")["token"]
+    for email in ("first@example.com", "second@example.com"):
+        approve(engine, email)
+    store_live(engine, "first@example.com", date(2026, 7, 1), 30, seed=1)
+    store_live(engine, "second@example.com", date(2026, 9, 1), 20, seed=2)
+
+    ranges = [
+        client.get("/data/status", headers=headers(token)).json()["range"]
+        for token in (first, second)
+    ]
+    assert ranges == [
+        {"start": "2026-07-01", "end": "2026-07-30"},
+        {"start": "2026-09-01", "end": "2026-09-20"},
+    ]
+
+
+def test_the_owner_uses_live_data_over_the_export_once_they_have_any(client, engine, owner_data):
+    from datetime import date
+
+    token = owner_token(client, engine)
+    assert client.get("/data/status", headers=headers(token)).json()["source"] == "takeout"
+    store_live(engine, OWNER, date(2026, 8, 1), 30)
+    status = client.get("/data/status", headers=headers(token)).json()
+    assert status["source"] == "google_health"  # never a mix of both
+    assert status["range"]["start"] == "2026-08-01"
+
+
+def test_the_owner_without_live_data_or_an_export_has_no_data(client, engine, monkeypatch):
+    from app.api import store
+    from app.ingest.takeout import IngestError
+
+    def missing():
+        raise IngestError("no export")
+
+    monkeypatch.setattr(store, "_load", missing)
+    token = owner_token(client, engine)
+    response = client.get("/data/status", headers=headers(token))
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "no_data"
+
+
+def test_a_new_sync_replaces_the_cached_analysis(client, engine, owner_data):
+    from datetime import date
+
+    from app.db.models import SyncRun
+
+    token = sign_up(client, "person@example.com")["token"]
+    approve(engine, "person@example.com")
+    store_live(engine, "person@example.com", date(2026, 8, 1), 30)
+    before = client.get("/data/status", headers=headers(token)).json()
+
+    store_live(engine, "person@example.com", date(2026, 8, 31), 10)
+    finished = datetime(2026, 9, 10, 6, 0, tzinfo=UTC)
+    with session_scope(engine) as session:
+        user = session.scalar(select(User).where(User.email == "person@example.com"))
+        session.add(
+            SyncRun(
+                user_id=user.id,
+                source="google_health",
+                status="succeeded",
+                range_start=date(2026, 8, 31),
+                range_end=date(2026, 9, 10),
+                days_written=10,
+                finished_at=finished,
+            )
+        )
+    after = client.get("/data/status", headers=headers(token)).json()
+    assert before["range"]["end"] == "2026-08-30"
+    assert after["range"]["end"] == "2026-09-09"
+    assert after["lastSync"].startswith("2026-09-10T06:00")
