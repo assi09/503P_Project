@@ -159,6 +159,8 @@ class ChatMessage(Base):
     consulted: Mapped[list[str]] = mapped_column(JSON, default=list)
     refused: Mapped[bool] = mapped_column(Boolean, default=False)
     run_id: Mapped[str | None] = mapped_column(String(32), default=None)  # links to the trace
+    # What the answer's model calls cost, in US dollars, for the daily spending caps.
+    cost_usd: Mapped[float | None] = mapped_column(Float, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

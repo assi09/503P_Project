@@ -5,6 +5,7 @@ import type {
   AccessRequest,
   Account,
   ApiClient,
+  ChatMessage,
   Credentials,
   DataStatus,
   Evidence,
@@ -13,6 +14,8 @@ import type {
 } from './types';
 
 const TIMEOUT_MS = 15_000;
+// An answer can take up to a minute; the server stops waiting after about 55 s.
+const CHAT_TIMEOUT_MS = 70_000;
 
 /** An error the screens can show as is. */
 export class ApiError extends Error {
@@ -26,10 +29,15 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(
+  baseUrl: string,
+  path: string,
+  init?: RequestInit,
+  timeoutMs = TIMEOUT_MS,
+): Promise<T> {
   const token = getToken();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
@@ -64,11 +72,13 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
   return body as T;
 }
 
-function post<T>(baseUrl: string, path: string, body?: unknown): Promise<T> {
-  return request<T>(baseUrl, path, {
-    method: 'POST',
-    ...(body !== undefined && { body: JSON.stringify(body) }),
-  });
+function post<T>(baseUrl: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  return request<T>(
+    baseUrl,
+    path,
+    { method: 'POST', ...(body !== undefined && { body: JSON.stringify(body) }) },
+    timeoutMs,
+  );
 }
 
 export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
@@ -86,11 +96,9 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
-    getEvidence: (id) =>
-      request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`).catch((error: unknown) => {
-        // While the chat still runs on mock data, its answers cite mock evidence ids.
-        if (error instanceof ApiError && error.status === 404) return fallback.getEvidence(id);
-        throw error;
-      }),
+    getEvidence: (id) => request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`),
+    getChat: () => request<ChatMessage[]>(baseUrl, '/chat'),
+    sendMessage: (text, { expert, depth, attachment }) =>
+      post<ChatMessage[]>(baseUrl, '/chat', { text, expert, depth, attachment }, CHAT_TIMEOUT_MS),
   };
 }

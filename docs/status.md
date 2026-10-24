@@ -20,9 +20,9 @@ priority**; the UI and data plumbing exist to serve them.
 | Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
 | Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
-| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
-| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
-| App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
+| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs) |
+| App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, 455 backend and 51 mobile tests |
 
 **Not built yet:** the recovery score, nutrition
@@ -184,8 +184,8 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
    data (not significant); each scenario's planted effect should be checked with the deterministic
    tools before it is used to grade the agent.
 7. **Cosmetic:** the model sometimes wraps quoted values in quote marks ("6 h 57 min").
-8. **Not wired yet:** the API and the app do not call `ask()`; the app's Ask screen still uses the
-   mock.
+8. ~~Not wired yet.~~ Fixed in PR #45: `POST /chat` runs `ask()` with the person's history and
+   memory, and the Ask screen uses it.
 9. **Follow-ups and memory recompute instead of citing.** Earlier answers' and findings' evidence
    is re-attached and citable, but the model recomputed every time, even after the prompt said to
    cite it. Since the per-run correction, this has a cost: in one run a sleep drop already verified

@@ -35,6 +35,7 @@ def add_answer(
     consulted: list[str],
     refused: bool,
     run_id: str | None,
+    cost_usd: float | None = None,
 ) -> ChatMessage:
     """Stores an answer, its verified claims, and the evidence they cite (once per id)."""
     cited = {i for claim in claims for i in claim.get("evidence_ids", [])}
@@ -50,6 +51,7 @@ def add_answer(
         consulted=consulted,
         refused=refused,
         run_id=run_id,
+        cost_usd=cost_usd,
     )
     session.add(message)
     session.flush()

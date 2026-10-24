@@ -93,21 +93,74 @@ describe('httpClient', () => {
 
 describe('evidence', () => {
   it('fetches evidence from the backend', async () => {
-    const evidence = { id: 'abc', tool: 'trend', metrics: [], windows: [], n: 1, sufficient: true, stats: {} };
+    const evidence = {
+      id: 'abc',
+      tool: 'trend',
+      metrics: [],
+      windows: [],
+      n: 1,
+      sufficient: true,
+      stats: {},
+    };
     const fetchMock = respond(200, evidence);
     globalThis.fetch = fetchMock;
     await expect(httpClient(BASE, mockClient).getEvidence('a b')).resolves.toEqual(evidence);
     expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/evidence/a%20b');
   });
 
-  it('falls back to the mock only when the backend does not know the id', async () => {
+  it('reports unknown evidence instead of falling back to made-up evidence', async () => {
     globalThis.fetch = respond(404, { error: { code: 'not_found', message: 'nope' } });
-    const evidence = await httpClient(BASE, mockClient).getEvidence('ev_steps');
-    expect(evidence.tool).toBe('trend');
+    await expect(httpClient(BASE, mockClient).getEvidence('ev_steps')).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it('does not hide other failures behind the mock', async () => {
     globalThis.fetch = respond(503, { error: { code: 'data_unavailable', message: 'down' } });
     await expect(httpClient(BASE, mockClient).getEvidence('ev_steps')).rejects.toThrow('down');
+  });
+});
+
+describe('chat', () => {
+  it('reads the conversation and posts questions with their options', async () => {
+    const fetchMock = respond(200, []);
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.getChat();
+    await client.sendMessage('How did I sleep?', {
+      expert: 'sleep',
+      depth: 'deep',
+      attachment: { kind: 'metric', metric: 'sleep_minutes' },
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/chat');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      text: 'How did I sleep?',
+      expert: 'sleep',
+      depth: 'deep',
+      attachment: { kind: 'metric', metric: 'sleep_minutes' },
+    });
+  });
+
+  it('waits longer for an answer than for other requests', async () => {
+    jest.useFakeTimers();
+    globalThis.fetch = jest.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) =>
+          init.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          ),
+        ),
+    ) as unknown as typeof fetch;
+    const sending = httpClient(BASE, mockClient).sendMessage('Hi', {
+      expert: 'auto',
+      depth: 'quick',
+    });
+    let settled = false;
+    sending.catch(() => (settled = true));
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(settled).toBe(false); // a normal request would have timed out at 15 s
+    await jest.advanceTimersByTimeAsync(45_000);
+    await expect(sending).rejects.toMatchObject({ code: 'timeout' });
   });
 });

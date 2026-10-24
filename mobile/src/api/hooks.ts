@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { ApiError } from './http';
 import { api } from './index';
 import type { ChatMessage, NotificationSettings, ReminderStatus, SendOptions } from './types';
 
@@ -29,7 +30,12 @@ export function useAnswerQuestion() {
 }
 
 export function useChat() {
-  return useQuery({ queryKey: keys.chat, queryFn: api.getChat });
+  return useQuery({
+    queryKey: keys.chat,
+    queryFn: api.getChat,
+    // A question without an answer yet is still being answered on the server: check back.
+    refetchInterval: (query) => (query.state.data?.at(-1)?.role === 'user' ? 4000 : false),
+  });
 }
 
 export function useSendMessage() {
@@ -40,6 +46,12 @@ export function useSendMessage() {
     // Append directly so the conversation never flickers while it refetches.
     onSuccess: (added) =>
       client.setQueryData<ChatMessage[]>(keys.chat, (old = []) => [...old, ...added]),
+    // A slow answer was still stored with its question: reload to show them as they arrive.
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'still_answering') {
+        client.invalidateQueries({ queryKey: keys.chat });
+      }
+    },
   });
 }
 

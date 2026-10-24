@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Accounts: who may approve sign-ups, and how long a device stays signed in.
     admin_emails: list[str] = []
     session_days: int = 30
+    # Questions from the app: daily spending caps (US dollars, from stored answer costs, per local
+    # day) and how long a request waits for the answer before telling the app to check back.
+    chat_daily_cap_per_user_usd: float = 0.10
+    chat_daily_cap_total_usd: float = 0.50
+    chat_wait_s: float = 55.0
     # Hard cap on model spending by this process, in US dollars.
     llm_spend_cap_usd: float = 20.0
 
