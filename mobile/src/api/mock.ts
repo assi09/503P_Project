@@ -2,7 +2,11 @@
 import { expertForMetric } from '@/lib/experts';
 import { shortDate } from '@/lib/format';
 
+import { ApiError } from './http';
+import { getToken } from './token';
 import type {
+  AccessRequest,
+  Account,
   ApiClient,
   Attachment,
   ChatMessage,
@@ -18,6 +22,7 @@ import type {
   Reminder,
   Report,
   SendOptions,
+  SignedIn,
 } from './types';
 
 const DAYS = 28;
@@ -291,7 +296,118 @@ function message(fields: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage {
   return { ...fields, id: `m${chat.length + 1}`, createdAt: new Date().toISOString() };
 }
 
+// Accounts work like the backend's: sign-ups wait for approval, and the made-up demo owner can
+// sign in and approve them.
+export const DEMO_OWNER = { email: 'demo@patterns.app', password: 'demo-password' };
+
+interface MockAccount extends Account {
+  id: string;
+  password: string;
+  requestedAt: string;
+}
+
+let accounts: MockAccount[] = [
+  {
+    id: 'u1',
+    ...DEMO_OWNER,
+    status: 'approved',
+    isAdmin: true,
+    requestedAt: new Date().toISOString(),
+  },
+];
+const sessions = new Map<string, string>(); // token -> account id
+
+function publicAccount({ email, status, isAdmin }: MockAccount): Account {
+  return { email, status, isAdmin };
+}
+
+function signedIn(account: MockAccount): SignedIn {
+  const token = `mock-token-${sessions.size + 1}-${Math.random().toString(36).slice(2)}`;
+  sessions.set(token, account.id);
+  return { token, account: publicAccount(account) };
+}
+
+function currentAccount(): MockAccount {
+  const id = sessions.get(getToken() ?? '');
+  const account = accounts.find((a) => a.id === id);
+  if (!account) throw new ApiError('Sign in to continue.', 'signed_out', 401);
+  return account;
+}
+
+function adminAccount(): MockAccount {
+  const account = currentAccount();
+  if (!account.isAdmin) throw new ApiError("Only the app's owner can do this.", 'forbidden', 403);
+  return account;
+}
+
+/** Waits like a network call, then runs `action`; a thrown error becomes a rejection. */
+async function later<T>(action: () => T): Promise<T> {
+  await delay(null);
+  return structuredClone(action());
+}
+
 export const mockClient: ApiClient = {
+  signUp: ({ email, password }) =>
+    later(() => {
+      const normalized = email.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) {
+        throw new ApiError('Enter a valid email address.', 'invalid_email', 422);
+      }
+      if (password.length < 10) {
+        throw new ApiError('Use a password of at least 10 characters.', 'weak_password', 422);
+      }
+      if (accounts.some((a) => a.email === normalized)) {
+        throw new ApiError('An account with this email already exists.', 'email_taken', 409);
+      }
+      const account: MockAccount = {
+        id: `u${accounts.length + 1}`,
+        email: normalized,
+        password,
+        status: 'pending',
+        isAdmin: false,
+        requestedAt: new Date().toISOString(),
+      };
+      accounts = [...accounts, account];
+      return signedIn(account);
+    }),
+
+  logIn: ({ email, password }) =>
+    later(() => {
+      const account = accounts.find((a) => a.email === email.trim().toLowerCase());
+      if (!account || account.password !== password) {
+        throw new ApiError('Wrong email or password.', 'invalid_credentials', 401);
+      }
+      return signedIn(account);
+    }),
+
+  logOut: () =>
+    later(() => {
+      sessions.delete(getToken() ?? '');
+    }),
+
+  getAccount: () => later(() => publicAccount(currentAccount())),
+
+  getAccessRequests: () =>
+    later(() => {
+      adminAccount();
+      return accounts
+        .filter((a) => a.status === 'pending')
+        .map<AccessRequest>(({ id, email, requestedAt }) => ({ id, email, requestedAt }));
+    }),
+
+  decideAccessRequest: (id, approve) =>
+    later(() => {
+      adminAccount();
+      const account = accounts.find((a) => a.id === id);
+      if (!account) throw new ApiError('No such account.', 'not_found', 404);
+      account.status = approve ? 'approved' : 'rejected';
+      if (!approve) {
+        // Like the backend: a rejected person is signed out everywhere.
+        for (const [token, owner] of sessions) if (owner === id) sessions.delete(token);
+      }
+      return publicAccount(account);
+    }),
+
   getLatestReport: () =>
     delay<Report>({
       id: 'report_latest',

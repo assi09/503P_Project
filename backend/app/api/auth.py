@@ -56,20 +56,32 @@ def current_user(db: Db, token: Token, clock: Now) -> User:
     return user
 
 
-def admin_user(user: Annotated[User, Depends(current_user)]) -> User:
+def _is_admin(user: User) -> bool:
     admins = {email.strip().lower() for email in settings.admin_emails}
-    if user.status != "approved" or user.email not in admins:
+    return user.status == "approved" and user.email in admins
+
+
+def admin_user(user: Annotated[User, Depends(current_user)]) -> User:
+    if not _is_admin(user):
         raise AuthError(403, "forbidden", "Only the app's owner can do this.")
     return user
 
 
+def data_owner(user: Annotated[User, Depends(current_user)]) -> User:
+    """The person the served data belongs to.
+
+    The API still serves one Takeout export, the owner's; until data is stored per person, any
+    other approved account has no data rather than seeing the owner's.
+    """
+    if user.status != "approved":
+        raise AuthError(403, "not_approved", "Your account is waiting for approval.")
+    if not _is_admin(user):
+        raise AuthError(404, "no_data", "Your Fitbit data is not connected yet.")
+    return user
+
+
 def _account(user: User) -> schemas.Account:
-    admins = {email.strip().lower() for email in settings.admin_emails}
-    return schemas.Account(
-        email=user.email,
-        status=user.status,
-        is_admin=user.status == "approved" and user.email in admins,
-    )
+    return schemas.Account(email=user.email, status=user.status, is_admin=_is_admin(user))
 
 
 @router.post("/auth/signup", response_model=schemas.SignedIn, status_code=201)

@@ -119,12 +119,14 @@ export function Button({
   onPress,
   variant = 'primary',
   iconAfter = false,
+  disabled = false,
 }: {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   iconAfter?: boolean; // e.g. a forward arrow after the label
+  disabled?: boolean;
 }) {
   const colors = useColors();
   const primary = variant === 'primary';
@@ -133,7 +135,9 @@ export function Button({
   return (
     <PressableScale
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       onPress={onPress}
+      disabled={disabled}
       style={[styles.button, primary && { backgroundColor: colors.text }]}
     >
       {!iconAfter && iconView}

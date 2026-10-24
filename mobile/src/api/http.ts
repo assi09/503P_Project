@@ -1,6 +1,16 @@
 // Client for the real backend API. Endpoints the backend does not serve yet fall back to
 // `fallback` (the mock), so the app can move to the real API one endpoint at a time.
-import type { ApiClient, DataStatus, Evidence, Report } from './types';
+import { getToken } from './token';
+import type {
+  AccessRequest,
+  Account,
+  ApiClient,
+  Credentials,
+  DataStatus,
+  Evidence,
+  Report,
+  SignedIn,
+} from './types';
 
 const TIMEOUT_MS = 15_000;
 
@@ -17,13 +27,18 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...init?.headers,
+      },
       signal: controller.signal,
     });
   } catch (error) {
@@ -49,9 +64,26 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
   return body as T;
 }
 
+function post<T>(baseUrl: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(baseUrl, path, {
+    method: 'POST',
+    ...(body !== undefined && { body: JSON.stringify(body) }),
+  });
+}
+
 export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
   return {
     ...fallback,
+    signUp: (credentials: Credentials) => post<SignedIn>(baseUrl, '/auth/signup', credentials),
+    logIn: (credentials: Credentials) => post<SignedIn>(baseUrl, '/auth/login', credentials),
+    logOut: () => post<void>(baseUrl, '/auth/logout'),
+    getAccount: () => request<Account>(baseUrl, '/auth/me'),
+    getAccessRequests: () => request<AccessRequest[]>(baseUrl, '/admin/access-requests'),
+    decideAccessRequest: (id, approve) =>
+      post<Account>(
+        baseUrl,
+        `/admin/access-requests/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`,
+      ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
     getEvidence: (id) =>

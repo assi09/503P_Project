@@ -121,7 +121,37 @@ export interface DataStatus {
   lowWearDays: ISODate[];
 }
 
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
+
+export interface Account {
+  email: string;
+  status: AccountStatus; // a sign-up waits for the owner's approval
+  isAdmin: boolean; // may approve sign-ups
+}
+
+export interface Credentials {
+  email: string;
+  password: string;
+}
+
+export interface SignedIn {
+  token: string; // sent as `Authorization: Bearer <token>`
+  account: Account;
+}
+
+export interface AccessRequest {
+  id: string;
+  email: string;
+  requestedAt: ISODateTime;
+}
+
 export interface ApiClient {
+  signUp(credentials: Credentials): Promise<SignedIn>;
+  logIn(credentials: Credentials): Promise<SignedIn>;
+  logOut(): Promise<void>;
+  getAccount(): Promise<Account>;
+  getAccessRequests(): Promise<AccessRequest[]>; // admins only
+  decideAccessRequest(id: string, approve: boolean): Promise<Account>; // admins only
   getLatestReport(): Promise<Report>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;
