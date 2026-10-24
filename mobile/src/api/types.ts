@@ -145,6 +145,14 @@ export interface AccessRequest {
   requestedAt: ISODateTime;
 }
 
+export interface GoogleStatus {
+  status: 'none' | 'active' | 'reconnect_needed'; // reconnect: Google's sign-in expired
+  syncing: boolean;
+  lastSync: ISODateTime | null; // the last successful sync
+  lastError: string | null; // why the latest sync failed, safe to show
+  missingScopes: string[]; // permissions the person unticked on Google's page
+}
+
 export interface ApiClient {
   signUp(credentials: Credentials): Promise<SignedIn>;
   logIn(credentials: Credentials): Promise<SignedIn>;
@@ -152,6 +160,10 @@ export interface ApiClient {
   getAccount(): Promise<Account>;
   getAccessRequests(): Promise<AccessRequest[]>; // admins only
   decideAccessRequest(id: string, approve: boolean): Promise<Account>; // admins only
+  getGoogleStatus(): Promise<GoogleStatus>;
+  connectGoogle(): Promise<{ url: string }>; // Google's sign-in page; it returns to /data
+  syncGoogle(): Promise<GoogleStatus>;
+  disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;

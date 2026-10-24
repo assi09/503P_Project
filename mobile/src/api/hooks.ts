@@ -11,6 +11,7 @@ export const keys = {
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
   accessRequests: ['admin', 'access-requests'] as const,
+  google: ['google', 'status'] as const,
 };
 
 export function useReport() {
@@ -94,5 +95,23 @@ export function useDecideAccessRequest() {
     mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
       api.decideAccessRequest(id, approve),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.accessRequests }),
+  });
+}
+
+export function useGoogleStatus() {
+  return useQuery({
+    queryKey: keys.google,
+    queryFn: api.getGoogleStatus,
+    refetchInterval: (query) => (query.state.data?.syncing ? 3000 : false), // until it is done
+  });
+}
+
+/** Sync now or disconnect; both answer with the new status. */
+export function useGoogleAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (action: 'sync' | 'disconnect') =>
+      action === 'sync' ? api.syncGoogle() : api.disconnectGoogle(),
+    onSuccess: (status) => client.setQueryData(keys.google, status),
   });
 }

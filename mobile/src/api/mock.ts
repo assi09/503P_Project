@@ -16,6 +16,7 @@ import type {
   Evidence,
   Expert,
   Finding,
+  GoogleStatus,
   ISODate,
   NotificationSettings,
   Point,
@@ -346,6 +347,21 @@ async function later<T>(action: () => T): Promise<T> {
   return structuredClone(action());
 }
 
+let google: GoogleStatus = {
+  status: 'none',
+  syncing: false,
+  lastSync: null,
+  lastError: null,
+  missingScopes: [],
+};
+
+function startMockSync() {
+  google = { ...google, syncing: true };
+  setTimeout(() => {
+    google = { ...google, syncing: false, lastSync: new Date().toISOString() };
+  }, 3000);
+}
+
 export const mockClient: ApiClient = {
   signUp: ({ email, password }) =>
     later(() => {
@@ -386,6 +402,28 @@ export const mockClient: ApiClient = {
     }),
 
   getAccount: () => later(() => publicAccount(currentAccount())),
+
+  // Google Health: connecting succeeds at once (no Google page) and a sync takes 3 seconds.
+  getGoogleStatus: () => later(() => google),
+  connectGoogle: () =>
+    later(() => {
+      google = { ...google, status: 'active', missingScopes: [] };
+      startMockSync();
+      return { url: '' }; // nothing to open
+    }),
+  syncGoogle: () =>
+    later(() => {
+      if (google.status !== 'active') {
+        throw new ApiError('Connect Google Health first.', 'not_connected', 409);
+      }
+      startMockSync();
+      return google;
+    }),
+  disconnectGoogle: () =>
+    later(() => {
+      google = { ...google, status: 'none', syncing: false };
+      return google;
+    }),
 
   getAccessRequests: () =>
     later(() => {

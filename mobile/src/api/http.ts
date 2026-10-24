@@ -9,6 +9,7 @@ import type {
   Credentials,
   DataStatus,
   Evidence,
+  GoogleStatus,
   Report,
   SignedIn,
 } from './types';
@@ -98,6 +99,10 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
     getEvidence: (id) => request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`),
     getChat: () => request<ChatMessage[]>(baseUrl, '/chat'),
+    getGoogleStatus: () => request<GoogleStatus>(baseUrl, '/google/status'),
+    connectGoogle: () => post<{ url: string }>(baseUrl, '/google/connect'),
+    syncGoogle: () => post<GoogleStatus>(baseUrl, '/google/sync'),
+    disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
     sendMessage: (text, { expert, depth, attachment }) =>
       post<ChatMessage[]>(baseUrl, '/chat', { text, expert, depth, attachment }, CHAT_TIMEOUT_MS),
   };

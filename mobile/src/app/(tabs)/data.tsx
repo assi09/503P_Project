@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useDataStatus } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { GoogleHealthCard } from '@/components/GoogleHealthCard';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { Button, Card, SectionTitle } from '@/components/ui';
@@ -22,6 +24,15 @@ const SOURCE_LABELS: Record<DataStatus['source'], string> = {
 export default function DataScreen() {
   const colors = useColors();
   const status = useDataStatus();
+
+  // Google sends the browser back here with ?google=connected (or why it did not connect). Keep
+  // the answer to show once, and clear it so a reload does not show it again.
+  const { google } = useLocalSearchParams<{ google?: string }>();
+  const [returned, setReturned] = useState(google);
+  if (google && google !== returned) setReturned(google);
+  useEffect(() => {
+    if (google) router.setParams({ google: undefined });
+  }, [google]);
 
   return (
     <Screen title="Data" refreshing={status.isRefetching} onRefresh={status.refetch}>
@@ -79,18 +90,6 @@ export default function DataScreen() {
                 )}
               </Card>
 
-              <SectionTitle>Update your data</SectionTitle>
-              <DisabledAction
-                icon="cloud-upload"
-                title="Upload a new Takeout export"
-                detail="Uploading from the app is coming next."
-              />
-              <DisabledAction
-                icon="sync"
-                title="Connect Google Health"
-                detail="Automatic syncing is planned."
-              />
-
               <Text variant="caption" color="faint" style={styles.privacy}>
                 Your data is only used to analyze your own patterns. Profile and account details
                 from the export are never read.
@@ -100,7 +99,15 @@ export default function DataScreen() {
         }}
       </QueryState>
 
-      {/* Outside the data: someone whose data cannot load can still sign out. */}
+      {/* Outside the data: someone without data yet can connect it, and anyone can sign out. */}
+      <SectionTitle>Your data source</SectionTitle>
+      <GoogleHealthCard returned={returned} />
+      <DisabledAction
+        icon="cloud-upload"
+        title="Upload a new Takeout export"
+        detail="Uploading from the app is coming next."
+      />
+
       <SectionTitle>Appearance</SectionTitle>
       <AppearanceSwitch />
 
