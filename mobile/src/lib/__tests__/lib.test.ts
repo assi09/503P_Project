@@ -2,6 +2,7 @@ import type { Evidence, Point } from '@/api/types';
 
 import { chartGeometry } from '../chart';
 import { EXPERTS, expertForMetric, expertInfo } from '../experts';
+import { heroFrame } from '../hero';
 import { formatP, formatValue, keyStats, shortDate, strength, timeAgo } from '../format';
 
 const points = (values: (number | null)[]): Point[] =>
@@ -135,5 +136,29 @@ describe('experts', () => {
       expect(expert.suggestions.length).toBeGreaterThan(0);
     }
     expect(expertInfo('general').id).toBe('auto');
+  });
+});
+
+describe('heroFrame', () => {
+  it('starts as a portrait card and ends filling the screen with square corners', () => {
+    const start = heroFrame(0, 390, 844);
+    expect(start.height).toBeGreaterThan(start.width);
+    expect(start.radius).toBe(24);
+    expect(heroFrame(1, 390, 844)).toMatchObject({ width: 390, height: 844, radius: 0 });
+  });
+
+  it('fits the starting card on a small phone and caps it on a desktop', () => {
+    expect(heroFrame(0, 320, 568).width).toBeLessThan(320);
+    expect(heroFrame(0, 1440, 900)).toMatchObject({ width: 300, height: 400 });
+  });
+
+  it('clamps progress outside 0..1, such as an iOS overscroll bounce', () => {
+    expect(heroFrame(-0.5, 390, 844)).toEqual(heroFrame(0, 390, 844));
+    expect(heroFrame(2, 390, 844)).toEqual(heroFrame(1, 390, 844));
+  });
+
+  it('grows steadily with progress', () => {
+    const widths = [0, 0.25, 0.5, 0.75, 1].map((p) => heroFrame(p, 390, 844).width);
+    widths.slice(1).forEach((width, i) => expect(width).toBeGreaterThan(widths[i]));
   });
 });

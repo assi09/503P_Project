@@ -6,7 +6,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { Direction } from '@/api/types';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
-import { radius, spacing, useColors, useScheme } from '@/theme';
+import { fonts, radius, spacing, useColors, useScheme } from '@/theme';
 
 /** A surface for grouped content. `glow` tints the top corner with a color, e.g. the metric's. */
 export function Card({
@@ -21,7 +21,9 @@ export function Card({
   const colors = useColors();
   const scheme = useScheme();
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+    <View
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, style]}
+    >
       {glow && (
         <LinearGradient
           pointerEvents="none"
@@ -107,26 +109,38 @@ export function Chip({
   );
 }
 
+/**
+ * A quiet pill button: solid in the text color for the main action, plain text for the
+ * alternative next to it. The accent stays for highlights rather than shouting from buttons.
+ */
 export function Button({
   label,
   icon,
   onPress,
+  variant = 'primary',
+  iconAfter = false,
 }: {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
+  variant?: 'primary' | 'secondary';
+  iconAfter?: boolean; // e.g. a forward arrow after the label
 }) {
   const colors = useColors();
+  const primary = variant === 'primary';
+  const foreground = primary ? colors.background : colors.text;
+  const iconView = icon && <Ionicons name={icon} size={14} color={foreground} />;
   return (
     <PressableScale
       accessibilityRole="button"
       onPress={onPress}
-      style={[styles.button, { backgroundColor: colors.text }]}
+      style={[styles.button, primary && { backgroundColor: colors.text }]}
     >
-      {icon && <Ionicons name={icon} size={18} color={colors.background} />}
-      <Text variant="bodyStrong" color="background">
+      {!iconAfter && iconView}
+      <Text variant="body" color={foreground} style={styles.buttonLabel}>
         {label}
       </Text>
+      {iconAfter && iconView}
     </PressableScale>
   );
 }
@@ -158,8 +172,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: 15,
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
     borderRadius: radius.pill,
   },
+  buttonLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18 },
 });
