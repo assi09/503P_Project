@@ -11,8 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from app.api import data, reports
+from app.api import auth, data, reports
 from app.api.schemas import ErrorBody, ErrorResponse
+from app.auth.accounts import AuthError
 from app.config import settings
 from app.ingest.takeout import IngestError
 
@@ -39,6 +40,10 @@ def create_app() -> FastAPI:
         logger.warning("Data unavailable: %s", exc)
         return _error(503, "data_unavailable", "Your Fitbit data could not be loaded.")
 
+    @app.exception_handler(AuthError)
+    async def auth_error(_: Request, exc: AuthError) -> JSONResponse:
+        return _error(exc.status, exc.code, exc.message)
+
     @app.exception_handler(HTTPException)
     async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
         code = "not_found" if exc.status_code == 404 else "http_error"
@@ -52,6 +57,7 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.include_router(auth.router)
     app.include_router(data.router)
     app.include_router(reports.router)
     return app
