@@ -22,7 +22,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
-| App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
+| App | a landing page (expanding hero, what the app does, sign-up buttons) before the app; Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, 426 backend and ~50 mobile tests |
 
 **Not built yet:** the recovery score, nutrition
@@ -95,6 +95,10 @@ To let someone else sign in, add their Google account as a test user in the cons
   question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.
 - **Nutrition waits for Sprint 2**: the expert exists but answers "no data yet" until the sync
   maps nutrition columns (only the API has them; Takeout's are "N/A").
+- **Sign-in is Google only** ("Continue with Google"): people must connect Google Health for
+  their data anyway, so one consent covers both, and there are no passwords to store or reset.
+  While the OAuth app is in Testing mode only listed test users can sign in. Until it is built,
+  the landing page's buttons just open the app (`mobile/src/lib/session.tsx`).
 - **Platform:** OpenAI for the LLM; Railway (backend and Postgres) and Vercel (web) when deploying;
   Langfuse for agent traces and Prometheus/Grafana for API metrics; iOS TestFlight undecided.
 
