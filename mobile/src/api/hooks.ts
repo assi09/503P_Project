@@ -9,6 +9,7 @@ export const keys = {
   reminders: ['reminders'] as const,
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
+  accessRequests: ['admin', 'access-requests'] as const,
 };
 
 export function useReport() {
@@ -69,4 +70,17 @@ export function useUpdateNotificationSettings() {
 
 export function useDataStatus() {
   return useQuery({ queryKey: keys.dataStatus, queryFn: api.getDataStatus });
+}
+
+export function useAccessRequests() {
+  return useQuery({ queryKey: keys.accessRequests, queryFn: api.getAccessRequests });
+}
+
+export function useDecideAccessRequest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
+      api.decideAccessRequest(id, approve),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.accessRequests }),
+  });
 }
