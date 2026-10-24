@@ -3,6 +3,7 @@ import json
 import httpx2
 import pytest
 
+from app.agent.intent import Intent, keyword_intent
 from app.agent.jev import JEV_PATH
 from app.agent.llm import LLMError, ScriptedLLM
 from app.agent.router import (
@@ -60,7 +61,11 @@ def choice(probs: dict, needs: dict | None = None, input_tokens: int = 100) -> h
     nouls = {f"needs_{e}": {"type": "noul", "noul": p} for e, p in (needs or needing(top)).items()}
     body = {
         "model": "jev-latest",
-        "answers": {"topic": answer, **nouls},
+        "answers": {
+            "topic": answer,
+            **nouls,
+            "intent": {"type": "choice", "probabilities": keyword_intent("How is my sleep?")},
+        },
         "usage": {"input_tokens": input_tokens},
     }
     return httpx2.Response(200, json=body)
@@ -184,12 +189,17 @@ def test_the_keyword_rule_says_a_cross_domain_question_needs_both_experts():
 
 def test_the_llm_router_reads_probabilities_from_its_tool_call():
     route = ScriptedLLM.call(
-        "route", cost_usd=0.0001, topic=probabilities(activity=1.0), needs=needing("activity")
+        "route",
+        cost_usd=0.0001,
+        topic=probabilities(activity=1.0),
+        needs=needing("activity"),
+        intent=keyword_intent("How many steps did I walk?"),
     )
     llm = ScriptedLLM([route])
     result = LLMRouter(llm).classify("How many steps did I walk?")
     assert result.top == "activity" and result.source == "llm" and result.cost_usd == 0.0001
     assert result.needs == needing("activity")
+    assert result.intent == Intent.READ
     request = llm.requests[0]
     assert request["tools"] == ["route"]
     assert json.loads(request["messages"][1]["content"]) == {

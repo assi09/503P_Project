@@ -24,6 +24,45 @@ to a computed statistic.
 | **Reminders** | Approves, mutes or declines reminders the agent proposes. Nothing is sent without approval. |
 | **Data** | Connects their Google Health account (whole history, then kept synced), sees data coverage, picks light or dark, signs out; the owner also approves sign-ups. Takeout upload and deleting data are planned. |
 
+## Agent-assisted logging (core planned capability)
+
+The agent helps the person record workouts and food through conversation, alongside analysing
+patterns. Activity owns workout proposals; Nutrition owns food proposals. This is planned work,
+not a capability currently available in the app.
+
+The shared flow is **collect missing details → propose → review/edit → confirm → execute → undo**.
+The agent cannot grant approval or write to Google directly. Each confirmation applies to one
+specific version of a proposal; edits require confirmation again. Cancellation writes nothing.
+
+- **Workout:** collect activity, local start time/timezone and duration/end; ask for distance when
+  relevant. A deterministic tool summarises available intraday heart rate and steps over that
+  window, with coverage and evidence. Missing sensor data stays missing. Do not infer distance
+  from an activity name or treat a workout log as extra steps/calories to add to device totals.
+- **Food with supplied values:** collect meal/time, serving and provided energy/macros; retain
+  their provenance as user-entered values, not independently verified measurements.
+- **Food from photos or weights:** a later phase proposes food/portion and nutrient estimates,
+  clearly labelled and editable before confirmation. A weight alone does not establish nutrient
+  content. Model estimates are never represented as computed statistical Evidence or precise
+  measurements; deterministic arithmetic may scale a known food's values to a serving.
+- **Undo:** a person can request deletion of an entry this app created; show whether Google has
+  confirmed the deletion. Never silently delete or overwrite another app's entries.
+
+Validation catches malformed units, dates and unsupported fields. Unusual but possible entries
+ask for clarification rather than imposing arbitrary medical or dietary limits. Logging gives no
+medical, diet or energy-balance advice. Google write access is optional and requested explicitly;
+existing read-only analysis must still work without it.
+
+Confirmed records feed subsequent analyses through the normal source-aware sync. Store Google
+record IDs and reconcile write-back echoes so each record is counted once, including existing
+Cronometer/Apple Health duplication. Retain whether values were sensor-derived, user-entered,
+food-database-derived or model-estimated.
+
+Build locally first. Photos remain part of the intended demo after supplied-value logging;
+hydration is a later extension. Jev classifies topic and request intent, the experts prepare
+drafts, and server code alone enforces approval and execution. See the task-based
+[tool plan and provider findings](agent-actions.md) and
+[roadmap.md](roadmap.md#agent-assisted-logging-workstream-planned).
+
 ## Morning check-in
 
 One question each morning: **"How do you feel today?"** on a 1 to 5 scale, with optional tags

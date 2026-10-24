@@ -152,3 +152,30 @@ printed). Milestone checks: in Sprint 1, the general agent explains a planted ch
 synthetic person end to end and the router sends a labeled question set correctly; in Sprint 2,
 the evaluation report compares all baselines on the held-out set and the deployed app works on a
 phone.
+
+## Agent-assisted logging workstream (planned)
+
+Added 2026-10-24 at the user's request: workout and food logging are core agent capabilities,
+with human confirmation and undo, not optional demo polish. See the
+[product flow](product.md#agent-assisted-logging-core-planned-capability) and
+[execution design](architecture.md#confirmed-action-execution-planned).
+
+Local-first sequence (confirmed 2026-10-24; tool research and details in
+[agent-actions.md](agent-actions.md)):
+
+1. Confirm provider formats, permissions and reconciliation semantics; build persistent action
+   proposals, confirmation/version checks, execution audit, idempotency and undo with fake Google.
+2. Workout logging through Activity: missing-detail conversation, intraday evidence summaries,
+   review/edit/confirm cards, Google execution and sync reconciliation.
+3. Food logging through Nutrition with supplied values or food-database serving calculations;
+   nutrition mapping and deduplication so logged food becomes usable by the expert.
+4. Photo/weight-assisted food estimates: explicit uploads, editable estimates, provenance,
+   privacy/retention policy and the same confirmed execution path.
+5. Evaluate completion and clarification accuracy, unauthorized-write rate (target zero), duplicate
+   rate, numerical correctness, undo/recovery success, latency and cost. Include injection attempts
+   in food names/photos and ambiguous provider failures. Use held-out tasks and scripted CI tests.
+
+Local development of this workstream now precedes deployment, per the user: use fake services
+first. Phone OAuth still needs a public backend before phone testing. Deliver focused PRs;
+keep recovery, tracing and held-out agent evaluation on the schedule. Do not enable real Google
+writes or run paid vision calls merely to validate the plan.

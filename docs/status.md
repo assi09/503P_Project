@@ -20,14 +20,33 @@ priority**; the UI and data plumbing exist to serve them.
 | Data | Takeout import (legacy layout); **live Google Health API** client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)); each person connects their own Google account from the app (encrypted token, background sync of the whole history) |
 | Storage | Postgres in Docker, five migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
-| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** on the Data tab (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 516 backend and 66 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 559 backend and 66 mobile tests |
 
 **Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
 check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
 proposes, tracing and metrics, the evaluation suite, the failure matrix and threat model.
+
+## Newly planned core capability: agent-assisted logging
+
+Added 2026-10-24: conversation-based workout and food logging, with review/edit, explicit approval,
+Google Health write-back and undo. This is not implemented. Activity owns workouts; Nutrition owns
+food. Proposed phases are a shared persistent action layer, workouts with deterministic intraday
+summaries, supplied-value food logging, then photo/weight estimates with explicit provenance.
+The user chose local development first, retained photo logging for the demo, and asked for tool
+research. Hydration stays a later extension. The hybrid design uses Jev for topic and intent,
+experts for draft preparation and a deterministic executor for confirmed actions. The first code
+slice adds intent routing and trace metadata only; answer dispatch is unchanged and no logging
+UI or writes exist yet. See [agent-actions.md](agent-actions.md) for research and the next slice.
+
+Details and acceptance gates: [product.md](product.md#agent-assisted-logging-core-planned-capability),
+[architecture.md](architecture.md#confirmed-action-execution-planned),
+[roadmap.md](roadmap.md#agent-assisted-logging-workstream-planned).
+Current Google connections remain read-only; console permissions and real account records are
+unchanged. Estimate provenance, durable confirmation/idempotency, source reconciliation and undo
+are requirements before enabling writes.
 
 ## Local setup
 
@@ -143,16 +162,19 @@ password and could not sign in (#42); the first question's error was invisible o
 by their edges took the file's pixel size, and the scroll hero did not animate until it read a
 derived value (#39, #46).
 
-Next, in order:
+Next, in order (local logging foundation moved first at the user's request):
 
-1. **Try connecting Google with a real sign-in** (the owner, from the browser): the flow is tested
+1. **Agent-assisted logging, locally first:** intent routing is implemented as trace metadata;
+   next build durable owned proposals and confirmation, then workout/food tools and review cards.
+   Research and provider constraints are in [agent-actions.md](agent-actions.md).
+2. **Try connecting Google with a real sign-in** (the owner, from the browser): the flow is tested
    with a fake Google and reaches Google's page, but no real sign-in has gone through yet.
-2. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
+3. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
    Postgres) with a public HTTPS address, a "Web application" OAuth client listing its
    `/google/callback`, the web build on Vercel, and the app in Expo Go pointing at the API.
-3. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
+4. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
    score (Sprint 2).
-4. Tracing (Langfuse) and the first evaluation (Sprint 2).
+5. Tracing (Langfuse) and the first evaluation (Sprint 2).
 
 ## What has been tested
 

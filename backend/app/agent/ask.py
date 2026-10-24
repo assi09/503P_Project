@@ -134,6 +134,10 @@ def _route_step(route: Route) -> dict:
         "source": c.source,
         "probabilities": {label: round(p, 4) for label, p in c.probabilities.items()},
         "needs": {expert: round(p, 4) for expert, p in c.needs.items()},
+        "intent": c.intent,
+        "intent_probabilities": {
+            intent: round(p, 4) for intent, p in c.intent_probabilities.items()
+        },
         "action": route.action,
         "expert": route.expert,
         "consult": list(route.consult),

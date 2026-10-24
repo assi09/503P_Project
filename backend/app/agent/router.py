@@ -1,7 +1,8 @@
 """Routing a question to the expert that owns its topic.
 
-A classifier answers two things about a question. Its **topic**: one probability per label (an
-expert, `general` or `out_of_scope`) that picks the lead and checks the scope. And, independently
+A classifier answers the topic, the experts needed and the request intent. Topic routing has two
+parts. Its **topic**: one probability per label (an expert, `general` or `out_of_scope`) that picks
+the lead and checks the scope. And, independently
 for each expert, whether answering **needs** that expert's data: a cross-domain question ("did my
 late nights hurt my recovery?") needs two. A single topic distribution cannot say that, because its
 spare probability is uncertainty, not a second topic. Code, not the classifier, decides what to do
@@ -19,12 +20,20 @@ to, even several questions back.
 import json
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
 import httpx2
 
 from app.agent.experts import EXPERTS
+from app.agent.intent import (
+    INTENT_CRITERIA,
+    INTENT_INSTRUCTIONS,
+    Intent,
+    decide_intent,
+    intent_probabilities,
+    keyword_intent,
+)
 from app.agent.jev import JevClient, JevError, clean
 from app.agent.llm import LLM, Budget, LLMError
 from app.agent.verifier import MEDICAL
@@ -40,16 +49,19 @@ CRITERIA = {
     "REM), time awake at night, sleep score",
     "recovery": "recovery, heart rate variability (HRV), resting heart rate, breathing rate, "
     "skin temperature, readiness",
-    "activity": "steps, distance, exercise and training, Active Zone Minutes, active and "
-    "sedentary time, calories burned, cardio load",
-    "nutrition": "food and drink logged: calories eaten, protein, carbohydrates, fat, nutrients, "
+    "activity": "logging workouts; steps, distance, exercise and training, Active Zone Minutes, "
+    "active and sedentary time, calories burned, cardio load",
+    "nutrition": "logging food and drink, or analysing food and drink logged: calories eaten, "
+    "protein, carbohydrates, fat, nutrients, "
     "meals",
     GENERAL: "the person's own Fitbit data overall, or several areas with no main one",
     OUT_OF_SCOPE: "medical diagnosis, symptoms, treatment, medication or health advice, or "
-    "anything that is not about the person's own Fitbit data",
+    "anything unrelated to analysing their own Fitbit data or logging their food, drink or "
+    "workouts",
 }
 INSTRUCTIONS = (
-    "A person asks a question about their own Fitbit data, possibly following up on their earlier "
+    "A person asks about their own Fitbit data or asks to log food, drink or workouts, possibly "
+    "following up on earlier "
     "questions. Which topic is the current question about? Earlier questions, newest first, only "
     "show what it may refer to."
 )
@@ -83,6 +95,12 @@ class Classification:
     latency_s: float = 0.0
     cost_usd: float = 0.0
     error: str | None = None  # why an earlier router in the chain failed
+
+    intent_probabilities: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def intent(self) -> Intent:
+        return decide_intent(self.intent_probabilities)
 
     @property
     def top(self) -> str:
@@ -148,9 +166,14 @@ class JevRouter:
             # A bare question when there is nothing earlier, as Jev reads plain text best.
             "state": given if given["earlier_questions"] else given["question"],
             "model": self.model,
-            # Evaluated in parallel in one call: the topic, and per expert whether it is needed.
+            # One call: topic, request intent, and per expert whether its data is needed.
             "questions": {
                 "topic": {"type": "choice", "instructions": INSTRUCTIONS, "criteria": CRITERIA},
+                "intent": {
+                    "type": "choice",
+                    "instructions": INTENT_INSTRUCTIONS,
+                    "criteria": INTENT_CRITERIA,
+                },
                 **{
                     f"needs_{expert}": {"type": "noul", "instructions": needs_instructions(expert)}
                     for expert in EXPERT_LABELS
@@ -175,7 +198,21 @@ class JevRouter:
             raise RouterError("Jev's answer was not in the expected format.")
         probabilities = normalized(topic.get("probabilities"))
         needed = needs_from({e: a.get("noul") for e, a in needs.items()})
-        return Classification(probabilities, needed, source="jev", latency_s=latency, cost_usd=cost)
+        try:
+            intent = answers["intent"]
+            if not isinstance(intent, dict) or intent.get("type") != "choice":
+                raise ValueError("The router returned an invalid request intent.")
+            intents = intent_probabilities(intent.get("probabilities"))
+        except (KeyError, ValueError, TypeError) as exc:
+            raise RouterError("Jev did not return a valid request intent.") from exc
+        return Classification(
+            probabilities,
+            needed,
+            source="jev",
+            latency_s=latency,
+            cost_usd=cost,
+            intent_probabilities=intents,
+        )
 
 
 def _words(*patterns: str) -> re.Pattern:
@@ -261,6 +298,7 @@ class KeywordRouter:
     def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
         given = state(question, earlier)
         text = given["question"]
+        intents = keyword_intent(text)
         probabilities = dict.fromkeys(LABELS, 0.0)
         hits = self._hits(text)
         for previous in given["earlier_questions"]:
@@ -270,13 +308,15 @@ class KeywordRouter:
         needs = {label: 1.0 if count else 0.0 for label, count in hits.items()}
         if MEDICAL.search(text) or OFF_TOPIC.search(text):
             probabilities[OUT_OF_SCOPE] = 1.0
-            return Classification(probabilities, needs, source="keyword")
+            return Classification(
+                probabilities, needs, source="keyword", intent_probabilities=intents
+            )
         total = sum(hits.values())
         if not total:
             probabilities[GENERAL] = 1.0
         else:
             probabilities |= {label: count / total for label, count in hits.items()}
-        return Classification(probabilities, needs, source="keyword")
+        return Classification(probabilities, needs, source="keyword", intent_probabilities=intents)
 
     @staticmethod
     def _hits(text: str) -> dict[str, int]:
@@ -290,6 +330,10 @@ LLM_ROUTER_PROMPT = (
     "separately for each of sleep, recovery, activity and nutrition the probability that "
     "answering needs that data (each from 0 to 1).\n"
     + "\n".join(f"- {label}: {meaning}" for label, meaning in CRITERIA.items())
+    + "\nAlso give a separate probability for each request intent. "
+    + INTENT_INSTRUCTIONS
+    + "\n"
+    + "\n".join(f"- {label}: {meaning}" for label, meaning in INTENT_CRITERIA.items())
 )
 
 
@@ -318,8 +362,9 @@ class LLMRouter:
                     "properties": {
                         "topic": _probabilities_schema(LABELS),
                         "needs": _probabilities_schema(EXPERT_LABELS),
+                        "intent": _probabilities_schema(tuple(Intent)),
                     },
-                    "required": ["topic", "needs"],
+                    "required": ["topic", "needs", "intent"],
                 },
             },
         }
@@ -335,12 +380,20 @@ class LLMRouter:
         call = next((c for c in completion.tool_calls if c.name == ROUTE_TOOL), None)
         if call is None or call.arguments is None:
             raise RouterError("The model did not route the question.")
+        # Validate topic/needs first so a missing intent does not hide other malformed fields.
+        topic = normalized(call.arguments.get("topic"))
+        needs = needs_from(call.arguments.get("needs"))
+        try:
+            intents = intent_probabilities(call.arguments.get("intent"))
+        except ValueError as exc:
+            raise RouterError(str(exc)) from exc
         return Classification(
-            normalized(call.arguments.get("topic")),
-            needs_from(call.arguments.get("needs")),
+            topic,
+            needs,
             source="llm",
             latency_s=completion.latency_s,
             cost_usd=completion.cost_usd,
+            intent_probabilities=intents,
         )
 
 

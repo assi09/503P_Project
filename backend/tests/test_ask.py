@@ -97,6 +97,16 @@ def test_only_the_question_reaches_the_router(frame):
     assert router.questions == ["How is my sleep?"]
 
 
+def test_request_intent_is_in_the_trace_without_enabling_logging_tools(frame):
+    llm = ScriptedLLM([empty_submission()])
+    reply = ask(llm, KeywordRouter(), frame, "Log a run.")
+    step = route_step(reply)
+    assert step["intent"] == "log" and step["intent_probabilities"]["log"] == 1.0
+    assert reply.result.expert == "activity"
+    assert not any("write" in tool or "log" in tool for tool in llm.requests[0]["tools"])
+    assert json.loads(json.dumps(step))["intent"] == "log"
+
+
 def test_without_a_typesafe_key_the_keyword_rule_routes():
     assert isinstance(default_router(Settings(typesafe_api_key=None)), KeywordRouter)
     router = default_router(Settings(typesafe_api_key="key"))
