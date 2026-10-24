@@ -5,7 +5,7 @@ same way. Read all of it before changing anything.
 
 ## The project
 
-EECE 503N/798S course project (Fall 2026) by Karim Assi and Jad Harakeh: an agent that analyzes a
+EECE 503P/798S course project (Fall 2026) by Karim Assi and Jad Harakeh: an agent that analyzes a
 user's longitudinal Fitbit data and reports trends, changes and relationships. **Every claim the
 agent makes must be backed by a computed statistic** (an `Evidence` record) that the user can
 inspect. The course grades evaluation, reliability, security, AgentOps and engineering practice,

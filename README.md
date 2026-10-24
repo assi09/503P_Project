@@ -1,6 +1,6 @@
 # Agentic Fitbit Data Analysis
 
-EECE 503N/798S course project (Fall 2026) — Karim Assi, Jad Harakeh.
+EECE 503P/798S course project (Fall 2026) — Karim Assi, Jad Harakeh.
 
 Fitbit shows daily scores, but answering questions like *"why was my sleep worse this month?"* or
 *"did my new training routine change my recovery?"* still means scrolling through screens and comparing

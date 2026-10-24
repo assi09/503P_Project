@@ -4,7 +4,7 @@ The page to read first when picking the project up. Updated 2026-10-23.
 
 ## Objective
 
-EECE 503N/798S course project (Path A, application), demo around the end of November 2026. An app
+EECE 503P/798S course project (Path A, application), demo around the end of November 2026. An app
 that analyzes a person's longitudinal Fitbit data and explains what changed and why, where **the
 agent decides what to investigate and deterministic tools compute every number**. The instructor
 requires a mobile app and a fully deployed system (backend online, installable app).
