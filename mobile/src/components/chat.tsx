@@ -17,21 +17,18 @@ import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
-import { metricLabel } from '@/lib/format';
+import { evidenceLabel, metricLabel } from '@/lib/format';
 import { radius, spacing, useColors } from '@/theme';
 
 const ENTER = FadeInDown.duration(260);
-
-/** Short label for an evidence chip: what it is about, e.g. "Time asleep". */
-function chipLabel(evidence: Evidence | undefined): string {
-  return evidence ? evidence.metrics.map(metricLabel).join(' & ') : 'Evidence';
-}
 
 /** A chip for evidence the report may not hold (a chat answer's): fetched to name it. */
 function AnswerEvidenceChip({ id, known }: { id: string; known?: Evidence }) {
   const fetched = useEvidence(id, !known);
   const evidence = known ?? fetched.data;
-  return <EvidenceChip id={id} label={chipLabel(evidence)} metric={evidence?.metrics[0]} />;
+  // Evidence about many metrics takes the accent color rather than its first metric's.
+  const metric = evidence && evidence.metrics.length <= 2 ? evidence.metrics[0] : undefined;
+  return <EvidenceChip id={id} label={evidenceLabel(evidence)} metric={metric} />;
 }
 
 export const MessageBubble = memo(function MessageBubble({

@@ -154,6 +154,16 @@ export function toolLabel(tool: string): string {
   return TOOL_LABELS[tool] ?? tool;
 }
 
+/**
+ * Short name for a piece of evidence, e.g. "Time asleep" or "Bedtime & Time asleep". Evidence
+ * about many metrics at once, such as a data coverage check, is named by what it did instead.
+ */
+export function evidenceLabel(evidence: Evidence | undefined): string {
+  if (!evidence) return 'Evidence';
+  if (evidence.metrics.length > 2 || evidence.tool === 'coverage') return toolLabel(evidence.tool);
+  return evidence.metrics.map(metricLabel).join(' & ');
+}
+
 /** Tiny p-values show as "< 0.001" rather than 0. */
 export function formatP(p: number): string {
   if (p < 0.001) return '< 0.001';

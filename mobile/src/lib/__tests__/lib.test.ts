@@ -4,6 +4,7 @@ import { chartGeometry } from '../chart';
 import { EXPERTS, expertForMetric, expertInfo } from '../experts';
 import { heroFrame } from '../hero';
 import {
+  evidenceLabel,
   formatP,
   formatValue,
   formatWithUnit,
@@ -163,6 +164,16 @@ describe('keyStats', () => {
     const link: Evidence = { ...base, tool: 'correlate', stats: { p_value: 0.01 } };
     expect(verdict(link)?.text).toBe('A clear relationship');
     expect(verdict({ ...base, tool: 'describe', stats: {} })).toBeNull();
+  });
+
+  it('names evidence by its metrics, or by what it did when it covers many', () => {
+    const one: Evidence = { ...base, metrics: ['sleep_minutes'], tool: 'compare_windows', stats: {} };
+    expect(evidenceLabel(one)).toBe('Time asleep');
+    const pair = { ...one, tool: 'correlate', metrics: ['bedtime_hour', 'sleep_minutes'] };
+    expect(evidenceLabel(pair)).toBe('Bedtime & Time asleep');
+    const coverage = { ...one, tool: 'coverage', metrics: ['steps', 'sleep_minutes', 'hrv_ms'] };
+    expect(evidenceLabel(coverage)).toBe('Data coverage');
+    expect(evidenceLabel(undefined)).toBe('Evidence');
   });
 
   it('formats values with their units', () => {

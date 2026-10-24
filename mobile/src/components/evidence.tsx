@@ -115,7 +115,7 @@ export function EvidenceChip({ id, label, metric }: { id: string; label: string;
       style={[styles.chip, { backgroundColor: `${color}1F`, borderColor: `${color}55` }]}
     >
       <Ionicons name="stats-chart" size={11} color={color} />
-      <Text variant="caption" color={color} style={{ fontSize: 12 }}>
+      <Text variant="caption" color={color} style={styles.chipText} numberOfLines={1}>
         {label}
       </Text>
     </PressableScale>
@@ -136,6 +136,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
   stats: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: spacing.xs },
   statRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
+  chipText: { fontSize: 12, flexShrink: 1 }, // a long label ends with … instead of overflowing
   rawToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
   raw: {
     fontFamily: 'Courier',
@@ -151,5 +152,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: radius.pill,
     borderWidth: 1,
+    maxWidth: '100%',
   },
 });
