@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     google_client_id: SecretStr | None = None
     google_client_secret: SecretStr | None = None
     google_token_file: Path = Path("data/google_token.json")
+    # Connecting Google Health from the app: the key that encrypts stored tokens (Fernet), this
+    # server's address for Google's callback, and the app's address to send the browser back to.
+    token_key: SecretStr | None = None
+    public_url: str = "http://127.0.0.1:8000"
+    app_url: str = "http://localhost:8081"
     # The database: Postgres from docker-compose.yml locally, a managed Postgres when deployed.
     database_url: str = (
         "postgresql+psycopg://fitbit_agent:local-dev-only@localhost:5433/fitbit_agent"

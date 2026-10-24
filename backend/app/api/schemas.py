@@ -119,3 +119,15 @@ class ChatMessage(ApiModel):
     consulted: list[str] | None = None
     refused: bool | None = None
     created_at: datetime
+
+
+class GoogleStatus(ApiModel):
+    status: Literal["none", "active", "reconnect_needed"]
+    syncing: bool
+    last_sync: datetime | None
+    last_error: str | None  # the latest sync's failure, safe to show
+    missing_scopes: list[str]  # permissions the person unticked on Google's page
+
+
+class ConnectStart(ApiModel):
+    url: str  # Google's sign-in page, to open in the browser

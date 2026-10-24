@@ -9,6 +9,7 @@ description = "Agentic analysis of longitudinal Fitbit data"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20",
+    "cryptography>=44",
     "fastapi>=0.115",
     "google-auth-oauthlib>=1.5",
     "httpx2>=2.14",

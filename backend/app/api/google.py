@@ -1,0 +1,143 @@
+"""Connecting a person's Google Health account from the app, and syncing it.
+
+`POST /google/connect` returns Google's sign-in address; the browser comes back to
+`GET /google/callback`, which stores the encrypted token, starts the first sync and sends the
+browser back to the app. `POST /google/sync` refreshes the data; `GET /google/status` reports it.
+"""
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date
+from functools import lru_cache
+from typing import Annotated
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import RedirectResponse
+
+from app.api import schemas
+from app.api.auth import Db, Now, approved_user
+from app.api.chat import Sessions, get_sessions
+from app.api.errors import ApiError
+from app.config import settings
+from app.db.models import GoogleConnection, User
+from app.sync import connections
+from app.sync.client import HealthClient
+from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
+from app.sync.google_auth import OAuthClient, SyncError
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/google", tags=["google"])
+
+sign_ins = SignIns()
+syncs = Syncs()
+
+
+@dataclass(frozen=True)
+class GoogleParts:
+    oauth: OAuth
+    box: TokenBox
+    health_for: Callable[[Callable[[], str]], HealthClient]
+
+
+@lru_cache(maxsize=1)
+def _google() -> GoogleParts:
+    try:
+        client = OAuthClient.from_settings(settings.google_client_id, settings.google_client_secret)
+        box = TokenBox(settings.token_key)
+    except SyncError as exc:
+        logger.warning("Connecting Google Health is not available: %s", exc)
+        raise ApiError(
+            503, "google_unavailable", "Connecting Google Health is not set up yet."
+        ) from exc
+    oauth = connections.GoogleOAuth(client, f"{settings.public_url.rstrip('/')}/google/callback")
+    return GoogleParts(oauth, box, HealthClient)
+
+
+def get_google() -> GoogleParts:
+    """FastAPI dependency; tests override it with a fake Google."""
+    return _google()
+
+
+Google = Annotated[GoogleParts, Depends(get_google)]
+Person = Annotated[User, Depends(approved_user)]
+
+
+def _status(db, user: User) -> schemas.GoogleStatus:
+    return schemas.GoogleStatus(**connections.status(db, user.id), syncing=syncs.running(user.id))
+
+
+def _start_sync(google: GoogleParts, sessions: Sessions, user: User, today: date) -> None:
+    syncs.start(
+        user.id,
+        lambda: connections.sync(sessions, google.box, user.id, google.health_for, today),
+    )
+
+
+@router.get("/status", response_model=schemas.GoogleStatus)
+def google_status(db: Db, user: Person) -> schemas.GoogleStatus:
+    return _status(db, user)
+
+
+@router.post("/connect", response_model=schemas.ConnectStart)
+def connect(user: Person, google: Google, clock: Now) -> schemas.ConnectStart:
+    return schemas.ConnectStart(url=sign_ins.start(google.oauth, user.id, clock))
+
+
+@router.get("/callback", include_in_schema=False)
+def callback(
+    db: Db,
+    google: Google,
+    clock: Now,
+    sessions: Annotated[Sessions, Depends(get_sessions)],
+    state: str = "",
+    code: str = "",
+    error: str = "",
+) -> RedirectResponse:
+    """Where Google sends the browser back. The `state` ties it to the person who started it."""
+
+    def back(result: str) -> RedirectResponse:
+        query = urlencode({"google": result})
+        return RedirectResponse(f"{settings.app_url.rstrip('/')}/data?{query}", status_code=303)
+
+    pending = sign_ins.finish(state, clock)
+    if pending is None:
+        return back("expired")
+    if error or not code:
+        return back("cancelled")  # the person said no on Google's page
+    try:
+        credentials = google.oauth.exchange(code, pending.verifier)
+        connections.save_connection(db, google.box, pending.user_id, credentials)
+    except Exception:
+        logger.exception("Connecting Google Health failed")
+        return back("failed")
+    db.commit()  # stored before the sync thread reads it
+    user = db.get(User, pending.user_id)
+    _start_sync(google, sessions, user, clock.date())
+    return back("connected")
+
+
+@router.post("/sync", response_model=schemas.GoogleStatus, status_code=202)
+def sync_now(
+    db: Db,
+    user: Person,
+    google: Google,
+    clock: Now,
+    sessions: Annotated[Sessions, Depends(get_sessions)],
+) -> schemas.GoogleStatus:
+    connection = db.get(GoogleConnection, user.id)
+    if connection is None or connection.status != "active":
+        raise ApiError(409, "not_connected", "Connect Google Health first.")
+    _start_sync(google, sessions, user, clock.date())
+    return _status(db, user)
+
+
+@router.post("/disconnect", response_model=schemas.GoogleStatus)
+def disconnect(db: Db, user: Person) -> schemas.GoogleStatus:
+    """Forgets the sign-in. The days already synced stay, so the history is kept."""
+    connection = db.get(GoogleConnection, user.id)
+    if connection is not None:
+        db.delete(connection)
+        db.flush()
+    return _status(db, user)
