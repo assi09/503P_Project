@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -8,7 +9,6 @@ import { PressableScale } from '@/components/PressableScale';
 import { ScrollExpandHero } from '@/components/ScrollExpandHero';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
-import { useSession } from '@/lib/session';
 import { column, radius, spacing, useColors } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -34,7 +34,8 @@ const FEATURES: { icon: IconName; title: string; body: string }[] = [
 export default function Welcome() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { signIn } = useSession();
+  const signUp = () => router.push('/sign-up');
+  const signIn = () => router.push('/sign-in');
 
   const header = (
     <View style={[styles.header, { top: insets.top + spacing.sm }]}>
@@ -50,7 +51,7 @@ export default function Welcome() {
             Sign in
           </Text>
         </PressableScale>
-        <PressableScale accessibilityRole="button" onPress={signIn} style={styles.headerSolid}>
+        <PressableScale accessibilityRole="button" onPress={signUp} style={styles.headerSolid}>
           <Text variant="caption" color="#000000">
             Get started
           </Text>
@@ -97,7 +98,7 @@ export default function Welcome() {
           </View>
 
           <View style={styles.actions}>
-            <Button label="Get started" icon="arrow-forward" iconAfter onPress={signIn} />
+            <Button label="Get started" icon="arrow-forward" iconAfter onPress={signUp} />
             <Button
               label="Sign in"
               variant="secondary"

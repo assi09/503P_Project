@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { useDataStatus } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
-import { Card, SectionTitle } from '@/components/ui';
+import { Button, Card, SectionTitle } from '@/components/ui';
 import { shortDate, timeAgo, windowLabel } from '@/lib/format';
+import { useSession } from '@/lib/session';
 import { radius, spacing, useColors, useMetricColor, useThemePreference } from '@/theme';
 
 const SOURCE_LABELS: Record<DataStatus['source'], string> = {
@@ -88,9 +91,6 @@ export default function DataScreen() {
                 detail="Automatic syncing is planned."
               />
 
-              <SectionTitle>Appearance</SectionTitle>
-              <AppearanceSwitch />
-
               <Text variant="caption" color="faint" style={styles.privacy}>
                 Your data is only used to analyze your own patterns. Profile and account details
                 from the export are never read.
@@ -99,7 +99,38 @@ export default function DataScreen() {
           );
         }}
       </QueryState>
+
+      {/* Outside the data: someone whose data cannot load can still sign out. */}
+      <SectionTitle>Appearance</SectionTitle>
+      <AppearanceSwitch />
+
+      <SectionTitle>Account</SectionTitle>
+      <AccountCard />
     </Screen>
+  );
+}
+
+function AccountCard() {
+  const colors = useColors();
+  const { account, logOut } = useSession();
+  return (
+    <Card>
+      <Text variant="headline">{account?.email}</Text>
+      {account?.isAdmin && (
+        <PressableScale
+          accessibilityRole="link"
+          onPress={() => router.push('/approvals')}
+          style={styles.accountRow}
+        >
+          <Ionicons name="people-outline" size={18} color={colors.text} />
+          <Text style={{ flex: 1 }}>Access requests</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+        </PressableScale>
+      )}
+      <View style={styles.accountActions}>
+        <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={logOut} />
+      </View>
+    </Card>
   );
 }
 
@@ -169,6 +200,13 @@ function DisabledAction({
 }
 
 const styles = StyleSheet.create({
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  accountActions: { flexDirection: 'row', marginLeft: -spacing.lg },
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   icon: {
     width: 36,

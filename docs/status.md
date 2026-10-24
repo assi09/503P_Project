@@ -21,12 +21,12 @@ priority**; the UI and data plumbing exist to serve them.
 | Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
-| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (single user, reads Takeout, not yet behind sign-in); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
-| App | a landing page (expanding hero, what the app does, sign-up buttons) before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
+| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; still one Takeout export, served to the owner only, others get `no_data`); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
+| App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, 455 backend and 51 mobile tests |
 
 **Not built yet:** the recovery score, nutrition
-columns, the API serving live data, sign-in in the app, deployment, tracing and metrics, the evaluation
+columns, the API serving live data, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
 ## Local setup
@@ -75,8 +75,8 @@ To let someone else sign in, add their Google account as a test user in the cons
   The data owner created by the sync has no password; they claim the account with
   `python -m app.auth set-password <email>` (asked without echo), which also replaces a
   forgotten or leaked password until there is a reset.
-  Until the app's sign-in screens exist, the landing page's buttons just open the app
-  (`mobile/src/lib/session.tsx`).
+  The app shows each phase's screens only (signed out, waiting, approved), so a deep link cannot
+  skip sign-in or approval. Until data is stored per person, only the owner sees the Takeout data.
 - **Never mix sources in one history.** The API's sleep is Google's v2 algorithm; the legacy
   export's is v1, about 38 minutes a night apart. Daily metrics are stored per source.
 - **The API lacks** readiness, Fitbit's sleep score and cardio load; its sedentary periods do not
@@ -213,4 +213,5 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
     asked it to. Proposals work in the scripted tests.
 16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
     address (approval is the gate), and a forgotten password needs the owner (`python -m app.auth set-password`). Both need an email
-    service. The log-in lock is kept in memory, so it resets on restart and is per server process.
+    service. The log-in lock is kept in memory, so it resets on restart and is per server process. On
+    the web the session token sits in localStorage, readable by any script on the page.
