@@ -259,3 +259,47 @@ def test_the_command_line_lists_and_approves_sign_ups(client, engine, monkeypatc
     assert cli.main(["pending"]) == 0
     assert "0 waiting" in capsys.readouterr().out
     assert cli.main(["reject", "nobody@example.com"]) == 1
+
+
+def test_the_local_owner_claims_their_account_with_set_password(
+    client, engine, monkeypatch, capsys
+):
+    from app.auth import __main__ as cli
+
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    with session_scope(engine) as session:
+        session.add(User(email="sync@example.com", status="approved"))
+    login = {"email": "sync@example.com", "password": PASSWORD}
+    assert client.post("/auth/login", json=login).status_code == 401
+
+    answers = iter([PASSWORD, PASSWORD])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: next(answers))
+    assert cli.main(["set-password", "sync@example.com"]) == 0
+    assert PASSWORD not in capsys.readouterr().out
+    assert client.post("/auth/login", json=login).status_code == 200
+
+
+@pytest.mark.parametrize(("first", "second"), [(PASSWORD, "something else"), ("short", "short")])
+def test_set_password_refuses_mismatches_and_weak_passwords(
+    client, engine, monkeypatch, first, second
+):
+    from app.auth import __main__ as cli
+
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    sign_up(client, "person@example.com")
+    answers = iter([first, second])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: next(answers))
+    assert cli.main(["set-password", "person@example.com"]) == 1
+    login = {"email": "person@example.com", "password": PASSWORD}
+    assert client.post("/auth/login", json=login).status_code == 200  # unchanged
+
+
+def test_setting_a_password_signs_out_every_device(client, engine, monkeypatch):
+    from app.auth import __main__ as cli
+
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    token = sign_up(client, "person@example.com")["token"]
+    answers = iter(["a brand new password"] * 2)
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: next(answers))
+    assert cli.main(["set-password", "person@example.com"]) == 0
+    assert client.get("/auth/me", headers=headers(token)).status_code == 401

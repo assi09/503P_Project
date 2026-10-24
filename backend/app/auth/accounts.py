@@ -119,6 +119,17 @@ def pending(session: Session) -> list[User]:
     )
 
 
+def set_password(session: Session, user: User, password: str) -> None:
+    """Sets or replaces the password and signs the person out everywhere.
+
+    How the local data owner, created by the sync without a password, claims their account.
+    """
+    check_password(password)
+    user.password_hash = hash_password(password)
+    session.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
+    session.flush()
+
+
 def decide(session: Session, user_id: uuid.UUID, approve: bool, now: datetime) -> User:
     user = session.get(User, user_id)
     if user is None:
