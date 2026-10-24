@@ -106,3 +106,16 @@ class AccessRequest(ApiModel):
     id: str
     email: str
     requested_at: datetime
+
+
+class ChatMessage(ApiModel):
+    id: str
+    role: Literal["user", "assistant"]
+    text: str
+    evidence_ids: list[str]
+    attachment: dict[str, Any] | None = None  # what a question asked about
+    answered_by: str | None = None  # an expert or "general"; absent on refusals
+    routed: bool | None = None  # true if the router chose the expert
+    consulted: list[str] | None = None
+    refused: bool | None = None
+    created_at: datetime

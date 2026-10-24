@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import create_app
+from app.api.reports import get_stored_evidence
 from app.api.store import LoadedData, analyze, get_data
 from app.ingest.takeout import DailyData, IngestError
 from app.synthetic import LowWear, MissedNights, Step, generate
@@ -21,6 +22,7 @@ def client_with(data_or_error) -> TestClient:
         return data_or_error
 
     app.dependency_overrides[get_data] = override
+    app.dependency_overrides[get_stored_evidence] = lambda: lambda evidence_id: None
     return TestClient(app)
 
 
