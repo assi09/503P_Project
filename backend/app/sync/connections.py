@@ -42,6 +42,7 @@ from app.sync.google_auth import (
     ReconnectNeeded,
     SyncError,
     missing_scopes,
+    relax_scope_check,
 )
 from app.sync.pull import SOURCE, pull
 
@@ -117,6 +118,7 @@ class GoogleOAuth:
         flow = Flow.from_client_config(
             self.client.config(), scopes=list(self.scopes), redirect_uri=self.redirect_uri
         )
+        relax_scope_check()
         flow.fetch_token(code=code, code_verifier=verifier)
         return flow.credentials
 

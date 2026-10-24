@@ -102,6 +102,9 @@ def test_payload_units_unknown_values_and_timezones():
         {"foodName": " "},
         {"confirmed": True},
         {"provenance": "model_estimate"},
+        {"energyKcal": 90000},  # implausible for one entry
+        {"proteinG": 501},
+        {"consumedAt": "2031-01-01T08:00:00+02:00"},  # in the future
     ],
 )
 def test_invalid_food(changes):
@@ -118,6 +121,11 @@ def test_invalid_food(changes):
         {"endTime": WORKOUT["startTime"]},
         {"distanceKm": -1},
         {"exerciseType": "UNKNOWN"},
+        # A 10-day "run" of 9,000 km, one over 300 km, and 30 km in 25 minutes.
+        {"endTime": "2026-10-20T08:00:00+03:00", "startTime": "2026-10-10T08:00:00+03:00"},
+        {"distanceKm": 301},
+        {"distanceKm": 30},
+        {"startTime": "2031-01-01T08:00:00+02:00", "endTime": "2031-01-01T08:30:00+02:00"},
     ],
 )
 def test_invalid_workout(changes):
@@ -332,3 +340,43 @@ def test_write_consent_is_optional_and_is_bound_to_the_sign_in_state():
     pending = sign_ins.finish(extra["state"][0], NOW)
     assert pending.user_id == person and pending.scopes == scopes
     assert WRITE_SCOPES["workout"] not in pending.scopes
+
+
+def test_plausible_entries_at_the_limits_pass():
+    LOG.validate_python(FOOD | {"energyKcal": 5000, "proteinG": 500})
+    marathon = WORKOUT | {
+        "startTime": "2026-10-24T07:00:00+03:00",
+        "endTime": "2026-10-24T11:00:00+03:00",
+        "activeSeconds": 14280,
+        "distanceKm": 42.2,
+    }
+    LOG.validate_python(marathon)
+    LOG.validate_python(WORKOUT | {"exerciseType": "AEROBIC_WORKOUT", "distanceKm": 0})
+
+
+@pytest.mark.parametrize("km", [5.1, 0.3, 42.195])
+def test_distance_is_sent_in_whole_millimetres(km):
+    long_run = {
+        "startTime": "2026-10-24T07:00:00+03:00",
+        "endTime": "2026-10-24T11:00:00+03:00",
+        "activeSeconds": 14280,
+    }
+    payload = LOG.validate_python(WORKOUT | long_run | {"distanceKm": km}).google_payload()
+    millimetres = payload["exercise"]["metricsSummary"]["distanceMillimeters"]
+    assert isinstance(millimetres, int) and millimetres == round(km * 1_000_000)
+
+
+def test_a_draft_that_no_longer_passes_the_checks_is_refused_before_any_write(engine, people):
+    class Writer:
+        calls = 0
+
+        def create(self, kind, payload):
+            Writer.calls += 1
+
+    with Session(engine) as db:
+        row = store.propose(db, people[0], uuid.uuid4(), FOOD, NOW)
+        row.payload = row.payload | {"energyKcal": 90000}  # saved under looser rules
+        db.commit()
+        with pytest.raises(ApiError) as error:
+            store.execute(db, people[0], row.id, row.version, Writer(), NOW)
+    assert error.value.code == "invalid_log" and Writer.calls == 0

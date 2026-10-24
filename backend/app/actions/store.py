@@ -238,7 +238,12 @@ def execute(
     if undo and not row.provider_name:
         raise ApiError(409, "not_logged", "This draft has no confirmed Google record to undo.")
     # Re-validate the persisted payload, not caller-supplied data, at the execution boundary.
-    payload = LOG.validate_python(row.payload).google_payload()
+    try:
+        payload = LOG.validate_python(row.payload).google_payload()
+    except ValidationError:
+        raise ApiError(
+            422, "invalid_log", "This draft no longer passes the checks. Edit it first."
+        ) from None
     _change(
         db,
         row,

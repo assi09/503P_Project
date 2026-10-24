@@ -70,6 +70,15 @@ class OAuthClient:
         }
 
 
+def relax_scope_check() -> None:
+    """Accept a sign-in that grants fewer scopes than asked for.
+
+    Google lets people untick each permission, and oauthlib then raises instead of returning the
+    token. The granted scopes are stored and the missing ones reported (`missing_scopes`).
+    """
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
+
 def missing_scopes(granted: list[str] | tuple[str, ...] | None) -> list[str]:
     """Scopes we asked for that the user did not grant (Google lets them untick each one)."""
     return [scope for scope in SCOPES if scope not in set(granted or ())]
@@ -86,6 +95,7 @@ def save(credentials: Credentials, token_file: Path) -> None:
 
 def connect(client: OAuthClient, token_file: Path, open_browser: bool = True) -> list[str]:
     """Runs the browser sign-in, stores the token, and returns any scopes that were not granted."""
+    relax_scope_check()
     flow = InstalledAppFlow.from_client_config(client.config(), list(SCOPES))
     credentials = flow.run_local_server(
         port=0,

@@ -366,3 +366,24 @@ def test_tokens_need_a_key_and_the_right_one(box):
     other = TokenBox(SecretStr(Fernet.generate_key().decode()))
     with pytest.raises(ReconnectNeeded):
         other.open(sealed)
+
+
+def test_a_partly_granted_sign_in_is_accepted(monkeypatch):
+    """Google lets people untick permissions; oauthlib then raises unless told to accept it."""
+    import os
+
+    from google_auth_oauthlib.flow import Flow
+
+    monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
+    seen = {}
+
+    def fetch(self, **kwargs):
+        seen["relaxed"] = os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE")
+
+    monkeypatch.setattr(Flow, "fetch_token", fetch)
+    monkeypatch.setattr(Flow, "credentials", property(lambda self: credentials()))
+    oauth = connections.GoogleOAuth(
+        connections.OAuthClient("client-id", "client-secret"), "http://127.0.0.1:8000/cb"
+    )
+    oauth.exchange("code", "verifier")
+    assert seen["relaxed"] == "1"
