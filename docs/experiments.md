@@ -184,3 +184,22 @@ request waits, with 4 verified claims citing 4 pieces of evidence, for $0.0113, 
 with its cost. Only aggregates are recorded here; the answer is in the owner's chat.
 **Changed:** nothing; the scripted tests had covered the plumbing, and the real run confirmed the
 OpenAI and Jev wiring through the worker thread.
+
+## Request intent alongside topic routing (2026-10-24)
+
+Added a separate read/log/mixed/manage/clarify choice to the existing Jev call; the keyword
+fallback and LLM-router baseline expose the same intent vocabulary. This first slice records
+intent in the answer trace only; it does not dispatch logging tools, change answer handling,
+write Google records or establish action authorization. See [agent-actions.md](agent-actions.md).
+
+One real Jev request on a synthetic mixed meal-logging/analysis message selected Nutrition and
+`mixed` correctly in 0.351 s, with an estimated cost of $0.000048342. No personal records were
+read and no Google write or OpenAI call was made. An initial sandbox network attempt failed
+before returning a response; the single successful request ran with network approval. This is
+one integration smoke check, not accuracy evidence or a comparison with expert-only intent.
+
+Scripted tests cover read-only history questions, explicit logs, ambiguous meal/photo statements,
+mixed requests, edit/cancel/undo, bare confirmations, topic/intent independence, refusal precedence,
+invalid/non-finite probabilities and malformed Jev responses falling back without echoing input.
+Remaining work: owned durable proposals and confirmation, context from an active draft, task-level
+held-out evaluation, and the actual logging tools/UI/executor. The 0.7 intent threshold is hand-set.

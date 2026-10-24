@@ -177,6 +177,56 @@ health? A flagged sentence is rejected like any other. If Jev is down, the word 
 and the trace says so. Consulted runs are not checked, since only the lead's text is shown. The
 Jev HTTP client (`jev.py`) is shared by the router and the guard.
 
+## Confirmed action execution (planned)
+
+Local-first delivery and researched tools: [agent-actions.md](agent-actions.md). The router now
+classifies read/log/mixed/manage/clarify intent in its existing Jev call and records it in the
+trace. Intent is observational in this first slice: proposal tools and execution are not exposed.
+Experts will collect details and prepare drafts; intent labels never authorize writes.
+
+Workout and nutrition logging are a core planned extension; see
+[product.md](product.md#agent-assisted-logging-core-planned-capability). Reuse accounts, expert
+routing, chat and encrypted Google connections. The current analysis toolbox remains read-only;
+add proposal tools and a separate deterministic executor, never unrestricted model write access.
+
+Persist per-user action proposals, immutable confirmed payload versions, status transitions,
+provider IDs and an audit of execution/undo. Add a migration and evolve the backend schemas,
+`mobile/src/api/types.ts`, HTTP client and mock together. Status must distinguish drafts,
+awaiting confirmation, cancelled, executing, succeeded, failed, unknown outcome and undone.
+Only an authenticated owner can confirm, execute or undo their own proposal. Model text and
+imported text cannot authorize actions. Routing must recognise logging requests and missing-detail
+follow-ups without weakening the medical refusal rules.
+
+Execution checks approval, payload version and granted scopes server-side. Idempotency and
+concurrent confirmation handling must survive process restarts. A timeout after Google's write
+may mean success: reconcile before retrying; never blindly replay a create. Reconcile remote
+success with local persistence failures, and deletion failures with the displayed undo status.
+Persist Google IDs and provenance so sync echoes and provider duplicates do not double count.
+
+Request the activity/nutrition write scopes only for enabled logging features, handle reconnect
+and denied permissions, and preserve read-only connections. Verify exact create/update/delete
+payloads, ownership restrictions, idempotency support and reconciliation semantics against the
+provider before enabling writes. No Google console or deployment change is made by this plan.
+
+Workout summaries require a new intraday fetch and deterministic aggregation layer: daily totals
+cannot establish a workout's heart rate or steps. Define time boundaries, timezone handling,
+sensor gaps and zone thresholds explicitly; return evidence with coverage and omit unsupported
+summaries. Keep raw samples out of prompts. Photo input is a deliberate later privacy extension
+to the current aggregates-only model boundary: explicit upload, bounded file validation, no
+photo content in traces, a defined retention/deletion policy, and estimates labelled separately
+from statistical evidence. Provider nutrition lookup should precede model estimates where feasible.
+
+Verify with fake Google transports and scripted models: clarification, edit/reconfirm, cancellation,
+unapproved and cross-user writes, denied scopes, duplicate/concurrent confirmation, ambiguous
+network outcomes, restart recovery, sync echoes, undo and partial failures. Test deterministic
+workout calculations on synthetic samples and photo provenance without paid calls. Real write
+validation requires explicit approval for the exact entry and any cleanup; photo model runs follow
+[costs.md](costs.md). These are acceptance gates, not results already observed.
+
+Provider references checked 2026-10-24: [supported data types and scopes](https://developers.google.com/health/data-types),
+[nutrition guide](https://developers.google.com/health/data-types/nutrition),
+[data point reference](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints).
+
 ## Memory and context
 
 The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The
@@ -297,5 +347,8 @@ The agent describes patterns in the user's own data. It does not give medical di
 The repository is public. Personal exports live under `data/` or `Takeout/`, both git-ignored, and
 are never committed; so are `.env` (the OAuth client ID and secret, the token encryption key) and
 the owner's Google sign-in token in `data/`. Passwords are stored as scrypt hashes, session tokens
-as hashes, Google tokens encrypted; no request returns another person's data or chat. The LLM will only ever receive aggregated statistics, never raw rows or account data. Tests and evaluation use the synthetic generator, whose baselines are generic
-values, not taken from any real export.
+as hashes, Google tokens encrypted; no request returns another person's data or chat. The analysis
+LLM receives aggregated statistics, never raw sensor rows or account data. The planned logging
+flow also needs user-supplied entry details; optional photo estimation has the separate consent
+and retention requirements above. Tests and evaluation use the synthetic generator, whose
+baselines are generic values, not taken from any real export.
