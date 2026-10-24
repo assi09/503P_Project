@@ -21,12 +21,12 @@ priority**; the UI and data plumbing exist to serve them.
 | Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Not yet reachable from the API or the app |
-| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, reads Takeout, no auth |
+| API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (single user, reads Takeout, not yet behind sign-in); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`) |
 | App | Today, Ask (expert picker, quick/deep, attachments, routed answers on mock data), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
 | Engineering | protected `main`, PRs with both CI jobs required, 426 backend and ~50 mobile tests |
 
 **Not built yet:** the recovery score, nutrition
-columns, the API serving live data, accounts, deployment, tracing and metrics, the evaluation
+columns, the API serving live data, sign-in in the app, deployment, tracing and metrics, the evaluation
 suite, the failure matrix and threat model.
 
 ## Local setup
@@ -65,6 +65,13 @@ To let someone else sign in, add their Google account as a test user in the cons
 ## Decisions and findings
 
 - **Live API is the data source going forward**; Takeout stays as an offline import.
+- **Accounts are our own, and every sign-up waits for approval.** Email and password (scrypt
+  from the standard library, sessions as random tokens stored only as hashes, 5 failed log-ins
+  lock an email for 15 minutes). The Google Health app is in Testing mode, so each approved person
+  must also be added as a test user in the console by hand (Google has no API for it); approval
+  is the reminder to do that. Signing in with Google was dropped: it would have needed a second,
+  public Google app just for sign-in. The owner's own account is approved with
+  `python -m app.auth approve <email>`, never automatically, since there is no email check yet.
 - **Never mix sources in one history.** The API's sleep is Google's v2 algorithm; the legacy
   export's is v1, about 38 minutes a night apart. Daily metrics are stored per source.
 - **The API lacks** readiness, Fitbit's sleep score and cardio load; its sedentary periods do not
@@ -198,4 +205,6 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
     words; the evaluation's planted scenarios will measure how often it happens.
 15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
     since August", it did not call `propose_fact` in either real run, the second after the prompt
-    asked it to. Proposals work in the scripted tests.
+    asked it to. Proposals work in the scripted tests.16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
+    address (approval is the gate), and a forgotten password needs the owner. Both need an email
+    service. The log-in lock is kept in memory, so it resets on restart and is per server process.
