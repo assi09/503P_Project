@@ -205,6 +205,7 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
     words; the evaluation's planted scenarios will measure how often it happens.
 15. **The agent has not yet proposed a fact in a real run.** Told "I've been working night shifts
     since August", it did not call `propose_fact` in either real run, the second after the prompt
-    asked it to. Proposals work in the scripted tests.16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
+    asked it to. Proposals work in the scripted tests.
+16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
     address (approval is the gate), and a forgotten password needs the owner. Both need an email
     service. The log-in lock is kept in memory, so it resets on restart and is per server process.
