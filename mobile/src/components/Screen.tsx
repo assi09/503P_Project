@@ -35,7 +35,11 @@ export function Screen({ children, title, subtitle, refreshing = false, onRefres
       keyboardShouldPersistTaps="handled"
       refreshControl={
         onRefresh && (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()} // React Native 0.88 types the callback's result
+            tintColor={colors.muted}
+          />
         )
       }
     >

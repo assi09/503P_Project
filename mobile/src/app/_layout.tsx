@@ -59,6 +59,8 @@ function Navigation() {
   // Until the stored session is read, show nothing rather than flash the landing page.
   if (state.phase === 'loading') return <Splash />;
   const approved = account?.status === 'approved';
+  // Where a route that is not available in this phase leads: the phase's own first screen.
+  const home = state.phase === 'signedOut' ? '/welcome' : approved ? '/' : '/waiting';
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
@@ -74,15 +76,15 @@ function Navigation() {
       >
         {/* Each route exists only in its phase, so a deep link can never skip sign-in or
             approval: signed out, pending or rejected, and approved. */}
-        <Stack.Protected guard={state.phase === 'signedOut'}>
+        <Stack.Protected guard={state.phase === 'signedOut'} redirectTo={home}>
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="sign-up" options={{ headerShown: false }} />
           <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         </Stack.Protected>
-        <Stack.Protected guard={state.phase === 'signedIn' && !approved}>
+        <Stack.Protected guard={state.phase === 'signedIn' && !approved} redirectTo={home}>
           <Stack.Screen name="waiting" options={{ headerShown: false }} />
         </Stack.Protected>
-        <Stack.Protected guard={approved}>
+        <Stack.Protected guard={approved} redirectTo={home}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="finding/[id]" options={{ title: '' }} />
           <Stack.Screen
@@ -95,7 +97,7 @@ function Navigation() {
               contentStyle: { backgroundColor: colors.background },
             }}
           />
-          <Stack.Protected guard={account?.isAdmin === true}>
+          <Stack.Protected guard={account?.isAdmin === true} redirectTo={home}>
             <Stack.Screen name="approvals" options={{ title: 'Access requests' }} />
           </Stack.Protected>
         </Stack.Protected>

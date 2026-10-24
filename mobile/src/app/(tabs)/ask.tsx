@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,7 +53,7 @@ export default function AskScreen() {
   const [depth, setDepth] = useState<Depth>('quick');
   const [attachment, setAttachment] = useState<Attachment>();
   const [attaching, setAttaching] = useState(false);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const insets = useSafeAreaInsets();
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const tabBarHeight = floatingTabBar ? barHeight : 0;
