@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/PressableScale';
@@ -44,11 +44,18 @@ export default function Welcome() {
           Patterns
         </Text>
       </View>
-      <PressableScale accessibilityRole="button" onPress={signIn} style={styles.headerButton}>
-        <Text variant="caption" color="#FFFFFF">
-          Sign in
-        </Text>
-      </PressableScale>
+      <View style={styles.headerActions}>
+        <PressableScale accessibilityRole="button" onPress={signIn} style={styles.headerGhost}>
+          <Text variant="caption" color="#FFFFFF">
+            Sign in
+          </Text>
+        </PressableScale>
+        <PressableScale accessibilityRole="button" onPress={signIn} style={styles.headerSolid}>
+          <Text variant="caption" color="#000000">
+            Get started
+          </Text>
+        </PressableScale>
+      </View>
     </View>
   );
 
@@ -90,12 +97,14 @@ export default function Welcome() {
           </View>
 
           <View style={styles.actions}>
-            <Button label="Get started" icon="arrow-forward" onPress={signIn} />
-            <Pressable accessibilityRole="button" onPress={signIn} style={styles.secondary}>
-              <Text variant="bodyStrong" color="muted">
-                I already have an account
-              </Text>
-            </Pressable>
+            <Button label="Get started" icon="arrow-forward" iconAfter onPress={signIn} />
+            <Button
+              label="Sign in"
+              variant="secondary"
+              icon="chevron-forward"
+              iconAfter
+              onPress={signIn}
+            />
           </View>
 
           <Text variant="caption" color="faint" style={styles.note}>
@@ -121,13 +130,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
+  // Over the photo the header keeps its own colors whatever the theme.
+  headerGhost: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  headerSolid: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    backgroundColor: '#FFFFFF',
   },
   body: {
     paddingHorizontal: spacing.xl,
@@ -145,7 +160,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   featureText: { flex: 1, gap: spacing.xs },
-  actions: { gap: spacing.sm, marginTop: spacing.xxl },
-  secondary: { alignItems: 'center', paddingVertical: spacing.md },
+  // Pills sized to their labels, side by side, as on most sign-up pages.
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xl,
+  },
   note: { textAlign: 'center', marginTop: spacing.sm },
 });
