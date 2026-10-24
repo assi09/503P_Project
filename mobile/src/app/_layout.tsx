@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { SessionProvider, useSession } from '@/lib/session';
 import { fonts, ThemeProvider, useColors, useScheme } from '@/theme';
 
 // A screen that crashes shows an error with a retry button instead of taking down the app.
@@ -36,8 +37,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider preference="dark">
         <QueryClientProvider client={queryClient}>
-          {/* If the font fails to load, carry on with the system font rather than a blank app. */}
-          {fontsLoaded || fontError ? <Navigation /> : <Splash />}
+          <SessionProvider>
+            {/* If the font fails to load, carry on with the system font rather than a blank app. */}
+            {fontsLoaded || fontError ? <Navigation /> : <Splash />}
+          </SessionProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
@@ -52,6 +55,7 @@ function Splash() {
 function Navigation() {
   const colors = useColors();
   const scheme = useScheme();
+  const { signedIn } = useSession();
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
@@ -65,18 +69,24 @@ function Navigation() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="finding/[id]" options={{ title: '' }} />
-        <Stack.Screen
-          name="evidence/[id]"
-          options={{
-            title: 'Evidence',
-            presentation: 'formSheet',
-            sheetAllowedDetents: [0.6, 1],
-            sheetGrabberVisible: true,
-            contentStyle: { backgroundColor: colors.background },
-          }}
-        />
+        {/* Signed out, every route leads to the landing page; signed in, it is gone. */}
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
+        </Stack.Protected>
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="finding/[id]" options={{ title: '' }} />
+          <Stack.Screen
+            name="evidence/[id]"
+            options={{
+              title: 'Evidence',
+              presentation: 'formSheet',
+              sheetAllowedDetents: [0.6, 1],
+              sheetGrabberVisible: true,
+              contentStyle: { backgroundColor: colors.background },
+            }}
+          />
+        </Stack.Protected>
       </Stack>
     </>
   );
