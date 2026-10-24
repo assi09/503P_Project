@@ -72,6 +72,9 @@ To let someone else sign in, add their Google account as a test user in the cons
   is the reminder to do that. Signing in with Google was dropped: it would have needed a second,
   public Google app just for sign-in. The owner's own account is approved with
   `python -m app.auth approve <email>`, never automatically, since there is no email check yet.
+  The data owner created by the sync has no password; they claim the account with
+  `python -m app.auth set-password <email>` (asked without echo), which also replaces a
+  forgotten or leaked password until there is a reset.
   Until the app's sign-in screens exist, the landing page's buttons just open the app
   (`mobile/src/lib/session.tsx`).
 - **Never mix sources in one history.** The API's sleep is Google's v2 algorithm; the legacy
@@ -209,5 +212,5 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
     since August", it did not call `propose_fact` in either real run, the second after the prompt
     asked it to. Proposals work in the scripted tests.
 16. **Accounts have no email check and no password reset yet.** Anyone can sign up with any
-    address (approval is the gate), and a forgotten password needs the owner. Both need an email
+    address (approval is the gate), and a forgotten password needs the owner (`python -m app.auth set-password`). Both need an email
     service. The log-in lock is kept in memory, so it resets on restart and is per server process.
