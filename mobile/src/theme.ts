@@ -1,41 +1,44 @@
-import { createContext, createElement, useContext, type ReactNode } from 'react';
+import { createContext, createElement, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
-// Dark is the primary look; light is derived from the same roles.
-const dark = {
-  background: '#07080B',
-  surface: '#111318',
-  surfaceRaised: '#181A21',
-  text: '#F3F4F7',
-  muted: '#8B91A0',
-  faint: '#5A5F6C', // tertiary text, axis labels
-  border: '#22252D',
-  accent: '#8C9EFF',
-  onAccent: '#07080B', // text and icons on accent backgrounds
-  accentSoft: '#1B2033',
-  danger: '#FF6B6B',
-  warning: '#F5B544',
-  chart: '#8C9EFF',
-  chartHighlight: '#1B2033',
-  track: '#1E2028', // empty part of rings and bars
+// "Track day": the warm cream, track orange and sky blue of the landing photos. Light is the
+// default look; dark is the same roles on warm charcoal rather than blue-black.
+const light = {
+  background: '#F7F2EA',
+  surface: '#FFFFFF',
+  surfaceRaised: '#FFFDF9',
+  text: '#1F1915',
+  muted: '#6E645B',
+  faint: '#A0958A', // tertiary text, axis labels
+  border: '#E8DFD3',
+  accent: '#CC4620', // track orange, deep enough for white text on it
+  onAccent: '#FFFFFF', // text and icons on accent backgrounds
+  accentSoft: '#FBE3D8',
+  secondary: '#3D8FD1', // sky blue
+  danger: '#B83227',
+  warning: '#B7791F',
+  chart: '#CC4620',
+  chartHighlight: '#FBE3D8',
+  track: '#EFE7DC', // empty part of rings and bars
 };
 
-const light: typeof dark = {
-  background: '#F3F4F7',
-  surface: '#FFFFFF',
-  surfaceRaised: '#FFFFFF',
-  text: '#0B0D12',
-  muted: '#5C6270',
-  faint: '#9298A6',
-  border: '#E3E5EB',
-  accent: '#4A5FE8',
-  onAccent: '#FFFFFF',
-  accentSoft: '#E6E9FD',
-  danger: '#D93838',
-  warning: '#B26B00',
-  chart: '#4A5FE8',
-  chartHighlight: '#E6E9FD',
-  track: '#E6E8EE',
+const dark: typeof light = {
+  background: '#17120F',
+  surface: '#221B17',
+  surfaceRaised: '#2B231E',
+  text: '#F5EFE8',
+  muted: '#A89C90',
+  faint: '#6F655C',
+  border: '#362C25',
+  accent: '#FF7A4D',
+  onAccent: '#1A0F0A',
+  accentSoft: '#3A2219',
+  secondary: '#6FB3EA',
+  danger: '#FF6B5E',
+  warning: '#F2B94B',
+  chart: '#FF7A4D',
+  chartHighlight: '#3A2219',
+  track: '#2E2620',
 };
 
 export type Colors = typeof dark;
@@ -43,12 +46,12 @@ export type Scheme = 'dark' | 'light';
 
 /** Colors per metric family: a solid color for lines and text, and a gradient pair for rings. */
 export const METRIC_COLORS = {
-  sleep: { dark: '#9D8CFF', light: '#6A55F0', gradient: ['#6B5BFF', '#C08CFF'] },
-  activity: { dark: '#FF9A4D', light: '#E8671A', gradient: ['#FF6A3D', '#FFC24D'] },
-  heart: { dark: '#FF5C7A', light: '#E0284D', gradient: ['#FF3D6E', '#FF8FA0'] },
-  recovery: { dark: '#3DDC97', light: '#14A86B', gradient: ['#18C487', '#8BEFC2'] },
-  temperature: { dark: '#44CFE0', light: '#0E97AB', gradient: ['#1FB6CC', '#8CE9F4'] },
-  nutrition: { dark: '#F2C94C', light: '#B7860B', gradient: ['#F2A93B', '#F7DC6F'] },
+  sleep: { dark: '#8FA8FF', light: '#4F6BD8', gradient: ['#4F6BD8', '#8FB8FF'] },
+  activity: { dark: '#FF8A4D', light: '#D9531F', gradient: ['#E2552C', '#FFA65C'] },
+  heart: { dark: '#FF6B86', light: '#D63A5A', gradient: ['#D63A5A', '#FF8FA0'] },
+  recovery: { dark: '#7BCB6A', light: '#4E9A3A', gradient: ['#4E9A3A', '#A6DB7D'] },
+  temperature: { dark: '#5CC8D6', light: '#1E8E9C', gradient: ['#1E8E9C', '#7FDCE6'] },
+  nutrition: { dark: '#F2C14E', light: '#B98512', gradient: ['#E0A21C', '#F7D877'] },
 } as const;
 
 export type MetricFamily = keyof typeof METRIC_COLORS;
@@ -83,20 +86,62 @@ export function metricFamily(metric: string): MetricFamily | undefined {
   return FAMILY_BY_METRIC[metric];
 }
 
-const ThemeContext = createContext<Scheme>('dark');
+export type ThemePreference = Scheme | 'system';
 
-/** Dark unless `preference` is 'light', or 'system' and the device is in light mode. */
-export function ThemeProvider({
-  preference = 'dark',
-  children,
-}: {
-  preference?: Scheme | 'system';
-  children: ReactNode;
-}) {
+const ThemeContext = createContext<Scheme>('light');
+const PreferenceContext = createContext<{
+  preference: ThemePreference;
+  setPreference: (preference: ThemePreference) => void;
+}>({ preference: 'system', setPreference: () => {} });
+
+const STORAGE_KEY = 'patterns.theme';
+
+// Remembered in the browser only; native apps have no storage dependency yet and start from
+// the device setting each launch.
+function storedPreference(): ThemePreference | undefined {
+  try {
+    const value = globalThis.localStorage?.getItem(STORAGE_KEY);
+    return value === 'light' || value === 'dark' || value === 'system' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storePreference(preference: ThemePreference) {
+  try {
+    globalThis.localStorage?.setItem(STORAGE_KEY, preference);
+  } catch {
+    // Private mode or blocked storage: the choice lasts until reload.
+  }
+}
+
+/** Follows the device unless the person picked light or dark, which `useThemePreference` sets. */
+export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
+  const [preference, setPreference] = useState<ThemePreference>(
+    () => storedPreference() ?? 'system',
+  );
   const scheme: Scheme =
-    preference === 'system' ? (system === 'light' ? 'light' : 'dark') : preference;
-  return createElement(ThemeContext.Provider, { value: scheme }, children);
+    preference === 'system' ? (system === 'dark' ? 'dark' : 'light') : preference;
+  const value = useMemo(
+    () => ({
+      preference,
+      setPreference: (next: ThemePreference) => {
+        setPreference(next);
+        storePreference(next);
+      },
+    }),
+    [preference],
+  );
+  return createElement(
+    PreferenceContext.Provider,
+    { value },
+    createElement(ThemeContext.Provider, { value: scheme }, children),
+  );
+}
+
+export function useThemePreference() {
+  return useContext(PreferenceContext);
 }
 
 export function useScheme(): Scheme {

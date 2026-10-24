@@ -35,7 +35,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider preference="dark">
+      <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <SessionProvider>
             {/* If the font fails to load, carry on with the system font rather than a blank app. */}

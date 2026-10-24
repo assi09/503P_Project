@@ -4,10 +4,11 @@ import { StyleSheet, View } from 'react-native';
 import { useDataStatus } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
 import { QueryState, Screen } from '@/components/Screen';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { Card, SectionTitle } from '@/components/ui';
 import { shortDate, timeAgo, windowLabel } from '@/lib/format';
-import { radius, spacing, useColors, useMetricColor } from '@/theme';
+import { radius, spacing, useColors, useMetricColor, useThemePreference } from '@/theme';
 
 const SOURCE_LABELS: Record<DataStatus['source'], string> = {
   takeout: 'Google Takeout export',
@@ -87,15 +88,35 @@ export default function DataScreen() {
                 detail="Automatic syncing is planned."
               />
 
+              <SectionTitle>Appearance</SectionTitle>
+              <AppearanceSwitch />
+
               <Text variant="caption" color="faint" style={styles.privacy}>
-                Your data is only used to analyze your own patterns. Profile and account details from
-                the export are never read.
+                Your data is only used to analyze your own patterns. Profile and account details
+                from the export are never read.
               </Text>
             </>
           );
         }}
       </QueryState>
     </Screen>
+  );
+}
+
+const APPEARANCE = { System: 'system', Light: 'light', Dark: 'dark' } as const;
+type AppearanceLabel = keyof typeof APPEARANCE;
+
+function AppearanceSwitch() {
+  const { preference, setPreference } = useThemePreference();
+  const labels = Object.keys(APPEARANCE) as AppearanceLabel[];
+  const current = labels.find((label) => APPEARANCE[label] === preference) ?? 'System';
+  return (
+    <SegmentedControl
+      options={labels}
+      value={current}
+      onChange={(label) => setPreference(APPEARANCE[label])}
+      accessibilityLabel="Appearance"
+    />
   );
 }
 
