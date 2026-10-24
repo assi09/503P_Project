@@ -95,10 +95,9 @@ To let someone else sign in, add their Google account as a test user in the cons
   question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.
 - **Nutrition waits for Sprint 2**: the expert exists but answers "no data yet" until the sync
   maps nutrition columns (only the API has them; Takeout's are "N/A").
-- **Sign-in is Google only** ("Continue with Google"): people must connect Google Health for
-  their data anyway, so one consent covers both, and there are no passwords to store or reset.
-  While the OAuth app is in Testing mode only listed test users can sign in. Until it is built,
-  the landing page's buttons just open the app (`mobile/src/lib/session.tsx`).
+- **Sign-up is our own** (email and password, each sign-up approved by the owner; see #41).
+  Until the app's sign-in screens are built, the landing page's buttons just open the app
+  (`mobile/src/lib/session.tsx`).
 - **Platform:** OpenAI for the LLM; Railway (backend and Postgres) and Vercel (web) when deploying;
   Langfuse for agent traces and Prometheus/Grafana for API metrics; iOS TestFlight undecided.
 
