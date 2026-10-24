@@ -48,8 +48,23 @@ source .venv/bin/activate
 FA_EXPORT_DIR=Takeout FA_TIMEZONE=Asia/Beirut uvicorn app.api.main:app --app-dir backend --reload
 ```
 
-It listens on `http://127.0.0.1:8000` only, since there is no login yet. Interactive API docs
-are at `/docs`.
+It listens on `http://127.0.0.1:8000`. Interactive API docs are at `/docs`. Data, chat and
+Google endpoints need a signed-in, approved account (see *Accounts* below).
+
+### Accounts
+
+People sign up in the app with an email and password and wait until the owner approves them.
+Put the owner's email in `.env` as `FA_ADMIN_EMAILS=["you@example.com"]`, then:
+
+```bash
+python -m app.auth pending                    # sign-ups waiting
+python -m app.auth approve you@example.com    # also how the owner approves their own account
+python -m app.auth set-password you@example.com   # sets a password (asked without echo)
+```
+
+`set-password` is how the owner claims the account `python -m app.sync pull` created, and how a
+forgotten password is replaced until there is a reset by email. Approving someone does not add
+them as a Google test user: do that in the Google Cloud console too.
 
 ### Database
 
@@ -90,11 +105,16 @@ The sign-in is stored in `data/google_token.json` (git-ignored, readable only by
 scopes are restricted, so the app stays in Testing mode: only test users can sign in, and Google
 expires the sign-in after 7 days, after which `connect` has to be run again.
 
+**From the app** (any approved person): Data → *Your data source* → **Connect**. This needs
+`FA_TOKEN_KEY` in `.env` (see `.env.example`), and the browser and the API on the same machine:
+Google sends the browser back to `FA_PUBLIC_URL/google/callback` (`http://127.0.0.1:8000` by
+default), which phones can only reach once the backend is deployed.
+
 ### Mobile app
 
-Requires Node 22. The app runs on mock data by default. Set `EXPO_PUBLIC_API_URL` (e.g.
-`http://localhost:8000`) to use a running backend: endpoints the backend serves come from it, the
-rest stay on mock data.
+Requires Node 22. The app runs on mock data by default (sign in as `demo@patterns.app` /
+`demo-password`, a made-up owner). Set `EXPO_PUBLIC_API_URL` (e.g. `http://127.0.0.1:8000`) to use
+a running backend: accounts, data, chat and Google come from it; reminders stay on mock data.
 
 ```bash
 cd mobile

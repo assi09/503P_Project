@@ -12,14 +12,14 @@ verifier rejects statements it cannot match to one.
 ## Components
 
 ```
- Mobile app (Expo) ──── HTTPS (+ auth, planned) ────► API (FastAPI)
+ Mobile app (Expo) ──── HTTPS + bearer session ────► API (FastAPI)
                                                        │
      ┌──────────────────────┬──────────────────────────┼─────────────────────────┐
      ▼                      ▼                          ▼                         ▼
  Google Health API     Takeout export          Agent                       Postgres
  (live sync) ──┐       (offline import) ─┐     router → experts            users, daily metrics,
-               ▼                         ▼     over analysis tools         sync runs; later reports,
-          daily table (same columns from either source)                    chat, memory, traces
+               ▼                         ▼     over analysis tools         sync runs, accounts,
+          daily table (same columns from either source)                    chat, memory; later traces
                │                                   │
                ▼                                   ▼
         Analysis tools (deterministic) ──► Evidence ──► Verifier ──► report / answer
@@ -28,11 +28,11 @@ verifier rejects statements it cannot match to one.
 | Component | Location | Status |
 |---|---|---|
 | Takeout ingestion | `backend/app/ingest/takeout.py` | done (legacy layout; newer exports lack `Global Export Data`) |
-| Google Health sign-in | `backend/app/sync/google_auth.py` | done: loopback OAuth, token file `0600`, one local user |
+| Google Health sign-in | `backend/app/sync/google_auth.py`, `connections.py` | the owner's CLI (loopback OAuth, token file `0600`), and each person's web sign-in from the app (PKCE, token encrypted in `google_connections`) |
 | Google Health API client | `backend/app/sync/client.py` | done: paging, roll-up windows, retries |
 | API data → daily table | `backend/app/sync/daily.py` | done, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
 | Database | `backend/app/db/`, `backend/migrations/` | users, Google connections, daily metrics, sync runs, chat messages, cited evidence, findings, context questions, check-ins, memory facts |
-| Live data → database | `backend/app/sync/pull.py` | `python -m app.sync pull`; the API service still reads Takeout |
+| Live data → database | `backend/app/sync/pull.py`, `connections.py` | `python -m app.sync pull`, and background syncs started from the app (whole history first, then the last 3 days) |
 | Analysis tools and `Evidence` | `backend/app/analysis/` | describe, coverage, compare_windows, trend, correlate |
 | Screen and templated report (the no-LLM baseline) | `backend/app/analysis/screen.py`, `report.py` | done |
 | Synthetic data with planted effects | `backend/app/synthetic.py` | done |
@@ -41,8 +41,9 @@ verifier rejects statements it cannot match to one.
 | Recovery score | `backend/app/analysis/` | planned, see [product.md](product.md#recovery-score) |
 | Router and the ask flow | `backend/app/agent/router.py`, `ask.py` | Jev with keyword fallback; LLM router for the evaluation |
 | Context builder | `backend/app/agent/context.py` | conversation and attachments; other memory planned |
-| API | `backend/app/api/` | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}`; single user, no auth yet |
-| Mobile app | `mobile/` | Today, Ask (expert picker, depth, attachments), Reminders, Data; mock data where the API has no endpoint |
+| Accounts | `backend/app/auth/`, `backend/app/api/auth.py` | email and password (scrypt), sessions as hashed tokens, approval of each sign-up by the owner, `python -m app.auth` |
+| API | `backend/app/api/` | auth, `/data/status`, `/reports/latest`, `/evidence/{id}`, `/chat`, `/google/*`; every data endpoint serves the signed-in person's own data |
+| Mobile app | `mobile/` | landing, sign-up and sign-in, waiting for approval, Access requests (owner); Today, Ask (real agent), Reminders (mock), Data (Connect Google Health) |
 | Advice guard and the Jev client | `backend/app/agent/guard.py`, `jev.py` | checks shown text by meaning |
 | Evaluation suite | `eval/` | started: the advice sentence set; the rest planned |
 
@@ -60,8 +61,10 @@ flow for desktop apps, with four read-only scopes (activity and fitness, health 
 nutrition); the refresh token is stored in `data/google_token.json`, readable only by its owner.
 The Google Cloud project's OAuth app stays in **Testing** mode, because health scopes are
 restricted: only listed test users can sign in, and Google expires the sign-in after 7 days, which
-surfaces as `ReconnectNeeded`. Per-user sign-in from the phone needs the backend on a public HTTPS
-address and arrives with accounts and deployment.
+surfaces as `ReconnectNeeded`. Each person connects from the app instead: the browser signs in to
+Google and returns to the API's `/google/callback`, which stores the token encrypted with
+`FA_TOKEN_KEY` and syncs in the background. Locally the callback is a loopback address; from a
+phone it needs the deployed backend on a public HTTPS address.
 
 The client lists data points across pages and fetches daily roll-ups in the windows the API
 accepts; rate limits, server errors and network failures are retried with backoff. The mapping
@@ -81,7 +84,12 @@ and each answer with its verified claims, who answered, whether the router chose
 consulted, whether it was refused, and the run id that links it to its trace. **Only evidence a
 verified claim cites is stored** (`evidence`, once per id), so the app can show it and a follow-up
 can cite it without recomputing; everything else a run computed can be recomputed from the data.
-Both are deleted with the person.
+Both are deleted with the person. Each answer also stores its cost, which the daily spending caps
+add up.
+
+Accounts are `users` (email, scrypt password hash, `pending`/`approved`/`rejected`) and
+`auth_sessions` (only a SHA-256 hash of each session token). A person's Google token is in
+`google_connections`, encrypted, never in plain text.
 
 ### Analysis tools
 
@@ -287,6 +295,7 @@ The agent describes patterns in the user's own data. It does not give medical di
 ## Data and privacy
 
 The repository is public. Personal exports live under `data/` or `Takeout/`, both git-ignored, and
-are never committed; so are `.env` (the OAuth client ID and secret) and the Google sign-in token
-in `data/`. The LLM will only ever receive aggregated statistics, never raw rows or account data. Tests and evaluation use the synthetic generator, whose baselines are generic
+are never committed; so are `.env` (the OAuth client ID and secret, the token encryption key) and
+the owner's Google sign-in token in `data/`. Passwords are stored as scrypt hashes, session tokens
+as hashes, Google tokens encrypted; no request returns another person's data or chat. The LLM will only ever receive aggregated statistics, never raw rows or account data. Tests and evaluation use the synthetic generator, whose baselines are generic
 values, not taken from any real export.
