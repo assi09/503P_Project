@@ -17,11 +17,12 @@ to a computed statistic.
 
 | Screen | What the user does |
 |---|---|
+| **Welcome, sign up, sign in** | Learns what Patterns does, creates an account, and waits for the owner's approval (the app is in testing). |
 | **Today** | Sees today's recovery score with its breakdown, last night's sleep, activity compared with their usual, and the morning check-in. |
 | **Findings** | Reads what changed recently and why, each finding with its evidence. Answers the agent's context questions. |
 | **Ask** | Asks questions about their data; answers come from the expert that owns the topic and cite evidence. |
 | **Reminders** | Approves, mutes or declines reminders the agent proposes. Nothing is sent without approval. |
-| **Data** | Uploads a Google Takeout export, sees data coverage, deletes their data. |
+| **Data** | Connects their Google Health account (whole history, then kept synced), sees data coverage, picks light or dark, signs out; the owner also approves sign-ups. Takeout upload and deleting data are planned. |
 
 ## Morning check-in
 

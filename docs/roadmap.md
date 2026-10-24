@@ -104,16 +104,22 @@ are still three weeks to recover. Each item is its own PR per AGENTS.md; risky i
 3. Days 3–4: four experts, consult tool, router (Jev + keyword + LLM fallbacks). **Done**
    (PRs #28, #29); results and open issues in [experiments.md](experiments.md) and
    [status.md](status.md#open-issues).
-4. Days 4–5: memory, findings and check-in tables; "worth asking" questions.
+4. Days 4–5: memory, findings and check-in tables; "worth asking" questions. **Done** (PRs #36,
+   #37).
 5. Days 5–7: API serves live data from the DB; `/reports`, `/chat`, `/checkins`, `/sync`
-   endpoints; the app's Today, findings, Ask and Data screens move off mock data.
+   endpoints; the app's Today, findings, Ask and Data screens move off mock data. **Done** except
+   `/checkins` (PRs #44, #45, #47, #48): each person's own data, real chat, Google sync from the
+   app. Also done early: the landing page, palette and sign-in pages (#39, #40, #46).
 
 **Sprint 2 (Oct 29–Nov 4): complete and online**
 1. Recovery score + morning check-in; nutrition columns (deduplicated) + nutrition expert.
 2. Daily run after sync + notifications; reminders and N-of-1 experiments with approval.
 3. Langfuse tracing + cost per task; Prometheus/Grafana for the API.
-4. Accounts (email/password) and per-user Google sign-in with encrypted tokens.
+4. Accounts (email/password) and per-user Google sign-in with encrypted tokens. **Done early**
+   (PRs #41–#43, #47, #48): our own sign-up, each approved by the owner; signing in with Google
+   was dropped (it needed a second, public Google app).
 5. Deployment: Railway (API + Postgres), Vercel (web), EAS Android; deploy from `main` after CI.
+   **Next**, moved first: phones need a public HTTPS backend to connect Google.
 6. Evaluation v1: synthetic people with planted changes and causes (extend
    `backend/app/synthetic.py`), dev/held-out split, all baselines (stats-only, LLM without
    tools, general agent, experts, experts without verifier), router comparison, deterministic

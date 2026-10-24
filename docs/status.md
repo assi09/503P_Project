@@ -1,6 +1,6 @@
 # Project status
 
-The page to read first when picking the project up. Updated 2026-10-23.
+The page to read first when picking the project up. Updated 2026-10-24.
 
 ## Objective
 
@@ -17,17 +17,17 @@ priority**; the UI and data plumbing exist to serve them.
 
 | Area | State |
 |---|---|
-| Data | Takeout import (legacy layout); **live Google Health API** sign-in, client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)) |
-| Storage | Postgres in Docker, three migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts); `python -m app.sync pull` stores live days |
+| Data | Takeout import (legacy layout); **live Google Health API** client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)); each person connects their own Google account from the app (encrypted token, background sync of the whole history) |
+| Storage | Postgres in Docker, five migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer); `python -m app.sync pull` stores live days |
 | Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic plus a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** on the Data tab (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 57, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 455 backend and 51 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 516 backend and 66 mobile tests |
 
-**Not built yet:** the recovery score, nutrition
-columns, the API serving live data, deployment, tracing and metrics, the evaluation
-suite, the failure matrix and threat model.
+**Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
+check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
+proposes, tracing and metrics, the evaluation suite, the failure matrix and threat model.
 
 ## Local setup
 
@@ -107,29 +107,52 @@ To let someone else sign in, add their Google account as a test user in the cons
   question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.
 - **Nutrition waits for Sprint 2**: the expert exists but answers "no data yet" until the sync
   maps nutrition columns (only the API has them; Takeout's are "N/A").
+- **Each person sees only their own data.** Live Google Health days from the database; only the
+  owner falls back to the Takeout export, and only with no live data at all. New people get their
+  whole history on the first sync (the API has no lookback limit; 90 or 14 days per request).
+- **Chat in the app** (`POST /chat`): the request waits up to 55 s and a slower answer is stored
+  when ready; one question at a time per person; daily spending caps of $0.10 per person and $0.50
+  for the app, counted from each answer's stored cost.
+- **Look:** a landing page with an expanding hero, the "Track day" palette (cream, track orange,
+  sky blue; light by default with a System/Light/Dark switch), quiet pill buttons, and sign-in
+  pages with a photo beside the form. Photos are free to use (Pixabay, Unsplash licences).
 - **Platform:** OpenAI for the LLM; Railway (backend and Postgres) and Vercel (web) when deploying;
   Langfuse for agent traces and Prometheus/Grafana for API metrics; iOS TestFlight undecided.
 
 ## Next
 
-The approved plan, with the decisions from the 20-question session and the schedule, is in
-[roadmap.md](roadmap.md). In short: **Sprint 1 (Oct 22–28)** builds the agent end to end (LLM
-layer with a scripted fake, agent tools, general agent with the hypothesis loop and verifier,
-four experts with consult and the router, memory, live data and the agent served to the app);
-**Sprint 2 (Oct 29–Nov 4)** adds the recovery score, check-in, nutrition, daily runs, reminders
-and experiments, tracing, accounts, deployment and the first evaluation; November after that is
-buffer and hardening.
+The approved plan and schedule are in [roadmap.md](roadmap.md): **Sprint 1 (Oct 22–28)** builds the
+agent end to end; **Sprint 2 (Oct 29–Nov 4)** completes it and puts it online; November is buffer
+and hardening.
 
-Sprint 1 so far: LLM layer, agent tools, general agent, verifier, human-readable findings, the
-experts with consult (PR #28), the router (PR #29), the verifier's metric check (PR #30), chat storage (PR #31), the context builder for the conversation and attachments (PR #32), the advice guard (PR #33), the per-run test correction (PR #34) and the coverage and summary checks (PR #35) the memory tables with their write rules (PR #36) and memory retrieval with fact proposals (PR #37) are done. The memory and context design
-(kinds, scope, lifetime, retrieval, write path, injection defenses, evaluation) is in
-[architecture.md](architecture.md#memory-and-context-conversation-built-other-memory-designed). Next, in order:
+**Sprint 1 is done**, a few days early. The agent: LLM layer, tools, general agent, verifier,
+experts with consult (#28), router (#29), metric check (#30), chat storage (#31), context builder
+(#32), advice guard (#33), per-run test correction (#34), coverage and summary checks (#35), memory
+tables (#36) and retrieval (#37). Then, on 2026-10-24, the app around it:
 
-1. Live data and the agent served through the API to the app (Sprint 1, item 5). Decided: each
-   person's live data (the owner falls back to Takeout only without any), `POST /chat` waits for
-   the answer up to 60 s, and spending is capped per person per day and in total per day. New
-   people get their whole history on the first sync (the API has no lookback limit).
-2. Check-ins as data the tools can analyse, with the recovery score (Sprint 2).
+- Landing page (#39), "Track day" palette with light/dark and quieter buttons (#40), sign-in pages
+  redesigned (#46).
+- Accounts with approval (#41), the owner's `set-password` (#42), sign-in screens and data behind
+  sign-in (#43), each person's own live data (#44).
+- Real chat: `POST /chat` and the Ask screen on the agent (#45).
+- Connecting each person's Google Health from the app, with background sync (#47, #48).
+
+Fixes found on the way: the course name (503P, #38); the owner's sync-created account had no
+password and could not sign in (#42); the first question's error was invisible on the Ask screen
+(#45); evidence no longer falls back to made-up mock evidence (#45); on the web, images placed only
+by their edges took the file's pixel size, and the scroll hero did not animate until it read a
+derived value (#39, #46).
+
+Next, in order:
+
+1. **Try connecting Google with a real sign-in** (the owner, from the browser): the flow is tested
+   with a fake Google and reaches Google's page, but no real sign-in has gone through yet.
+2. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
+   Postgres) with a public HTTPS address, a "Web application" OAuth client listing its
+   `/google/callback`, the web build on Vercel, and the app in Expo Go pointing at the API.
+3. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
+   score (Sprint 2).
+4. Tracing (Langfuse) and the first evaluation (Sprint 2).
 
 ## What has been tested
 
@@ -155,7 +178,14 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the lead already reads (B): B is about half the cost and time, A states the question's premise
   and has fewer rejected claims. Undecided.
 
-Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
+- **Chat through the API:** one real question on the owner's live data: routed to sleep by Jev,
+  answered in 11.3 s with 4 verified claims for $0.011.
+- **Accounts, chat and Google connect** are covered by scripted tests (no paid calls): access for
+  each account state, people never seeing each other's data or chat, spending caps, slow answers,
+  and the Google flow end to end with a fake Google. The screens were clicked through with
+  Playwright on phone and desktop sizes, in light and dark.
+
+Spent so far on real runs: about $0.59 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -223,3 +253,7 @@ Spent so far on real runs: about $0.58 of OpenAI and $0.004 of Jev ([costs.md](c
     unreachable from a phone. Deployment needs a public HTTPS address and a "Web application" OAuth
     client listing its `/google/callback`. Sign-ins in progress and running syncs are kept in
     memory, per server process.
+18. **On the web, `?google=` stays in the address** after Google sends the browser back, so a
+    reload shows the "connected" notice again.
+19. **No screen yet for facts the agent proposes**; they are stored as proposed. Jev's routing and
+    guard costs (about $0.00007 a question) are not added to the stored cost of an answer.
