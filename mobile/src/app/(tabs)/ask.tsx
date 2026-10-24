@@ -69,6 +69,14 @@ export default function AskScreen() {
     if (findingId) router.setParams({ findingId: undefined });
   }, [findingId]);
 
+  // Once a slow answer shows up in the chat, its "taking longer" message has done its job.
+  const lastRole = chat.data?.at(-1)?.role;
+  const { reset: resetSend } = send;
+  const slow = (send.error as { code?: string } | null)?.code === 'still_answering';
+  useEffect(() => {
+    if (slow && lastRole === 'assistant') resetSend();
+  }, [slow, lastRole, resetSend]);
+
   const findings = useMemo(() => report.data?.findings ?? [], [report.data]);
   const findingTitles = useMemo(
     () => Object.fromEntries(findings.map((f) => [f.id, f.title])),
@@ -78,6 +86,13 @@ export default function AskScreen() {
   const pendingText = send.isPending ? send.variables?.text : undefined;
   const pendingExpert = send.variables?.options.expert ?? expert;
   const started = messages.length > 0 || pendingText !== undefined;
+  const sendError = send.error && (
+    <Text variant="caption" color="danger" style={{ textAlign: 'center' }}>
+      {send.error.message || 'Could not send your message.'}
+      {/* A slow answer is still coming; other errors can be retried. */}
+      {slow ? '' : ' Try again.'}
+    </Text>
+  );
 
   useEffect(() => {
     scroll.current?.scrollToEnd({ animated: true });
@@ -144,15 +159,13 @@ export default function AskScreen() {
                   <Thinking expert={pendingExpert} />
                 </>
               )}
-              {send.error && (
-                <Text variant="caption" color="danger" style={{ textAlign: 'center' }}>
-                  {send.error.message || 'Could not send your message.'} Try again.
-                </Text>
-              )}
+              {sendError}
             </ScrollView>
           ) : (
             <Animated.View exiting={FadeOut.duration(150)} style={styles.greeting}>
               <Greeting expert={expert} />
+              {/* The first question's error, e.g. no data yet, shows before any conversation. */}
+              {sendError}
             </Animated.View>
           )
         }
