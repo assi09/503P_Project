@@ -118,3 +118,57 @@ describe('http sessions', () => {
     expect(fetchMock.mock.calls[1][0]).toBe('http://api.test/admin/access-requests/id%2F1/reject');
   });
 });
+
+describe('Google Health', () => {
+  it('connects in the mock, syncs for a while, then records the sync', async () => {
+    jest.useFakeTimers();
+    try {
+      const status = mockClient.getGoogleStatus();
+      await jest.advanceTimersByTimeAsync(500);
+      expect((await status).status).toBe('none');
+
+      const connecting = mockClient.connectGoogle();
+      await jest.advanceTimersByTimeAsync(500);
+      await expect(connecting).resolves.toEqual({ url: '' });
+      const syncing = mockClient.getGoogleStatus();
+      await jest.advanceTimersByTimeAsync(500);
+      expect(await syncing).toMatchObject({ status: 'active', syncing: true });
+
+      await jest.advanceTimersByTimeAsync(3000);
+      const done = mockClient.getGoogleStatus();
+      await jest.advanceTimersByTimeAsync(500);
+      expect((await done).syncing).toBe(false);
+      expect((await done).lastSync).not.toBeNull();
+
+      const disconnecting = mockClient.disconnectGoogle();
+      await jest.advanceTimersByTimeAsync(500);
+      expect((await disconnecting).status).toBe('none');
+      const refused = mockClient.syncGoogle();
+      const assertion = expect(refused).rejects.toMatchObject({ code: 'not_connected' });
+      await jest.advanceTimersByTimeAsync(500);
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('calls the Google endpoints', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.getGoogleStatus();
+    await client.connectGoogle();
+    await client.syncGoogle();
+    await client.disconnectGoogle();
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.method ?? 'GET'])).toEqual([
+      ['http://api.test/google/status', 'GET'],
+      ['http://api.test/google/connect', 'POST'],
+      ['http://api.test/google/sync', 'POST'],
+      ['http://api.test/google/disconnect', 'POST'],
+    ]);
+  });
+});
