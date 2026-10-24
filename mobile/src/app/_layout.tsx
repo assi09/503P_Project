@@ -76,8 +76,8 @@ function Navigation() {
             approval: signed out, pending or rejected, and approved. */}
         <Stack.Protected guard={state.phase === 'signedOut'}>
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
-          <Stack.Screen name="sign-up" options={{ title: '' }} />
-          <Stack.Screen name="sign-in" options={{ title: '' }} />
+          <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         </Stack.Protected>
         <Stack.Protected guard={state.phase === 'signedIn' && !approved}>
           <Stack.Screen name="waiting" options={{ headerShown: false }} />
