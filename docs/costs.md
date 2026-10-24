@@ -76,3 +76,5 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-24 | Request-intent routing: one synthetic mixed nutrition log/analysis message, Jev (Nutrition + mixed, 0.351 s; no Google writes or OpenAI calls) | $0.000048342 |
 | 2026-10-24 | Logging tools, synthetic meal with no history: draft prepared, but model finished without submission (5 calls); OpenAI $0.005649, Jev router/guard $0.000067410; no Google writes | $0.005716410 |
 | 2026-10-24 | Same after explicit logging-completion instruction: one draft, submitted in 2 calls; OpenAI $0.002841150, Jev router/guard $0.000066948; no Google writes | $0.002908098 |
+| 2026-10-25 | First real Google write, owner's app session: "log a snack" (asked for the time), the time reply (misread as a sleep question), the same in one message (draft) | $0.0166 |
+| 2026-10-25 | Answer and time fixes, owner's data: the sleep question again (one natural reply, 4 claims), "log a snack… just now" (still asked for the time: the tool's own description said to) | $0.0140 |

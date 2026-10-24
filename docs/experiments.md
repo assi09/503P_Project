@@ -233,3 +233,28 @@ Actual Google create/delete, asynchronous operation reconciliation, existing-pro
 matching, nutrition sync/deduplication, workout telemetry and photo estimates remain unvalidated
 or unbuilt. `FA_GOOGLE_WRITES_ENABLED` stays false. Real account test entries and cleanup need
 explicit approval. Expo Doctor's unrelated SDK 57 patch mismatch was fixed separately in PR #51.
+
+## First real Google write, and answers that read like one reply (2026-10-25)
+
+**Tested:** the owner connected Google from the app (first real connection: 4 read scopes, a
+7-day resync), asked to log a 10 kcal test snack, edited it to 14 kcal, allowed the nutrition write
+scope when asked, confirmed it, saw it in the Fitbit app and read it back from Google (name, energy
+and meal matched), then undid it; the delete went through. Total chat cost $0.0166.
+**Showed:** the write path works end to end. It also showed four chat problems:
+- The agent did not know the time: the task said "Today is" the last day of data, so "just now" got
+  a question back.
+- Its follow-up ("00:53, +02:00") reached the agent without the request it answered, and the model
+  answered the first turn's sleep question instead.
+- Answers pasted each verified claim as its own sentence ("time asleep did not clearly change…"
+  four times), lower-case, and the chips all read "Evidence".
+- The evidence card showed the raw p (0.016) for a time-asleep drop the answer called "not clearly
+  changed": correct after correcting for the run's 6 tests (0.096), but it looked like a
+  contradiction. Recomputing the four tests from the stored data reproduced every value exactly.
+**Changed (PR #54):** the local time and offset go into every task; a reply to a logging question
+reaches the agent with its request; the summary is the answer (2 to 4 connected sentences), claims
+stay as evidence; a hedged sentence may give a borderline direction for a tested metric; "slept"
+counts as time asleep; chips name their metric; the card shows units, the p-value the answer was
+judged on and a plain verdict. A rerun of the sleep question ($0.0098) gave one natural paragraph.
+That rerun ran 5 tests instead of 6, so the same drop came out significant (0.04) and was called a
+small real dip: open issue 20. "Log a snack… just now" still asked for the time ($0.0042), because
+the logging tool's own description told the model to ask; fixed, not yet rerun.
