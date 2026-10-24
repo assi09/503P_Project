@@ -303,3 +303,56 @@ def test_setting_a_password_signs_out_every_device(client, engine, monkeypatch):
     monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: next(answers))
     assert cli.main(["set-password", "person@example.com"]) == 0
     assert client.get("/auth/me", headers=headers(token)).status_code == 401
+
+
+# Who sees the data
+
+
+@pytest.fixture
+def owner_data(monkeypatch):
+    from datetime import date
+
+    from app.api import store
+    from app.ingest.takeout import DailyData
+    from app.synthetic import generate
+
+    loaded = store.analyze(DailyData(frame=generate(date(2026, 7, 1), 30).frame), T0)
+    monkeypatch.setattr(store, "_load", lambda: loaded)
+    return loaded
+
+
+DATA_PATHS = ["/data/status", "/reports/latest", "/evidence/unknown"]
+
+
+@pytest.mark.parametrize("path", DATA_PATHS)
+def test_data_needs_sign_in(client, owner_data, path):
+    response = client.get(path)
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "signed_out"
+
+
+@pytest.mark.parametrize("path", DATA_PATHS)
+def test_pending_accounts_see_no_data(client, owner_data, path):
+    token = sign_up(client, "person@example.com")["token"]
+    response = client.get(path, headers=headers(token))
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_approved"
+
+
+@pytest.mark.parametrize("path", DATA_PATHS)
+def test_other_approved_accounts_never_see_the_owners_data(client, engine, owner_data, path):
+    token = sign_up(client, "person@example.com")["token"]
+    with session_scope(engine) as session:
+        session.scalar(select(User).where(User.email == "person@example.com")).status = "approved"
+    response = client.get(path, headers=headers(token))
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "no_data"
+
+
+def test_the_owner_sees_their_data(client, engine, owner_data):
+    token = owner_token(client, engine)
+    assert client.get("/data/status", headers=headers(token)).status_code == 200
+    report = client.get("/reports/latest", headers=headers(token))
+    assert report.status_code == 200
+    evidence_id = next(iter(owner_data.evidence))
+    assert client.get(f"/evidence/{evidence_id}", headers=headers(token)).status_code == 200

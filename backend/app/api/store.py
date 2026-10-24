@@ -1,17 +1,22 @@
 """Loads the user's daily metrics and the analysis the API serves.
 
 Single-user for now: the daily table comes from the Takeout export at `settings.export_dir` and is
-analyzed once, then cached. Per-user storage replaces this once accounts exist.
+analyzed once, then cached; only the owner's account may read it. Per-user storage replaces this.
 """
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
+from typing import Annotated
+
+from fastapi import Depends
 
 from app.analysis.evidence import Evidence
 from app.analysis.report import Report, build_report
 from app.analysis.screen import screen
+from app.api.auth import data_owner
 from app.config import settings
+from app.db.models import User
 from app.ingest.takeout import DailyData, load_daily
 
 
@@ -36,6 +41,6 @@ def _load() -> LoadedData:
     return analyze(daily, datetime.now(UTC))
 
 
-def get_data() -> LoadedData:
-    """FastAPI dependency; tests override it with synthetic data."""
+def get_data(_: Annotated[User, Depends(data_owner)]) -> LoadedData:
+    """FastAPI dependency: only the signed-in owner gets the data. Tests override it."""
     return _load()
