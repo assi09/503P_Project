@@ -152,16 +152,16 @@ def _route_step(route: Route) -> dict:
 
 def _notes(frame: pd.DataFrame, route: Route, result: AgentResult) -> list[str]:
     """Fixed sentences for what the answer could not cover, so a gap is said, not hidden."""
-    notes = [
-        f"There is no {name} data to look at yet, so this answer leaves that part out."
-        for name in route.consult
-        if name in EXPERTS and not available(EXPERTS[name], frame)
+    missing = [
+        name for name in route.consult if name in EXPERTS and not available(EXPERTS[name], frame)
     ]
-    notes += [
-        f"This answer does not cover the {name} side of the question: nothing about it could "
-        "be verified."
-        for name in result.uncovered
-    ]
+    notes = [f"There is no {name} data yet, so it is left out here." for name in missing]
+    if result.uncovered:
+        names = " or ".join(result.uncovered)
+        notes.append(
+            f"Your {names} data was not checked for this answer; ask about it if you would "
+            "like it looked at."
+        )
     return notes
 
 

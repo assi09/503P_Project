@@ -209,6 +209,11 @@ taken from the model or the app, and it never blocks a draft: without a sign-in 
 error it is marked unavailable and only the given values are sent. Which metrics are read depends on
 the kind of workout; see [workouts.md](workouts.md).
 
+Questions about one day use `compare_day` (one day against the middle half of the 28 days before,
+the rule the Today screen uses). Its claims have their own kind, `day`, whose direction must match
+where the day sits (up above the range, down below, none within); it describes the day and is
+never treated as a test of a change.
+
 The following requirements also cover the remaining capabilities:
 
 Workout and nutrition logging are a core planned extension; see

@@ -321,3 +321,21 @@ treated a log-only request as an unanswered question. Fixed: a request only to l
 coverage check; a mixed one keeps it. After the fix, "tennis for an hour this morning at 9" gave
 a TENNIS draft with no note (no steps that hour, so none were added). Both drafts were cancelled.
 **Not tested:** types the owner has never done on real data (placed by rule), swims, elevation.
+
+## Answers about today, and consults that agree with the summary (2026-10-25)
+
+**Seen by the user:** "am i recovered today?" was answered with last week's trends, and ended with
+two fixed notes, one saying the sleep side was not covered although the text described sleep.
+**Why (from the stored answer):** the Recovery lead consulted Sleep, which verified its claims,
+but the lead kept only its own four claims, so the coverage check marked sleep as uncovered; the
+router had also asked for activity, which was never consulted. No tool compared one day with the
+person's usual: the Today screen's analysis was not available to the agent.
+**Changed:** a `compare_day` tool (one day against the middle half of the 28 days before, the
+Today rule) with its own claim kind `day`, checked against that tool's position (above, below,
+within); a summary may say "higher than usual today" when it shows that; the prompt sends questions
+about today or last night to it. A consulted expert's verified claims are carried into the answer
+when the summary draws on its metrics and the lead cited none of them (through the guard). The
+notes are reworded ("Your activity data was not checked for this answer...").
+**Real run ($0.0304, run through `ask()` directly because the day's chat cap was reached):** 7
+`compare_day` calls, 9 day claims (4 carried from Sleep), a summary that answers for today, and
+one note left for activity. Still seen: 5 correlation tests the question did not need.

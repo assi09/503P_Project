@@ -22,7 +22,7 @@ from app.analysis.screen import benjamini_hochberg
 
 ALPHA = 0.05
 
-ClaimKind = Literal["change", "association", "no_change", "data_quality"]
+ClaimKind = Literal["change", "association", "no_change", "data_quality", "day"]
 Direction = Literal["up", "down"]
 
 
@@ -232,6 +232,10 @@ LEVEL_KEYS = (
     "mean_after",
     "mean_weekend",
     "mean_weekday",
+    "value",
+    "usual_median",
+    "usual_low",
+    "usual_high",
 )
 
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
@@ -409,8 +413,20 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
         reasons.append("claims no change, but the cited evidence shows a significant one")
     if claim.kind == "data_quality" and not any(e.tool == "coverage" for e in cited):
         reasons.append("a data-quality claim must cite coverage evidence")
+    if claim.kind == "day":
+        # Where one day sits against the usual range: up for above, down for below, none within.
+        days = [e for e in about if e.tool == "compare_day"]
+        expected = {"above": "up", "below": "down", "within": None}
+        if not days:
+            reasons.append("a day claim must cite compare_day evidence about its metric")
+        elif {expected.get(e.stats.get("position")) for e in days} != {claim.direction}:
+            position = days[0].stats.get("position")
+            reasons.append(
+                f"the day is {position} the usual range"
+                + ("" if position == "within" else ", so the claim's direction must say so")
+            )
 
-    if claim.direction and claim.kind == "change":
+    if claim.direction and claim.kind in ("change", "day"):
         up, down = bool(UP_WORDS.search(claim.text)), bool(DOWN_WORDS.search(claim.text))
         if (
             claim.direction == "up"
@@ -503,6 +519,13 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     tested, significant or not: that is the honest way to describe a borderline result."""
     supported = {
         metric for e in evidence if e.tool in TEST_TOOLS and _significant(e) for metric in e.metrics
+    }
+    # "Higher than usual today" describes where a day sits, which compare_day shows.
+    supported |= {
+        metric
+        for e in evidence
+        if e.tool == "compare_day" and e.stats.get("position") in ("above", "below")
+        for metric in e.metrics
     }
     tested = {metric for e in evidence if e.tool in TEST_TOOLS for metric in e.metrics}
     flagged: list[str] = []
