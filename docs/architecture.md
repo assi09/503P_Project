@@ -200,7 +200,7 @@ name/time or workout type/interval), and never blindly retries a create. Food na
 are not put in proposal-tool trace metadata; SQL errors are handled without logging bound values.
 Unknown/pending operations and interrupted execution stay blocked; automatic reconciliation is
 still planned. The provider writer is tested with fake HTTP, and one real food create and delete went through on
-2026-10-25; workout writes are untested for real. Real writes are gated by
+2026-10-25, and one real workout create and delete after PR #57. Real writes are gated by
 `FA_GOOGLE_WRITES_ENABLED`, off by default.
 
 The following requirements also cover the remaining capabilities:

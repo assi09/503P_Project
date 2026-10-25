@@ -259,3 +259,25 @@ That rerun ran 5 tests instead of 6, so the same drop came out significant (0.04
 small real dip: open issue 20. "Log a snack… just now" still asked for the time ($0.0042), because
 the logging tool's own description told the model to ask. After fixing that, the same message
 ($0.0076) gave a draft at the current local time (UTC+02:00) with no question back.
+
+## First real workout write (PR #57, 2026-10-25)
+
+**Tested:** whether a confirmed workout reaches Google. Reading Google's Exercise reference first
+showed that `displayName` and `metricsSummary` are required and our payload left them out (and
+`metricsSummary` entirely when no distance was given), so PR #57 sends both. Then, with
+`FA_GOOGLE_WRITES_ENABLED=true` for the test server only, the owner asked in the app "Log a 20
+minute walk that ended just now" (no distance, the least certain case), granted the workout write
+scope when the card asked, and confirmed.
+**Showed:** the Activity expert prepared the draft in one answer ($0.0104); Google accepted the
+workout with an empty `metricsSummary`. Read back from Google, the type, name ("Walk"), active
+duration and interval matched (Google returns the times in UTC with the same offsets). The walk
+appeared in the Fitbit app; undo deleted it and Google then answered 404 for the record.
+Two observations:
+- Fitbit labels the entry's source as **"Cronometer"**, not this app. We send no `dataSource`;
+  how Google attributes a write is not documented, so this is open.
+- The entry shows only the duration, while a walk Fitbit detected itself shows steps, distance,
+  calories, pace and heart rate. **Next:** when a workout is proposed, read the tracker's
+  minute-level steps, distance, energy and heart rate for that interval and put the summary in
+  the proposal; warn on the card when the tracker already recorded an exercise over that time;
+  log with only the given values when there is no tracker data; values the person gave win over
+  measured ones (decided with the user).

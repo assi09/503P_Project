@@ -53,7 +53,7 @@ Real Google writes remain off by default. Fake-provider end-to-end tests and UI 
 pass; two real synthetic model runs prepared drafts without Google writes, with the final run
 submitting in two calls. On 2026-10-25 one real food entry was created from the app, read back
 from Google and deleted by undo (see [experiments.md](experiments.md#first-real-google-write-and-answers-that-read-like-one-reply-2026-10-25));
-workout writes are untested for real. Reconciliation of pending operations or process crashes
+one real workout (no distance) was created and undone the same way after PR #57. Reconciliation of pending operations or process crashes
 remains a prerequisite to leaving writes on. A refresh reads the saved status;
 it does not currently poll Google operations. Nutrition history/mapping, food lookup, serving
 arithmetic, workout telemetry summaries, photo input and hydration are still planned.
