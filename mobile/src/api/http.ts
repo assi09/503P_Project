@@ -6,6 +6,7 @@ import type {
   Account,
   ApiClient,
   ChatMessage,
+  Conversation,
   Credentials,
   DataStatus,
   DaySummary,
@@ -124,13 +125,32 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         `/metrics/${encodeURIComponent(metric)}?days=${days}${end ? `&end=${end}` : ''}`,
       ),
     getEvidence: (id) => request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`),
-    getChat: () => request<ChatMessage[]>(baseUrl, '/chat'),
+    getChat: (conversationId) =>
+      request<ChatMessage[]>(
+        baseUrl,
+        conversationId ? `/chat?conversation=${encodeURIComponent(conversationId)}` : '/chat',
+      ),
+    getConversations: () => request<Conversation[]>(baseUrl, '/conversations'),
+    createConversation: () => post<Conversation>(baseUrl, '/conversations'),
+    renameConversation: (id, title) =>
+      request<Conversation>(baseUrl, `/conversations/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      }),
+    deleteConversation: (id) =>
+      request<void>(baseUrl, `/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getGoogleStatus: () => request<GoogleStatus>(baseUrl, '/google/status'),
     connectGoogle: (capability) =>
       post<{ url: string }>(baseUrl, '/google/connect', capability ? { capability } : undefined),
     syncGoogle: () => post<GoogleStatus>(baseUrl, '/google/sync'),
     disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
-    sendMessage: (text, { expert, depth, attachment }) =>
-      post<ChatMessage[]>(baseUrl, '/chat', { text, expert, depth, attachment }, CHAT_TIMEOUT_MS),
+    sendMessage: (text, { expert, depth, attachment, conversationId }) =>
+      post<ChatMessage[]>(
+        baseUrl,
+        '/chat',
+        { text, expert, depth, attachment, conversationId },
+        CHAT_TIMEOUT_MS,
+      ),
   };
 }

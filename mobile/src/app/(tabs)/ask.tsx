@@ -6,6 +6,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -14,21 +15,26 @@ import {
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useChat, useReport, useSendMessage } from '@/api/hooks';
+import { type ChatTarget, useChat, useConversations, useReport, useSendMessage } from '@/api/hooks';
 import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
 import { AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
 import { Composer } from '@/components/composer';
+import { ConversationList } from '@/components/conversations';
 import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { metricLabel } from '@/lib/format';
 import { DURATION, EASE_OUT } from '@/lib/motion';
+import { useWide } from '@/lib/layout';
 import { floatingTabBar } from '@/lib/platform';
 import { column, radius, spacing, useColors } from '@/theme';
 
 const MAX_LENGTH = 500;
+// On wide screens the conversation is a quarter wider than other pages' column, beside the list.
+const WIDE_CHAT = 900;
+const SIDEBAR = 272;
 
 // The composer moves from the middle of the empty page down to the bottom of the conversation.
 const MOVE = LinearTransition.duration(DURATION.normal).easing(EASE_OUT);
@@ -44,8 +50,28 @@ function attachmentLabel(attachment: Attachment | undefined, findings: Finding[]
 
 export default function AskScreen() {
   const colors = useColors();
-  const { findingId, metric } = useLocalSearchParams<{ findingId?: string; metric?: string }>();
-  const chat = useChat();
+  const { findingId, metric, c } = useLocalSearchParams<{
+    findingId?: string;
+    metric?: string;
+    c?: string; // a conversation to open, e.g. from the chats page
+  }>();
+  const wide = useWide();
+  const [target, setTarget] = useState<ChatTarget>('latest');
+  const [seenChat, setSeenChat] = useState<string>();
+  if (c !== seenChat) {
+    setSeenChat(c);
+    if (c) setTarget(c);
+  }
+  useEffect(() => {
+    if (c) router.setParams({ c: undefined });
+  }, [c]);
+  const chat = useChat(target);
+  const conversations = useConversations();
+  // The open conversation: the one asked for, or the latest when none was.
+  const openId =
+    target === 'latest' ? conversations.data?.[0]?.id : target === 'new' ? undefined : target;
+  const openTitle =
+    target === 'new' ? 'New chat' : conversations.data?.find((x) => x.id === openId)?.title;
   const report = useReport();
   const send = useSendMessage();
   const [draft, setDraft] = useState('');
@@ -112,31 +138,59 @@ export default function AskScreen() {
     const trimmed = text.trim();
     if (!trimmed || send.isPending) return;
     send.mutate(
-      { text: trimmed, options: { expert, depth, ...(attachment && { attachment }) } },
+      { text: trimmed, options: { expert, depth, ...(attachment && { attachment }) }, target },
       {
         // Keep the text if sending fails, so it can be retried.
-        onSuccess: () => {
+        onSuccess: (added) => {
           setDraft('');
           setAttachment(undefined);
+          // A new chat now exists: keep showing it by its id.
+          const id = added[0]?.conversationId;
+          if (id && target !== id) setTarget(id);
         },
       },
     );
   }
+
+  function openChat(next: ChatTarget) {
+    send.reset();
+    setDraft('');
+    setAttachment(undefined);
+    setTarget(next);
+  }
+
+  const width = wide ? { maxWidth: WIDE_CHAT } : null;
 
   const suggestions =
     attachment?.kind === 'finding'
       ? FINDING_SUGGESTIONS
       : expertInfo(expert).suggestions;
 
-  return (
+  const conversation = (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text variant={started ? 'headline' : 'display'} accessibilityRole="header">
-          Ask
+      <View style={[styles.header, width, { paddingTop: insets.top + spacing.md }]}>
+        <Text
+          variant={started ? 'headline' : 'display'}
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={{ flex: 1 }}
+        >
+          {started && openTitle ? openTitle : 'Ask'}
         </Text>
+        {/* On phones the list of chats is a page of its own; wide screens show it beside. */}
+        {!wide && (
+          <View style={styles.headerActions}>
+            <HeaderButton
+              icon="albums-outline"
+              label="Your chats"
+              onPress={() => router.push('/chats')}
+            />
+            <HeaderButton icon="create-outline" label="New chat" onPress={() => openChat('new')} />
+          </View>
+        )}
       </View>
 
       <QueryState query={chat}>
@@ -145,7 +199,7 @@ export default function AskScreen() {
             <ScrollView
               ref={scroll}
               style={{ flex: 1 }}
-              contentContainerStyle={styles.messages}
+              contentContainerStyle={[styles.messages, width]}
               keyboardShouldPersistTaps="handled"
             >
               {messages.map((message) => (
@@ -172,7 +226,7 @@ export default function AskScreen() {
               {sendError}
             </ScrollView>
           ) : (
-            <Animated.View exiting={FadeOut.duration(150)} style={styles.greeting}>
+            <Animated.View exiting={FadeOut.duration(150)} style={[styles.greeting, width]}>
               <Greeting expert={expert} />
               {/* The first question's error, e.g. no data yet, shows before any conversation. */}
               {sendError}
@@ -184,7 +238,7 @@ export default function AskScreen() {
       {started && attachment?.kind === 'finding' && (
         <ScrollView
           horizontal
-          style={styles.quickRail}
+          style={[styles.quickRail, width]}
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.quickReplies}
@@ -199,6 +253,7 @@ export default function AskScreen() {
         layout={MOVE}
         style={[
           styles.composer,
+          width,
           // Above the floating tab bar, except while the keyboard covers it.
           { paddingBottom: started ? (keyboardOpen ? 0 : tabBarHeight) + spacing.sm : spacing.md },
         ]}
@@ -222,7 +277,7 @@ export default function AskScreen() {
       </Animated.View>
 
       {!started && (
-        <Animated.View exiting={FadeOut.duration(150)} style={styles.below}>
+        <Animated.View exiting={FadeOut.duration(150)} style={[styles.below, width]}>
           <View style={styles.suggestions}>
             {suggestions.map((text, i) => (
               <Animated.View key={`${expert}-${text}`} entering={FadeIn.delay(i * 40).duration(DURATION.fast)}>
@@ -243,6 +298,49 @@ export default function AskScreen() {
         }}
       />
     </KeyboardAvoidingView>
+  );
+
+  if (!wide) return conversation;
+  return (
+    <View style={[styles.split, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.sidebar,
+          { borderColor: colors.border, paddingTop: insets.top + spacing.lg },
+        ]}
+      >
+        <ConversationList
+          current={openId}
+          newOpen={target === 'new'}
+          onSelect={(id) => openChat(id)}
+          onNew={() => openChat('new')}
+        />
+      </View>
+      {conversation}
+    </View>
+  );
+}
+
+function HeaderButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'albums-outline' | 'create-outline';
+  label: string;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => [styles.headerButton, pressed && { backgroundColor: colors.track }]}
+    >
+      <Ionicons name={icon} size={20} color={colors.text} />
+    </Pressable>
   );
 }
 
@@ -283,7 +381,29 @@ function useKeyboardOpen(): boolean {
 }
 
 const styles = StyleSheet.create({
-  header: { ...column, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  header: {
+    ...column,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerActions: { flexDirection: 'row', gap: spacing.xs },
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  split: { flex: 1, flexDirection: 'row' },
+  sidebar: {
+    width: SIDEBAR,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
   greeting: {
     ...column,
     flex: 1,

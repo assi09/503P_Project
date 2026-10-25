@@ -182,3 +182,30 @@ describe('days', () => {
     });
   });
 });
+
+describe('conversations', () => {
+  const OPTIONS = { expert: 'auto' as const, depth: 'quick' as const };
+
+  it('keeps each chat apart, names it by its first question, and deletes it with its messages', async () => {
+    const first = await mockClient.createConversation();
+    expect(first.title).toBe('New chat');
+    await mockClient.sendMessage('How   did I\nsleep?', { ...OPTIONS, conversationId: first.id });
+    const second = await mockClient.createConversation();
+    await mockClient.sendMessage('Steps this week?', { ...OPTIONS, conversationId: second.id });
+
+    const list = await mockClient.getConversations();
+    expect(list[0]).toMatchObject({ id: second.id, title: 'Steps this week?', messages: 2 });
+    expect(list.find((c) => c.id === first.id)?.title).toBe('How did I sleep?');
+    const sleep = await mockClient.getChat(first.id);
+    expect(sleep.map((m) => m.text)[0]).toBe('How   did I\nsleep?');
+    expect(sleep.every((m) => m.conversationId === first.id)).toBe(true);
+    expect((await mockClient.getChat())[0].text).toBe('Steps this week?'); // the latest
+
+    await mockClient.renameConversation(first.id, 'Sleep');
+    await mockClient.deleteConversation(second.id);
+    const left = await mockClient.getConversations();
+    expect(left.map((c) => c.title)).toContain('Sleep');
+    expect(left.some((c) => c.id === second.id)).toBe(false);
+    await expect(mockClient.getChat(second.id)).rejects.toMatchObject({ status: 404 });
+  });
+});

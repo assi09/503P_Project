@@ -180,3 +180,30 @@ describe('days', () => {
     ]);
   });
 });
+
+describe('conversations', () => {
+  it('reads, sends to and manages conversations by path', async () => {
+    const fetchMock = respond(200, []);
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.getChat();
+    await client.getChat('c 1');
+    await client.getConversations();
+    await client.createConversation();
+    await client.renameConversation('c1', 'Sleep');
+    await client.deleteConversation('c1');
+    await client.sendMessage('Hi', { expert: 'auto', depth: 'quick', conversationId: 'c1' });
+    const calls = fetchMock.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET']);
+    expect(calls).toEqual([
+      ['http://api.test/chat', 'GET'],
+      ['http://api.test/chat?conversation=c%201', 'GET'],
+      ['http://api.test/conversations', 'GET'],
+      ['http://api.test/conversations', 'POST'],
+      ['http://api.test/conversations/c1', 'PATCH'],
+      ['http://api.test/conversations/c1', 'DELETE'],
+      ['http://api.test/chat', 'POST'],
+    ]);
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({ title: 'Sleep' });
+    expect(JSON.parse(fetchMock.mock.calls[6][1].body)).toMatchObject({ conversationId: 'c1' });
+  });
+});

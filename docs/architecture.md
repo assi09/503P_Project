@@ -209,6 +209,13 @@ taken from the model or the app, and it never blocks a draft: without a sign-in 
 error it is marked unavailable and only the given values are sent. Which metrics are read depends on
 the kind of workout; see [workouts.md](workouts.md).
 
+**Conversations.** A person's chats are separate conversations (migration 0007 filed the earlier
+single thread as the first). A run is given its own conversation's recent turns; memory is the
+person's and shared by all of them: facts, findings, answers, and verified claims from their other
+conversations of the last 60 days (memory kind `chat`, with their evidence), which the context
+builder picks by the question's metrics, so an answer can point to what another chat found.
+Deleting a conversation deletes its messages; facts and findings stay.
+
 Questions about one day use `compare_day` (one day against the middle half of the 28 days before,
 the rule the Today screen uses). Its claims have their own kind, `day`, whose direction must match
 where the day sits (up above the range, down below, none within); it describes the day and is

@@ -12,6 +12,7 @@ import type {
   Attachment,
   ChatMessage,
   ContextQuestion,
+  Conversation,
   DataStatus,
   DayMetric,
   DaySummary,
@@ -395,6 +396,33 @@ function delay<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(structuredClone(value)), LATENCY_MS));
 }
 
+// Like the backend: each chat is a conversation, named by its first question until renamed.
+const NEW_CHAT = 'New chat';
+let conversations: Conversation[] = [];
+let nextConversation = 0;
+
+function conversationTitle(text: string): string {
+  const title = text.split(/\s+/).filter(Boolean).join(' ') || NEW_CHAT;
+  return title.length <= 60 ? title : `${title.slice(0, 59).trimEnd()}…`;
+}
+
+function newConversation(): Conversation {
+  const now = new Date().toISOString();
+  const conversation = {
+    id: `c${++nextConversation}`,
+    title: NEW_CHAT,
+    messages: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  conversations = [...conversations, conversation];
+  return { ...conversation };
+}
+
+function latestConversation(): Conversation | undefined {
+  return [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
 function message(fields: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage {
   return { ...fields, id: `m${chat.length + 1}`, createdAt: new Date().toISOString() };
 }
@@ -703,16 +731,63 @@ export const mockClient: ApiClient = {
     return updated ? delay(updated) : Promise.reject(new Error('Unknown question'));
   },
 
-  getChat: () => delay(chat),
+  getChat: (conversationId) => {
+    const id = conversationId ?? latestConversation()?.id;
+    if (conversationId && !conversations.some((c) => c.id === conversationId)) {
+      return Promise.reject(new ApiError('No such conversation.', 'not_found', 404));
+    }
+    return delay(chat.filter((m) => m.conversationId === id));
+  },
+
+  getConversations: () =>
+    delay(
+      [...conversations]
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map((c) => ({ ...c, messages: chat.filter((m) => m.conversationId === c.id).length })),
+    ),
+
+  createConversation: () => delay(newConversation()),
+
+  renameConversation: (id, title) => {
+    const conversation = conversations.find((c) => c.id === id);
+    if (!conversation) {
+      return Promise.reject(new ApiError('No such conversation.', 'not_found', 404));
+    }
+    conversation.title = conversationTitle(title);
+    return delay({ ...conversation });
+  },
+
+  deleteConversation: (id) => {
+    conversations = conversations.filter((c) => c.id !== id);
+    chat = chat.filter((m) => m.conversationId !== id);
+    return delay(undefined);
+  },
 
   sendMessage: (text, options) => {
     if (options.expert === 'nutrition') {
       return Promise.reject(new Error('The nutrition expert is not available yet.'));
     }
+    const conversation = options.conversationId
+      ? conversations.find((c) => c.id === options.conversationId)
+      : (latestConversation() ?? newConversation());
+    if (!conversation) {
+      return Promise.reject(new ApiError('No such conversation.', 'not_found', 404));
+    }
+    if (conversation.title === NEW_CHAT) conversation.title = conversationTitle(text);
+    conversation.updatedAt = new Date().toISOString();
     const { attachment } = options;
-    const added = [message({ role: 'user', text, evidenceIds: [], ...(attachment && { attachment }) })];
+    const conversationId = conversation.id;
+    const added = [
+      message({
+        role: 'user',
+        text,
+        evidenceIds: [],
+        conversationId,
+        ...(attachment && { attachment }),
+      }),
+    ];
     chat = [...chat, ...added];
-    const answer = message(reply(text, options));
+    const answer = message({ ...reply(text, options), conversationId });
     chat = [...chat, answer];
     return delay([...added, answer]);
   },

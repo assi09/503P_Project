@@ -150,3 +150,13 @@ def test_report_without_enough_history_says_nothing_changed(client):
     body = client.get("/reports/latest").json()
     assert body["findings"] == []
     assert body["headline"].startswith("Nothing changed enough")
+
+
+def test_cors_lets_the_web_app_rename_and_delete(client):
+    for method in ("PATCH", "DELETE"):
+        preflight = client.options(
+            "/conversations/x",
+            headers={"Origin": "http://localhost:8081", "Access-Control-Request-Method": method},
+        )
+        assert preflight.status_code == 200, method
+        assert method in preflight.headers["access-control-allow-methods"]
