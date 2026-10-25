@@ -17,6 +17,7 @@ import { metricOf, shiftDate, stages, wakeHour } from '@/lib/day';
 import { formatValue, metricLabel } from '@/lib/format';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
+import { isHovered } from '@/lib/platform';
 
 const KEY_NUMBERS = [
   { metric: 'sleep_minutes', label: 'Sleep', short: 'Sleep' },
@@ -308,7 +309,7 @@ function FindingRow({ finding }: { finding: Finding }) {
       accessibilityRole="link"
       accessibilityHint="Opens the evidence for this finding"
       onPress={() => router.push(`/finding/${finding.id}`)}
-      style={({ hovered }) => [styles.finding, hovered && { backgroundColor: colors.track }]}
+      style={(state) => [styles.finding, isHovered(state) && { backgroundColor: colors.track }]}
     >
       <View style={[styles.findingDot, { backgroundColor: color }]} />
       <View style={{ flex: 1, gap: 2 }}>

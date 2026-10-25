@@ -25,6 +25,7 @@ import {
   useMetricColor,
   useScheme,
 } from '@/theme';
+import { isHovered } from '@/lib/platform';
 
 /** The day's name in large type, its date, and arrows to the day before and after. */
 export function DayHeader({
@@ -64,7 +65,10 @@ export function DayHeader({
               select();
               onChange('latest');
             }}
-            style={({ hovered }) => [styles.latest, hovered && { backgroundColor: colors.track }]}
+            style={(state) => [
+              styles.latest,
+              isHovered(state) && { backgroundColor: colors.track },
+            ]}
           >
             <Text variant="caption" style={{ fontFamily: fonts.semibold }}>
               Latest
@@ -111,10 +115,10 @@ function Arrow({
         select();
         onPress();
       }}
-      style={({ hovered, pressed }) => [
+      style={(state) => [
         styles.arrow,
         { borderColor: colors.border },
-        (hovered || pressed) && !disabled && { backgroundColor: colors.track },
+        (isHovered(state) || state.pressed) && !disabled && { backgroundColor: colors.track },
       ]}
     >
       <Ionicons name={icon} size={18} color={disabled ? colors.faint : colors.text} />
@@ -146,7 +150,7 @@ export function KeyNumber({
       accessibilityRole="button"
       accessibilityLabel={`${label}: ${big.value} ${big.unit ?? ''}. ${usualLine(metric, partial)}`}
       onPress={onPress}
-      style={({ hovered }) => [styles.key, hovered && { backgroundColor: colors.track }]}
+      style={(state) => [styles.key, isHovered(state) && { backgroundColor: colors.track }]}
     >
       <View style={styles.keyLabel}>
         <View style={[styles.dot, { backgroundColor: color }]} />
@@ -238,7 +242,10 @@ export function MetricRow({
       accessibilityLabel={`${label}: ${shown}. ${detail ?? usualLine(metric, partial)}`}
       disabled={!onPress}
       onPress={onPress}
-      style={({ hovered }) => [styles.row, hovered && onPress && { backgroundColor: colors.track }]}
+      style={(state) => [
+        styles.row,
+        isHovered(state) && onPress && { backgroundColor: colors.track },
+      ]}
     >
       <View style={{ flex: 1, gap: 2 }}>
         <Text>{label}</Text>

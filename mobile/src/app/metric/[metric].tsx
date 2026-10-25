@@ -15,6 +15,7 @@ import { bigValue, dayTitle, metricOf, usualLine, valueText } from '@/lib/day';
 import { metricLabel } from '@/lib/format';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
+import { isHovered } from '@/lib/platform';
 
 const SPANS = { '7 days': 7, '30 days': 30, '90 days': 90 } as const;
 type Span = keyof typeof SPANS;
@@ -171,9 +172,9 @@ function DayRow({
       accessibilityState={{ selected }}
       onPress={onPress}
       disabled={point.value === null}
-      style={({ hovered }) => [
+      style={(state) => [
         styles.dayRow,
-        (hovered || selected) && { backgroundColor: colors.track },
+        (isHovered(state) || selected) && { backgroundColor: colors.track },
       ]}
     >
       <Text style={{ flex: 1 }} color={selected ? 'text' : undefined}>
