@@ -127,3 +127,10 @@ Workouts are not daily metrics, and the analysis does not read them yet. When th
 the server reads minute-level steps, distance, calories, heart rate and zones over the workout's
 interval with range roll-ups; which of those a workout gets, and how they were checked against
 Fitbit's own summaries, is in [workouts.md](workouts.md).
+
+## Derived
+
+`recovery_score` (0-100) is computed from the daily table, not read from Fitbit: the mean of the
+shares of the 28 days before that last night's HRV, resting heart rate (inverted) and time asleep
+beat, with at least two of the three. See [architecture.md](architecture.md)
+for where it is served; it is not validated yet (status.md, issue 24).

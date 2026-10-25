@@ -145,6 +145,11 @@ npx expo export --platform web     # the web build must still build
   `total-calories` and `floors` cannot be listed, only rolled up. A range roll-up
   (`dataPoints:rollUp`, `HealthClient.rollup`) reproduces Fitbit's own workout summaries; see
   [docs/workouts.md](docs/workouts.md). Swim-length points also appear outside swims.
+- Web-only hover: CI's React Native types have no `hovered` on Pressable state; use
+  `isHovered(state)` and `canHover()` from `src/lib/platform.ts`, and show hover-only controls all
+  the time on touch screens.
+- Formatting: `npx prettier --single-quote --print-width 100`. Several older files are not
+  Prettier-clean, so format whole files only when they were clean before; otherwise just your lines.
 - A real Google write is a real entry in someone's Fitbit: test only with approval, then undo it
   and check it is gone (Google returns 404 for a deleted record).
 - The Google OAuth app is in Testing mode: the sign-in expires after 7 days (`ReconnectNeeded`);
