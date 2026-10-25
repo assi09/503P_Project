@@ -70,7 +70,7 @@ class Attachment:
 class MemoryItem:
     """One stored memory, as the context builder ranks it (the store turns rows into these)."""
 
-    kind: str  # finding, answer, fact, preference
+    kind: str  # finding, answer, fact, preference, chat (a claim from another conversation)
     id: str
     text: str  # a verified claim, a menu answer turned into a sentence, or an approved fact
     metrics: tuple[str, ...]

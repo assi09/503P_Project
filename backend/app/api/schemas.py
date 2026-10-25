@@ -148,7 +148,20 @@ class ChatMessage(ApiModel):
     routed: bool | None = None  # true if the router chose the expert
     consulted: list[str] | None = None
     refused: bool | None = None
+    conversation_id: str | None = None
     created_at: datetime
+
+
+class Conversation(ApiModel):
+    id: str
+    title: str
+    messages: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationTitle(ApiModel):
+    title: str = Field(min_length=1, max_length=120)
 
 
 class GoogleStatus(ApiModel):

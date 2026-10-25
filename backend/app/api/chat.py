@@ -10,6 +10,7 @@ person, or the whole app, has reached its daily cap. The caps count local days.
 
 import logging
 import threading
+import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as WaitTimeout
@@ -22,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from pydantic import Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.actions.schemas import Measured
@@ -41,7 +42,7 @@ from app.api.store import LoadedData, get_data
 from app.config import settings
 from app.db import chat as store
 from app.db import memory
-from app.db.models import ChatMessage, User
+from app.db.models import ChatMessage, Conversation, User
 from app.db.session import session_scope
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ class Question(schemas.ApiModel):
     expert: Literal["auto", "sleep", "recovery", "activity", "nutrition"] = "auto"
     depth: Literal["quick", "deep"] = "quick"
     attachment: AttachmentIn | None = None
+    conversation_id: uuid.UUID | None = None  # the latest conversation, or a new one, if absent
 
 
 def _message(row: ChatMessage) -> schemas.ChatMessage:
@@ -118,8 +120,30 @@ def _message(row: ChatMessage) -> schemas.ChatMessage:
         routed=row.routed if row.role == "assistant" else None,
         consulted=list(row.consulted or []) or None,
         refused=row.refused or None,
-        created_at=row.created_at if row.created_at.tzinfo else row.created_at.replace(tzinfo=UTC),
+        conversation_id=str(row.conversation_id) if row.conversation_id else None,
+        created_at=_aware(row.created_at),
     )
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _conversation(row: Conversation, messages: int) -> schemas.Conversation:
+    return schemas.Conversation(
+        id=str(row.id),
+        title=row.title,
+        messages=messages,
+        created_at=_aware(row.created_at),
+        updated_at=_aware(row.updated_at),
+    )
+
+
+def _owned(db: Session, user: User, conversation_id: uuid.UUID) -> Conversation:
+    conversation = store.get_conversation(db, user.id, conversation_id)
+    if conversation is None:
+        raise ApiError(404, "not_found", "No such conversation.")
+    return conversation
 
 
 def _day_start(now: datetime) -> datetime:
@@ -191,14 +215,20 @@ def _answer(
     body: Question,
     attachment: Attachment | None,
     now: datetime,
+    conversation_id: uuid.UUID | None = None,
 ) -> list[ChatMessage]:
     """Runs on a worker thread: answers, stores the answer, and frees the person for the next."""
     try:
         with sessions() as db:
-            earlier = [m for m in store.history(db, user_id, HISTORY_USED) if m.id != question_id]
+            # The conversation's own turns; memory, including the other conversations, is shared.
+            earlier = [
+                m
+                for m in store.history(db, user_id, HISTORY_USED, conversation_id)
+                if m.id != question_id
+            ]
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
-            remembered = memory.memory_items(db, user_id, now)
+            remembered = memory.memory_items(db, user_id, now, conversation_id)
         last = earlier[-1] if earlier and earlier[-1].role == "assistant" else None
         continuing_log = None
         if last and last.pending_log_expert:
@@ -265,6 +295,7 @@ def _answer(
                     consulted=[],
                     refused=False,
                     run_id=None,
+                    conversation_id=conversation_id,
                 )
                 return [question, answer]
             result = reply.result
@@ -298,6 +329,7 @@ def _answer(
                 run_id=result.run_id,
                 cost_usd=result.budget.cost_usd,
                 action_ids=prepared or None,
+                conversation_id=conversation_id,
                 pending_log_expert=(reply.route.expert or "general")
                 if not prepared
                 and (reply.route.expert in draft_tools or reply.route.action == "general")
@@ -321,8 +353,57 @@ def _answer(
 
 
 @router.get("/chat", response_model=list[schemas.ChatMessage], response_model_exclude_none=True)
-def get_chat(db: Db, user: Annotated[User, Depends(approved_user)]) -> list:
-    return [_message(m) for m in store.history(db, user.id, HISTORY_SHOWN)]
+def get_chat(
+    db: Db,
+    user: Annotated[User, Depends(approved_user)],
+    conversation: uuid.UUID | None = None,
+) -> list:
+    """A conversation's messages; without `conversation`, the most recently used one."""
+    chosen = (
+        _owned(db, user, conversation) if conversation else store.latest_conversation(db, user.id)
+    )
+    if chosen is None:
+        return []
+    return [_message(m) for m in store.history(db, user.id, HISTORY_SHOWN, chosen.id)]
+
+
+@router.get("/conversations", response_model=list[schemas.Conversation])
+def list_conversations(db: Db, user: Annotated[User, Depends(approved_user)]) -> list:
+    return [_conversation(row, count) for row, count in store.conversations(db, user.id)]
+
+
+@router.post("/conversations", response_model=schemas.Conversation, status_code=201)
+def create_conversation(
+    db: Db, user: Annotated[User, Depends(approved_user)]
+) -> schemas.Conversation:
+    return _conversation(store.create_conversation(db, user.id), 0)
+
+
+@router.patch("/conversations/{conversation_id}", response_model=schemas.Conversation)
+def rename_conversation(
+    conversation_id: uuid.UUID,
+    body: schemas.ConversationTitle,
+    db: Db,
+    user: Annotated[User, Depends(approved_user)],
+) -> schemas.Conversation:
+    conversation = _owned(db, user, conversation_id)
+    conversation.title = store.title_from(body.title)
+    db.flush()
+    count = next((n for row, n in store.conversations(db, user.id) if row.id == conversation.id), 0)
+    return _conversation(conversation, count)
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(
+    conversation_id: uuid.UUID, db: Db, user: Annotated[User, Depends(approved_user)]
+) -> None:
+    """Deletes the conversation and its messages; facts and findings stay in memory."""
+    conversation = _owned(db, user, conversation_id)
+    if user.id in _busy:
+        raise ApiError(409, "busy", "Still answering a question; try again in a moment.")
+    db.execute(delete(ChatMessage).where(ChatMessage.conversation_id == conversation.id))
+    db.delete(conversation)
+    db.flush()
 
 
 @router.post("/chat", response_model=list[schemas.ChatMessage], response_model_exclude_none=True)
@@ -337,6 +418,13 @@ def post_chat(
     now = datetime.now(UTC)
     check_caps(db, user, now)
     attachment = _attachment(data, body.attachment)
+    conversation = (
+        _owned(db, user, body.conversation_id)
+        if body.conversation_id
+        else store.latest_conversation(db, user.id) or store.create_conversation(db, user.id)
+    )
+    conversation_id = conversation.id
+    db.commit()  # the answering thread opens its own sessions and must see the conversation
     with _busy_lock:
         if user.id in _busy:
             raise ApiError(409, "busy", "Still answering your last question.")
@@ -349,10 +437,20 @@ def post_chat(
                 user.id,
                 body.text.strip(),
                 body.attachment.model_dump(exclude_none=True) if body.attachment else None,
+                store.get_conversation(own, user.id, conversation_id),
             )
             question_id = question.id
         future = _pool.submit(
-            _answer, sessions, agent, user.id, question_id, data, body, attachment, now
+            _answer,
+            sessions,
+            agent,
+            user.id,
+            question_id,
+            data,
+            body,
+            attachment,
+            now,
+            conversation_id,
         )
     except BaseException:
         with _busy_lock:

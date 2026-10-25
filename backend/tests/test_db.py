@@ -120,3 +120,56 @@ def test_emails_are_unique(session):
     user(session, "same@example.com")
     with pytest.raises(IntegrityError):
         user(session, "same@example.com")
+
+
+def test_existing_messages_become_each_persons_first_conversation(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text
+
+    url = f"sqlite:///{tmp_path / 'chats.db'}"
+    config = Config(ALEMBIC_INI)
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0006")
+    engine = create_engine(url)
+    first, second, quiet = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    start = datetime(2026, 10, 1, tzinfo=UTC)
+    with engine.begin() as connection:
+        for person in (first, second, quiet):
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, email, status, created_at) "
+                    "VALUES (:id, :email, 'approved', :at)"
+                ),
+                {"id": person.hex, "email": f"{person.hex}@example.com", "at": start.isoformat()},
+            )
+        rows = [
+            (first, "user", "  How   did I sleep\nthis week?", 0),
+            (first, "assistant", "Steady.", 1),
+            (first, "user", "And steps?", 2),
+            (second, "user", "x" * 100, 0),
+        ]
+        for person, role, body, minutes in rows:
+            connection.execute(
+                text(
+                    "INSERT INTO chat_messages (id, user_id, role, text, claims, evidence_ids, "
+                    "consulted, refused, created_at) VALUES (:id, :user, :role, :text, '[]', "
+                    "'[]', '[]', 0, :at)"
+                ),
+                {
+                    "id": uuid.uuid4().hex,
+                    "user": person.hex,
+                    "role": role,
+                    "text": body,
+                    "at": (start + timedelta(minutes=minutes)).isoformat(),
+                },
+            )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        titles = dict(connection.execute(text("SELECT user_id, title FROM conversations")).all())
+        unfiled = connection.execute(
+            text("SELECT count(*) FROM chat_messages WHERE conversation_id IS NULL")
+        ).scalar()
+    assert len(titles) == 2 and unfiled == 0  # no conversation for someone who never asked
+    assert sorted(titles.values()) == sorted(["How did I sleep this week?", "x" * 59 + "…"])
+    command.downgrade(config, "0006")

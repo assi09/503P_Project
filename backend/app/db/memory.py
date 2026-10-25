@@ -28,8 +28,10 @@ from app.db.chat import load_evidence, store_evidence
 from app.db.models import (
     CHECKIN_TAGS,
     CONTEXT_OPTIONS,
+    ChatMessage,
     CheckIn,
     ContextQuestion,
+    Conversation,
     Finding,
     MemoryFact,
 )
@@ -39,6 +41,8 @@ FINDING_DAYS = 90
 ANSWER_DAYS = 180
 CHECKIN_DAYS = 365
 FACT_UNUSED_DAYS = 60  # approved facts unused this long are no longer retrieved
+CHAT_DAYS = 60  # verified claims from the person's other conversations, for pointers between them
+CHAT_CLAIMS = 40  # at most this many, newest first; the context builder picks the relevant few
 # After this many dismissals within the window, no new question for a while.
 BACKOFF_DISMISSALS, BACKOFF_WINDOW_DAYS, BACKOFF_QUIET_DAYS = 2, 30, 14
 DECLINED = "rather_not_say"  # an answer, but counted like a dismissal
@@ -354,11 +358,15 @@ OPTION_TEXT = {
 
 
 def memory_items(
-    session: Session, user_id: uuid.UUID, now: datetime | None = None
+    session: Session,
+    user_id: uuid.UUID,
+    now: datetime | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> list[MemoryItem]:
     """This person's memory that may still be retrieved: current findings with their evidence,
-    answers from the last 180 days (not "rather not say"), and approved facts used or decided in
-    the last 60 days."""
+    answers from the last 180 days (not "rather not say"), approved facts used or decided in the
+    last 60 days, and verified claims from their other conversations of the last 60 days (with
+    `conversation_id`, the one being answered), so one chat can point to what another found."""
     now = now or _now()
     items: list[MemoryItem] = []
     findings = current_findings(session, user_id, now)
@@ -417,6 +425,52 @@ def memory_items(
                 metrics=tuple(fact.metrics),
                 created=_aware(fact.decided_at or fact.created_at),
                 importance=1.0,
+            )
+        )
+    if conversation_id is not None:
+        items += _other_chats(session, user_id, conversation_id, now)
+    return items
+
+
+def _other_chats(
+    session: Session, user_id: uuid.UUID, conversation_id: uuid.UUID, now: datetime
+) -> list[MemoryItem]:
+    rows = session.execute(
+        select(ChatMessage, Conversation.title)
+        .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+        .where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.conversation_id != conversation_id,
+            ChatMessage.created_at >= now - timedelta(days=CHAT_DAYS),
+        )
+        .order_by(ChatMessage.created_at.desc())
+    ).all()
+    claims = [
+        (message, title, claim)
+        for message, title in rows
+        for claim in message.claims
+        if claim.get("metric") and claim.get("text")
+    ][:CHAT_CLAIMS]
+    evidence = load_evidence(
+        session, user_id, {i for _, _, claim in claims for i in claim.get("evidence_ids", [])}
+    )
+    items = []
+    for index, (message, title, claim) in enumerate(claims):
+        created = _aware(message.created_at)
+        cited = tuple(evidence[i] for i in claim.get("evidence_ids", []) if i in evidence)
+        items.append(
+            MemoryItem(
+                kind="chat",
+                # Not a fact id, so using it in a run leaves the facts' usage alone.
+                id=f"chat:{message.id}:{index}",
+                text=f'In the chat "{title}" ({short_date(created.date())}): {claim["text"]}',
+                metrics=(claim["metric"],),
+                created=created,
+                importance=0.5,
+                start=min((w.start for e in cited for w in e.windows), default=None),
+                end=max((w.end for e in cited for w in e.windows), default=None),
+                evidence=cited,
             )
         )
     return items

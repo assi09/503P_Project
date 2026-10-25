@@ -341,3 +341,97 @@ def test_a_slow_answer_is_stored_when_it_is_ready(client, engine, agent, monkeyp
     messages = client.get("/chat", headers=headers).json()
     assert [m["role"] for m in messages] == ["user", "assistant"]
     assert messages[1]["text"].startswith("Nothing stood out.")
+
+
+# Conversations
+
+
+def test_questions_go_to_their_conversation_and_are_named_by_the_first(client, engine, agent):
+    headers = signed_in(client, engine)
+    agent.llm.turns.append(submission("Nothing stood out."))
+    first = ask(client, headers, "How did I sleep last month?").json()
+    sleep_chat = first[0]["conversationId"]
+    new = client.post("/conversations", headers=headers).json()
+    assert new["title"] == "New chat" and new["messages"] == 0
+    agent.llm.turns.append(submission("Steps held steady."))
+    ask(client, headers, "  How   many steps\ndid I take? ", conversationId=new["id"])
+
+    chats = client.get("/conversations", headers=headers).json()
+    assert [c["title"] for c in chats] == [
+        "How many steps did I take?",
+        "How did I sleep last month?",
+    ]
+    assert [c["messages"] for c in chats] == [2, 2]
+    # Each conversation shows only its own messages; the default is the latest used.
+    mine = client.get("/chat", params={"conversation": sleep_chat}, headers=headers).json()
+    assert [m["text"] for m in mine][0] == "How did I sleep last month?" and len(mine) == 2
+    latest = client.get("/chat", headers=headers).json()
+    assert latest[0]["conversationId"] == new["id"]  # the message keeps its own spacing
+    # The steps chat's answer did not see the sleep chat's turns.
+    assert "How did I sleep last month?" not in json.dumps(agent.llm.requests[-1]["messages"])
+
+
+def test_a_long_first_question_makes_a_short_title(client, engine, agent):
+    headers = signed_in(client, engine)
+    agent.llm.turns.append(submission("Nothing stood out."))
+    ask(client, headers, "Why " + "really " * 30 + "?")
+    title = client.get("/conversations", headers=headers).json()[0]["title"]
+    assert len(title) == 60 and title.endswith("…")
+
+
+def test_conversations_can_be_renamed_and_deleted(client, engine, agent):
+    headers = signed_in(client, engine)
+    agent.llm.turns.append(submission("Nothing stood out."))
+    chat_id = ask(client, headers).json()[0]["conversationId"]
+    renamed = client.patch(f"/conversations/{chat_id}", json={"title": "Sleep"}, headers=headers)
+    assert renamed.json()["title"] == "Sleep" and renamed.json()["messages"] == 2
+    assert (
+        client.patch(f"/conversations/{chat_id}", json={"title": ""}, headers=headers).status_code
+        == 422
+    )
+    assert client.delete(f"/conversations/{chat_id}", headers=headers).status_code == 204
+    assert client.get("/conversations", headers=headers).json() == []
+    assert client.get("/chat", headers=headers).json() == []
+    with session_scope(engine) as session:
+        assert session.scalar(select(ChatMessage.id)) is None
+
+
+def test_people_never_reach_each_others_conversations(client, engine, agent):
+    first = signed_in(client, engine, "first@example.com")
+    second = signed_in(client, engine, "second@example.com")
+    agent.llm.turns.append(submission("Nothing stood out."))
+    chat_id = ask(client, first).json()[0]["conversationId"]
+    for response in (
+        client.get("/chat", params={"conversation": chat_id}, headers=second),
+        client.patch(f"/conversations/{chat_id}", json={"title": "Mine"}, headers=second),
+        client.delete(f"/conversations/{chat_id}", headers=second),
+        ask(client, second, conversationId=chat_id),
+    ):
+        assert response.status_code == 404, response.text
+    assert client.get("/conversations", headers=second).json() == []
+    assert len(client.get("/chat", params={"conversation": chat_id}, headers=first).json()) == 2
+
+
+def test_another_conversations_verified_claims_are_shared_as_memory(client, engine, agent):
+    from app.db import memory
+
+    headers = signed_in(client, engine)
+    agent.llm.turns.extend(describe_then_claim("Your time asleep held steady."))
+    sleep_chat = ask(client, headers).json()[0]["conversationId"]
+    other = client.post("/conversations", headers=headers).json()["id"]
+    with session_scope(engine) as session:
+        user = session.scalar(select(User))
+        import uuid
+
+        from_other = memory.memory_items(session, user.id, None, uuid.UUID(other))
+        from_same = memory.memory_items(session, user.id, None, uuid.UUID(sleep_chat))
+    chats = [item for item in from_other if item.kind == "chat"]
+    assert len(chats) == 1 and chats[0].metrics == ("sleep_minutes",)
+    assert chats[0].text.startswith('In the chat "How did I sleep?"')
+    assert chats[0].evidence and chats[0].evidence[0].tool == "describe"
+    assert not [item for item in from_same if item.kind == "chat"]  # its own turns are history
+    # The next question in the other conversation is given the pointer.
+    agent.llm.turns.append(submission("As you saw before, sleep held steady."))
+    ask(client, headers, "How is my sleep lately?", conversationId=other)
+    sent = json.dumps(agent.llm.requests[-1]["messages"])
+    assert "In the chat" in sent and "Your time asleep held steady." in sent

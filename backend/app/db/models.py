@@ -134,6 +134,19 @@ class SyncRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
+class Conversation(Base):
+    """One of a person's chats. Memory is the person's, so every conversation shares it."""
+
+    __tablename__ = "conversations"
+    __table_args__ = (Index("ix_conversations_user_updated", "user_id", "updated_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(120), default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ChatMessage(Base):
     """One turn of a person's conversation with the agent (one thread per person).
 
@@ -150,6 +163,12 @@ class ChatMessage(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(16))
+    # Null only for messages from before conversations existed, until the migration files them.
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE", name="fk_chat_messages_conversation"),
+        index=True,
+        default=None,
+    )
     action_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
     # An unfinished clarification, usable only by the next reply within 24 hours.
     pending_log_expert: Mapped[str | None] = mapped_column(String(16), default=None)
