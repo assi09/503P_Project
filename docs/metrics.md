@@ -120,3 +120,10 @@ matches exactly on every night, minutes asleep within 2 minutes on 82% (median d
 each stage within a median of 1 to 2 minutes; the rest are nights rescored after the export.
 **A history must come from one source**: stitching legacy and current sleep would show the switch
 as a change in the person's sleep.
+
+## Workouts
+
+Workouts are not daily metrics, and the analysis does not read them yet. When the agent logs one,
+the server reads minute-level steps, distance, calories, heart rate and zones over the workout's
+interval with range roll-ups; which of those a workout gets, and how they were checked against
+Fitbit's own summaries, is in [workouts.md](workouts.md).

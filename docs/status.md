@@ -23,7 +23,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** on the Data tab (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 58, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 626 backend and 78 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 662 backend and 82 mobile tests |
 
 **Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
 check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
@@ -234,6 +234,10 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   Then the owner connected Google from the app for real (4 read scopes), logged a test snack,
   confirmed it, read it back from Google and undid it; the chat problems this showed were fixed in
   PR #54 and rechecked with three more real runs.
+- **Workouts** (PRs #57-#59, [workouts.md](workouts.md)): a real walk without a distance and a
+  real measured walk were written and read back; range roll-ups reproduced Fitbit's summaries of
+  the owner's 119 tracked workouts; real agent runs drafted `KICKBOXING` and `TENNIS` at the right
+  local times. Fitbit labels our writes "Cronometer" (issue 22).
 
 Spent so far on real runs: about $0.64 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
 

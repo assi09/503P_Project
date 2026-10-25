@@ -206,7 +206,8 @@ still planned. The provider writer is tested with fake HTTP, and one real food c
 A workout draft also carries the tracker's reading for its interval (`measured`), read by the
 server with Google's range roll-ups whenever the draft is created or saved again. It is never
 taken from the model or the app, and it never blocks a draft: without a sign-in or on any Google
-error it is marked unavailable and only the given values are sent.
+error it is marked unavailable and only the given values are sent. Which metrics are read depends on
+the kind of workout; see [workouts.md](workouts.md).
 
 The following requirements also cover the remaining capabilities:
 

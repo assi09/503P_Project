@@ -115,6 +115,9 @@ written to Google until the person confirms it in the app. Writes also need
 `FA_GOOGLE_WRITES_ENABLED=true` in `.env` (off by default) and the write-only scope
 (`googlehealth.nutrition.writeonly` or `googlehealth.activity_and_fitness.writeonly`), which the
 app asks for the first time someone logs. Add both scopes to the consent screen's data access.
+Any of Google's workout types can be logged; the server adds what the tracker recorded during it
+(calories, heart rate and zones, and steps, distance or swim lengths where Fitbit records them).
+See [docs/workouts.md](docs/workouts.md).
 
 ### Mobile app
 

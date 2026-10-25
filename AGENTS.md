@@ -19,7 +19,7 @@ agent and its evaluation are the priority.
 |---|---|
 | `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the agent (`app/agent`: LLM layer, router, experts, verifier, guard), accounts (`app/auth`, `python -m app.auth`), confirmed logging and Google writes (`app/actions`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 58) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `agent-actions.md` (confirmed food and workout logging), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
+| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `agent-actions.md` (confirmed food and workout logging), `workouts.md` (workout types, the metrics each kind gets and their Google fields), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
 | `eval/` | evaluation sets and scripts that call paid APIs on purpose (never run in CI) |
 | `docker-compose.yml` | local Postgres on port 5433 |
@@ -140,6 +140,13 @@ npx expo export --platform web     # the web build must still build
   `pageSize`; 64-bit numbers arrive as strings and durations as `"123s"`; the Active Zone Minutes
   cardio and peak sums are already doubled; daily roll-ups accept at most 90 days (14 for heart
   rate, active minutes and calories).
+- Writing workouts: `displayName` and `metricsSummary` are required (empty is fine). Exercises are
+  listed with a filter on `exercise.interval.civil_start_time` in local time **without** an offset;
+  `total-calories` and `floors` cannot be listed, only rolled up. A range roll-up
+  (`dataPoints:rollUp`, `HealthClient.rollup`) reproduces Fitbit's own workout summaries; see
+  [docs/workouts.md](docs/workouts.md). Swim-length points also appear outside swims.
+- A real Google write is a real entry in someone's Fitbit: test only with approval, then undo it
+  and check it is gone (Google returns 404 for a deleted record).
 - The Google OAuth app is in Testing mode: the sign-in expires after 7 days (`ReconnectNeeded`);
   run `python -m app.sync connect` again. Only listed test users can sign in.
 - Postgres for this project is on port **5433** (`docker compose up -d db`); 5432 may be another
