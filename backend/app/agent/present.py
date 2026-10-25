@@ -57,6 +57,10 @@ LEVEL_KEYS = (
     "mean_after",
     "mean_weekend",
     "mean_weekday",
+    "value",
+    "usual_median",
+    "usual_low",
+    "usual_high",
 )
 CHANGE_KEYS = ("difference", "change_over_window")
 

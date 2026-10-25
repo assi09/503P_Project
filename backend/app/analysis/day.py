@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
+from app.analysis.evidence import Evidence, ToolError, Window
 from app.analysis.screen import without_low_wear
 
 USUAL_DAYS = 28  # the weeks before the day that make up its usual range
@@ -86,4 +87,35 @@ def usual_before(frame: pd.DataFrame, metric: str, day: date) -> Usual | None:
     stamp = pd.Timestamp(day)
     return usual(
         cleaned[metric].loc[stamp - timedelta(days=USUAL_DAYS) : stamp - timedelta(days=1)]
+    )
+
+
+def compare_day(frame: pd.DataFrame, metric: str, day: date) -> Evidence:
+    """One day's value against the person's usual range: the middle half of the 28 days before.
+
+    Descriptive, like the Today screen: "above usual" says where the day sits, not that anything
+    changed. Sufficient only with a value that day and at least MIN_USUAL_DAYS days before it.
+    """
+    if metric not in frame.columns:
+        raise ToolError(f"Unknown metric {metric!r}")
+    stamp = pd.Timestamp(day)
+    if stamp not in frame.index:
+        raise ToolError(f"There is no data for {day.isoformat()}")
+    value = _value(frame.loc[stamp, metric])
+    window = Window(start=day - timedelta(days=USUAL_DAYS), end=day - timedelta(days=1))
+    range_ = usual_before(frame, metric, day)
+    stats: dict = {"value": value, "usual_days": range_.days if range_ else 0}
+    if range_:
+        stats |= {"usual_median": range_.median, "usual_low": range_.low, "usual_high": range_.high}
+    if value is not None and range_:
+        stats["position"] = (
+            "above" if value > range_.high else "below" if value < range_.low else "within"
+        )
+    return Evidence(
+        tool="compare_day",
+        metrics=(metric,),
+        windows=(Window(start=day, end=day), window),
+        n=stats["usual_days"],
+        sufficient="position" in stats,
+        stats=stats,
     )

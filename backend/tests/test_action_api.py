@@ -418,5 +418,5 @@ def test_a_log_only_workout_request_is_not_told_it_left_activity_uncovered(setup
     )
     reply = response.json()[-1]
     assert reply["answeredBy"] == "activity" and len(reply["actionIds"]) == 1
-    assert "does not cover" not in reply["text"]
+    assert "was not checked" not in reply["text"]
     assert len(agent.llm.requests) == 2  # no repair round asking for activity claims

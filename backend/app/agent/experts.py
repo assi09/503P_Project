@@ -14,7 +14,7 @@ cannot consult in turn, so a question costs at most one lead run and a few short
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import StrEnum
 
@@ -22,11 +22,11 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer_task, run_agent
-from app.agent.guard import Guard
+from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget
 from app.agent.present import label, metric_list
 from app.agent.tools import ALWAYS_VISIBLE, Toolbox, evidence_payload
-from app.agent.verifier import Claim
+from app.agent.verifier import MENTIONS, Claim
 from app.analysis.evidence import Evidence
 
 LOGGING_PROMPT = (
@@ -266,6 +266,7 @@ class _Consults:
     allowed: tuple[str, ...]  # chosen by the router
     borrowed: dict[str, str]
     consulted: list[str]
+    verified: dict[str, list[Claim]] = field(default_factory=dict)  # each consult's claims
 
     def experts(self) -> list[str]:
         return [
@@ -318,6 +319,7 @@ class _Consults:
             budget=child,
         )
         self.consulted.append(args.expert)
+        self.verified[args.expert] = list(result.claims)
         self.budget.calls += child.calls
         self.budget.cost_usd += child.cost_usd
 
@@ -389,6 +391,13 @@ def ask_expert(
     prompt = system_prompt(expert, frame, consultable)
     if allow_logging:
         prompt += LOGGING_PROMPT
+    coverage = (
+        coverage_check(
+            [n for n in needs if n in EXPERTS and available(EXPERTS[n], frame)], toolbox.evidence
+        )
+        if needs
+        else None
+    )
     result = run_agent(
         llm,
         toolbox,
@@ -398,12 +407,43 @@ def ask_expert(
         extra_tools=extras,
         claim_check=ownership_check(expert, borrowed),
         guard=guard,  # consulted runs are not guarded: only the lead's text is shown
-        coverage=coverage_check(
-            [n for n in needs if n in EXPERTS and available(EXPERTS[n], frame)], toolbox.evidence
-        )
-        if needs
-        else None,
+        coverage=coverage,
     )
+    carried = carry_consulted(result, consults.verified, borrowed, guard)
+    if carried and coverage:
+        result.uncovered = coverage(result.claims)
     result.expert = name
     result.consulted = consults.consulted
     return result
+
+
+def carry_consulted(
+    result: AgentResult,
+    verified: dict[str, list[Claim]],
+    borrowed: dict[str, str],
+    guard: Guard | None,
+) -> list[Claim]:
+    """Adds a consulted expert's verified claims when the summary draws on that expert's metrics
+    but the lead cited none of its claims, so the evidence shown matches what the answer says.
+
+    The claims were verified by their owner; their text is shown now, so the guard reads it.
+    """
+    cited = {i for claim in result.claims for i in claim.evidence_ids}
+    carried: list[Claim] = []
+    for name, claims in verified.items():
+        owned = set(EXPERTS[name].owns)
+        mentioned = {m for m, pattern in MENTIONS.items() if pattern.search(result.summary)}
+        if not claims or any(borrowed.get(i) == name for i in cited) or not owned & mentioned:
+            continue
+        carried += claims
+    if carried and guard:
+        try:
+            flags = guard.judge([claim.text for claim in carried]).flagged
+        except GuardError as exc:
+            result.trace.append({"type": "guard", "error": str(exc)})
+        else:
+            carried = [claim for claim, flag in zip(carried, flags, strict=True) if not flag]
+    result.claims += carried
+    if carried:
+        result.trace.append({"type": "carried", "claims": len(carried)})
+    return carried

@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.agent.llm import ToolCall
 from app.agent.present import display, label
 from app.analysis import tools as analysis
+from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
 
 # Kept with any metric set: activity totals are not comparable on days the device was barely worn.
@@ -43,6 +44,11 @@ class CompareArguments(_Arguments):
     recent_end: date
     baseline_start: date = Field(description="The baseline must not overlap the recent window")
     baseline_end: date
+
+
+class DayArguments(_Arguments):
+    metric: str = Field(description="A metric from the list")
+    day: date = Field(description="The day, YYYY-MM-DD; the last day of data for 'today'")
 
 
 class CorrelateArguments(Period):
@@ -108,6 +114,14 @@ TOOLS: dict[str, AgentTool] = {
             "(Spearman, adjusted for the lags tried). Shows association, not cause.",
             CorrelateArguments,
             lambda frame, a: analysis.correlate(frame, a.driver, a.target, _window(a), a.max_lag),
+        ),
+        AgentTool(
+            "compare_day",
+            "One day's value against the person's usual range (the middle half of the 28 days "
+            "before): above, below or within. Use it for questions about today, last night or "
+            "a single day. It describes where the day sits; it is not a test of a change.",
+            DayArguments,
+            lambda frame, a: compare_day(frame, a.metric, a.day),
         ),
         AgentTool(
             "weekday_split",

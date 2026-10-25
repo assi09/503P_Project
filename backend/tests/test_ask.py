@@ -392,8 +392,8 @@ def test_a_part_still_left_out_is_said_in_a_fixed_note(frame):
     reply = ask(llm, router, frame, EXERCISE_QUESTION)
     assert reply.result.uncovered == ["activity"]
     assert reply.result.notes == [
-        "This answer does not cover the activity side of the question: nothing about it could "
-        "be verified."
+        "Your activity data was not checked for this answer; ask about it if you would "
+        "like it looked at."
     ]
 
 
@@ -402,9 +402,7 @@ def test_a_needed_expert_without_data_is_said_not_asked_for(frame):
     router = FixedRouter(("sleep", "nutrition"), sleep=0.8, nutrition=0.2)
     reply = ask(llm, router, frame, "Does eating late change how I sleep?")
     assert reply.result.uncovered == [] and len(reply.result.claims) == 1
-    assert reply.result.notes == [
-        "There is no nutrition data to look at yet, so this answer leaves that part out."
-    ]
+    assert reply.result.notes == ["There is no nutrition data yet, so it is left out here."]
 
 
 def test_a_coverage_check_does_not_count_as_covering_a_topic():
