@@ -87,6 +87,15 @@ def test_payload_units_unknown_values_and_timezones():
     workout = LOG.validate_python(WORKOUT).google_payload()["exercise"]
     assert workout["metricsSummary"] == {"distanceMillimeters": 5_000_000}
     assert workout["activeDuration"] == "1500s" and "dataSource" not in workout
+    assert workout["displayName"] == "Run"
+
+
+def test_workout_payload_has_googles_required_fields_without_distance():
+    for kind in ("RUNNING", "WALKING", "BIKING", "AEROBIC_WORKOUT"):
+        log = WORKOUT | {"exerciseType": kind}
+        log.pop("distanceKm")
+        workout = LOG.validate_python(log).google_payload()["exercise"]
+        assert workout["displayName"] and workout["metricsSummary"] == {}
 
 
 @pytest.mark.parametrize(

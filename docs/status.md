@@ -47,7 +47,9 @@ Google consent can request just food or workout logging while preserving analysi
 tested once for real, on 2026-10-25 with the flag on for the test: the owner logged a test snack
 from the app, edited it, granted the nutrition write scope, confirmed it, saw it in the Fitbit app,
 read it back from Google and undid it ([experiments.md](experiments.md#first-real-google-write-and-answers-that-read-like-one-reply-2026-10-25)).
-Workout writes have not been tried for real. Pending Google operations or crashes remain blocked
+A real workout (a 20-minute walk with no distance) was written, read back and undone on
+2026-10-25 after PR #57 added the fields Google requires; it carries only the given values, so the
+next step is adding the tracker's own measurements for that interval. Pending Google operations or crashes remain blocked
 for reconciliation; automatic provider reconciliation/polling is not built yet.
 
 Validated with fake Google and a scripted model end to end, browser review/edit/confirm/undo and
@@ -188,8 +190,9 @@ Next, in order:
 2. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
    score (Sprint 2).
 3. Tracing (Langfuse) and the first evaluation (Sprint 2).
-4. Logging, continued: reconciliation of pending writes, a real workout write, food lookup,
-   nutrition mapping, workout summaries (`summarize_workout`) and photo estimates. See
+4. Logging, continued: the tracker's measurements on logged workouts (`summarize_workout`),
+   reconciliation of pending writes, food lookup,
+   nutrition mapping and photo estimates. See
    [agent-actions.md](agent-actions.md).
 
 ## What has been tested
@@ -227,7 +230,7 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   confirmed it, read it back from Google and undid it; the chat problems this showed were fixed in
   PR #54 and rechecked with three more real runs.
 
-Spent so far on real runs: about $0.62 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
+Spent so far on real runs: about $0.63 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -309,3 +312,5 @@ Spent so far on real runs: about $0.62 in all, almost all OpenAI (Jev under $0.0
 21. **The access log records Google's sign-in code.** The callback's address, code included, is
     written to the server's request log. The code works once and is used immediately, but the
     callback should be left out of request logging.
+22. **Google labels our writes as "Cronometer"** in the Fitbit app (seen on the first real workout
+    write). We send no `dataSource`; how Google picks the label is not documented yet.
