@@ -12,6 +12,7 @@ import {
   type HostInstance,
   type TextInputInstance,
   type TextInputKeyPressEvent,
+  type ViewInstance,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -24,6 +25,7 @@ import Animated, {
 import Svg, { Rect } from 'react-native-svg';
 
 import type { Depth, ExpertChoice } from '@/api/types';
+import type { Anchor } from '@/components/attach';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { EXPERTS, expertInfo, useExpertColor, type ExpertInfo } from '@/lib/experts';
@@ -50,7 +52,7 @@ interface ComposerProps {
   depth: Depth;
   onDepthChange: (depth: Depth) => void;
   attachmentLabel?: string;
-  onAttach: () => void;
+  onAttach: (anchor?: Anchor) => void; // with where the + button is on screen, when known
   onClearAttachment: () => void;
   busy: boolean;
   /** Shrinks to a pill while empty and not focused, e.g. on the empty chat. */
@@ -80,6 +82,7 @@ export function Composer({
   const input = useRef<TextInputInstance>(null);
   // Set when a control is pressed, so the blur that the press causes does not close the input.
   const keepOpen = useRef(false);
+  const attachRef = useRef<ViewInstance>(null);
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -256,15 +259,22 @@ export function Composer({
             <MorphLabel text={depth === 'quick' ? 'Quick' : 'Deep'} color={colors.muted} />
           </PressableScale>
           <View style={{ flex: 1 }} />
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Attach a finding or metric"
-            onPressIn={holdOpen}
-            onPress={onAttach}
-            style={[styles.control, styles.attach]}
-          >
-            <Ionicons name="add" size={18} color={colors.muted} />
-          </PressableScale>
+          {/* Measured on press, so a popup can open right above it on wide screens. */}
+          <View ref={attachRef} collapsable={false}>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Attach a finding or metric"
+              onPressIn={holdOpen}
+              onPress={() =>
+                attachRef.current?.measureInWindow((x, y, width, height) =>
+                  onAttach({ x, y, width, height }),
+                ) ?? onAttach()
+              }
+              style={[styles.control, styles.attach]}
+            >
+              <Ionicons name="add" size={18} color={colors.muted} />
+            </PressableScale>
+          </View>
         </Animated.View>
 
         {/* Positioned by a wrapper: PressableScale applies its style to an inner view. */}

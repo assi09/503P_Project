@@ -15,9 +15,16 @@ import {
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type ChatTarget, useChat, useConversations, useReport, useSendMessage } from '@/api/hooks';
+import {
+  type ChatTarget,
+  useChat,
+  useConversations,
+  useDay,
+  useReport,
+  useSendMessage,
+} from '@/api/hooks';
 import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
-import { AttachSheet } from '@/components/attach';
+import { type Anchor, AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
 import { Composer } from '@/components/composer';
 import { ConversationList, IconButton } from '@/components/conversations';
@@ -103,6 +110,12 @@ export default function AskScreen() {
   const [depth, setDepth] = useState<Depth>('quick');
   const [attachment, setAttachment] = useState<Attachment>();
   const [attaching, setAttaching] = useState(false);
+  const [anchor, setAnchor] = useState<Anchor>();
+  // Only metrics the person has data for can be attached.
+  const latest = useDay('latest');
+  const available = latest.data?.metrics
+    .filter((m) => m.value !== null || m.usual !== null)
+    .map((m) => m.metric);
   const scroll = useRef<ScrollViewInstance>(null);
   const insets = useSafeAreaInsets();
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
@@ -321,7 +334,10 @@ export default function AskScreen() {
           depth={depth}
           onDepthChange={setDepth}
           attachmentLabel={attachmentLabel(attachment, findings)}
-          onAttach={() => setAttaching(true)}
+          onAttach={(at) => {
+            setAnchor(at);
+            setAttaching(true);
+          }}
           onClearAttachment={() => setAttachment(undefined)}
           busy={send.isPending}
           collapsible={!started}
@@ -345,6 +361,8 @@ export default function AskScreen() {
       <AttachSheet
         visible={attaching}
         findings={findings}
+        available={available}
+        anchor={anchor}
         onClose={() => setAttaching(false)}
         onPick={(picked) => {
           setAttachment(picked);
