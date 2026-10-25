@@ -18,6 +18,13 @@ MAX_WORKOUT = timedelta(hours=24)
 MAX_DISTANCE_KM = 300
 MAX_SPEED_KMH = {"RUNNING": 25, "WALKING": 10, "BIKING": 80}  # over the active time
 FUTURE_GRACE = timedelta(minutes=15)  # clock drift between the phone and the server
+# The names the app shows, so the entry reads the same in Fitbit.
+WORKOUT_NAMES = {
+    "RUNNING": "Run",
+    "WALKING": "Walk",
+    "BIKING": "Ride",
+    "AEROBIC_WORKOUT": "Workout",
+}
 
 
 def now() -> datetime:
@@ -116,16 +123,17 @@ class WorkoutLog(LogModel):
         return self
 
     def google_payload(self) -> dict:
+        # Google requires displayName and metricsSummary, even when there is no metric to give.
         exercise = {
             "exerciseType": self.exercise_type,
+            "displayName": WORKOUT_NAMES[self.exercise_type],
             "interval": interval(self.start_time, self.end_time),
             "activeDuration": f"{self.active_seconds:g}s",
+            "metricsSummary": {},
         }
         if self.distance_km is not None:
             # Whole millimetres: 5.1 km is 5_100_000, not 5_099_999.999999999.
-            exercise["metricsSummary"] = {
-                "distanceMillimeters": round(self.distance_km * 1_000_000)
-            }
+            exercise["metricsSummary"]["distanceMillimeters"] = round(self.distance_km * 1_000_000)
         # No fabricated HR, steps or calories, and no telemetry writes that duplicate device data.
         return {"exercise": exercise}
 
