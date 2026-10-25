@@ -6,7 +6,7 @@ Errors become `SyncError`s whose messages can be shown to the user as they are.
 
 import time
 from collections.abc import Callable, Iterator
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx2
 
@@ -38,6 +38,10 @@ class ApiError(SyncError):
 
 def _civil_date(day: date) -> dict:
     return {"date": {"year": day.year, "month": day.month, "day": day.day}}
+
+
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _windows(start: date, end: date, max_days: int) -> Iterator[tuple[date, date]]:
@@ -97,6 +101,16 @@ class HealthClient:
                     break
                 request = {**request, "pageToken": token}
         return points
+
+    def rollup(self, data_type: str, start: datetime, end: datetime) -> dict:
+        """One roll-up over [start, end), at most a day long; {} when there is no data."""
+        request = {
+            "range": {"startTime": _utc(start), "endTime": _utc(end)},
+            "windowSize": "86400s",  # longer than any workout, so the range is one window
+        }
+        body = self._request("POST", f"{API_BASE}/{data_type}/dataPoints:rollUp", json=request)
+        points = body.get("rollupDataPoints", [])
+        return points[0] if points else {}
 
     def _request(self, method: str, url: str, **kwargs) -> dict:
         error: ApiError | None = None

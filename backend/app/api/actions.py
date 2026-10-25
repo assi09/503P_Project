@@ -10,14 +10,16 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.actions import store
+from app.actions.measure import measure, with_measurement
 from app.actions.provider import GoogleWriter, Writer
-from app.actions.schemas import WRITE_SCOPES, Log, LogModel
+from app.actions.schemas import WRITE_SCOPES, Log, LogModel, Measured
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.google import get_google
 from app.api.schemas import ApiModel
 from app.config import settings
 from app.db.models import GoogleConnection, HealthAction, User
+from app.sync.client import HealthClient
 from app.sync.connections import credentials_for
 from app.sync.google_auth import SyncError
 
@@ -67,6 +69,15 @@ def response(row: HealthAction) -> Action:
     )
 
 
+def measure_workout(db: Session, user_id: uuid.UUID, start: datetime, end: datetime) -> Measured:
+    """The tracker's data for a workout's interval; "unavailable" without a working sign-in."""
+    try:
+        token = credentials_for(db, get_google().box, user_id).token
+    except (ApiError, SyncError, GoogleAuthError):
+        return Measured(status="unavailable")
+    return measure(HealthClient(lambda: token, max_retries=1), start, end)
+
+
 def get_writer(db: Session, user_id: uuid.UUID, kind: str) -> Writer:
     if not settings.google_writes_enabled:
         raise ApiError(
@@ -104,7 +115,14 @@ def get_action(action_id: uuid.UUID, db: Db, user: Person) -> Action:
 def propose(body: NewDraft, db: Db, user: Person, clock: Now) -> Action:
     return response(
         store.propose(
-            db, user.id, body.request_key, body.log.model_dump(mode="json", by_alias=True), clock
+            db,
+            user.id,
+            body.request_key,
+            with_measurement(
+                body.log.model_dump(mode="json", by_alias=True),
+                lambda start, end: measure_workout(db, user.id, start, end),
+            ),
+            clock,
         )
     )
 
@@ -117,7 +135,11 @@ def revise(action_id: uuid.UUID, body: RevisedDraft, db: Db, user: Person, clock
             user.id,
             action_id,
             body.version,
-            body.log.model_dump(mode="json", by_alias=True),
+            # Saving a workout again reads the tracker again: a new time, or data synced since.
+            with_measurement(
+                body.log.model_dump(mode="json", by_alias=True),
+                lambda start, end: measure_workout(db, user.id, start, end),
+            ),
             clock,
         )
     )

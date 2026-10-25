@@ -343,3 +343,53 @@ def test_a_general_logging_request_can_be_narrowed_to_food_on_the_next_reply(set
     assert len(response.json()[-1]["actionIds"]) == 1
     assert "propose_workout_log" in agent.llm.requests[0]["tools"]
     assert "propose_workout_log" not in agent.llm.requests[1]["tools"]
+
+
+def test_workout_drafts_carry_the_trackers_reading_and_revising_reads_it_again(setup, monkeypatch):
+    from app.actions.schemas import Measured
+
+    client, _, _ = setup
+    headers = sign_in(setup)
+    readings = iter([Measured(status="no_data"), Measured(status="measured", steps=900)])
+    asked = []
+
+    def measure_workout(db, user_id, start, end):
+        asked.append((start, end))
+        return next(readings)
+
+    monkeypatch.setattr(actions, "measure_workout", measure_workout)
+    workout = {
+        "kind": "workout",
+        "exerciseType": "WALKING",
+        "startTime": "2026-10-24T08:00:00+03:00",
+        "endTime": "2026-10-24T08:20:00+03:00",
+        "activeSeconds": 1200,
+        "measured": {"status": "measured", "caloriesKcal": 9000},  # never trusted from a client
+    }
+    created = propose(client, headers, workout).json()
+    measured = created["log"]["measured"]
+    assert measured["status"] == "no_data" and measured["caloriesKcal"] is None
+    # "Refresh" in the app saves the same log again; the tracker is read again.
+    revised = client.post(
+        f"/actions/{created['id']}/revise",
+        headers=headers,
+        json={"version": created["version"], "log": created["log"]},
+    ).json()
+    assert revised["version"] == created["version"] + 1
+    assert revised["log"]["measured"]["steps"] == 900
+    assert len(asked) == 2
+
+
+def test_without_google_a_workout_draft_is_kept_unmeasured(setup):
+    client, _, _ = setup
+    headers = sign_in(setup)
+    workout = {
+        "kind": "workout",
+        "exerciseType": "RUNNING",
+        "startTime": "2026-10-24T08:00:00+03:00",
+        "endTime": "2026-10-24T08:20:00+03:00",
+        "activeSeconds": 1200,
+    }
+    created = propose(client, headers, workout)
+    assert created.status_code == 201
+    assert created.json()["log"]["measured"]["status"] == "unavailable"

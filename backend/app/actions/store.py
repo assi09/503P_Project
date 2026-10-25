@@ -66,6 +66,11 @@ def _payload(payload: dict) -> dict:
         ) from None
 
 
+def _given(payload: dict) -> dict:
+    # The tracker's reading can change between two identical requests as data syncs.
+    return {key: value for key, value in payload.items() if key != "measured"}
+
+
 def _fingerprint(payload: dict) -> str:
     keys = (
         ("kind", "foodName", "consumedAt")
@@ -112,7 +117,7 @@ def propose(
                 HealthActionEvent.event == "proposed",
             )
         )
-        if first is None or first.payload != payload:
+        if first is None or _given(first.payload) != _given(payload):
             raise ApiError(
                 409, "request_conflict", "This request key belongs to another log payload."
             )

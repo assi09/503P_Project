@@ -25,6 +25,7 @@ from pydantic import Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.ask import ask, default_guard, default_router
 from app.agent.context import Attachment, turns_from
@@ -220,7 +221,15 @@ def _answer(
                 f"Their reply: {body.text}"
             )
         prepared: list[str] = []
-        draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared)
+
+        def measurer(start: datetime, end: datetime) -> Measured:
+            # Imported here: the actions routes import Google's, which import this module.
+            from app.api.actions import measure_workout
+
+            with sessions() as db:
+                return measure_workout(db, user_id, start, end)
+
+        draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared, measurer)
         try:
             reply = ask(
                 agent.llm,

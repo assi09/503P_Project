@@ -97,6 +97,25 @@ class FoodLog(LogModel):
         return {"nutritionLog": log}
 
 
+class Overlap(LogModel):
+    """An exercise already recorded over part of the workout, by the tracker or another app."""
+
+    exercise_type: str = Field(pattern=r"^[A-Z_]{1,64}$")
+    start_time: AwareDatetime
+    end_time: AwareDatetime
+
+
+class Measured(LogModel):
+    """What the tracker recorded during the workout. Only the server fills this in."""
+
+    status: Literal["measured", "no_data", "unavailable"]
+    steps: Annotated[int, Field(ge=0)] | None = None
+    distance_km: Annotated[float, Field(ge=0)] | None = None
+    calories_kcal: Annotated[float, Field(ge=0)] | None = None
+    average_heart_rate: Annotated[int, Field(gt=0)] | None = None
+    overlaps: list[Overlap] = Field(default_factory=list, max_length=20)
+
+
 class WorkoutLog(LogModel):
     kind: Literal["workout"] = "workout"
     exercise_type: Literal["RUNNING", "WALKING", "BIKING", "AEROBIC_WORKOUT"]
@@ -105,6 +124,7 @@ class WorkoutLog(LogModel):
     active_seconds: Annotated[int, Field(gt=0, strict=True)]
     distance_km: Annotated[float, Field(ge=0, strict=True)] | None = None
     provenance: Literal["user_entered"] = "user_entered"
+    measured: Measured | None = None
 
     @model_validator(mode="after")
     def ordered(self) -> Self:
@@ -129,13 +149,34 @@ class WorkoutLog(LogModel):
             "displayName": WORKOUT_NAMES[self.exercise_type],
             "interval": interval(self.start_time, self.end_time),
             "activeDuration": f"{self.active_seconds:g}s",
-            "metricsSummary": {},
+            "metricsSummary": self._summary(),
         }
-        if self.distance_km is not None:
-            # Whole millimetres: 5.1 km is 5_100_000, not 5_099_999.999999999.
-            exercise["metricsSummary"]["distanceMillimeters"] = round(self.distance_km * 1_000_000)
-        # No fabricated HR, steps or calories, and no telemetry writes that duplicate device data.
         return {"exercise": exercise}
+
+    def _summary(self) -> dict:
+        # What the person said wins; the tracker's measurements fill in the rest. Nothing is
+        # estimated, and no minute-level data is written: the tracker already wrote it, and a
+        # summary does not change the daily totals, so nothing is counted twice.
+        measured = self.measured if self.measured and self.measured.status == "measured" else None
+        summary: dict = {}
+        distance_km = self.distance_km
+        if distance_km is None and measured and measured.distance_km:
+            distance_km = measured.distance_km
+        if distance_km is not None:
+            # Whole millimetres: 5.1 km is 5_100_000, not 5_099_999.999999999.
+            summary["distanceMillimeters"] = round(distance_km * 1_000_000)
+            if distance_km > 0:
+                summary["averagePaceSecondsPerMeter"] = round(
+                    self.active_seconds / (distance_km * 1000), 3
+                )
+        if measured:
+            if measured.steps:
+                summary["steps"] = str(measured.steps)  # 64-bit integers travel as strings
+            if measured.calories_kcal is not None:
+                summary["caloriesKcal"] = measured.calories_kcal
+            if measured.average_heart_rate:
+                summary["averageHeartRateBeatsPerMinute"] = str(measured.average_heart_rate)
+        return summary
 
 
 def interval(start: datetime, end: datetime) -> dict:
