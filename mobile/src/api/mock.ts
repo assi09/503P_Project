@@ -365,6 +365,29 @@ function startMockSync() {
   }, 3000);
 }
 
+// A made-up tracker reading, as the server would add it: never what the app sent.
+function withMockReading(log: HealthLog): HealthLog {
+  if (log.kind !== 'workout') return log;
+  const minutes = log.activeSeconds / 60;
+  return {
+    ...log,
+    measured: {
+      status: 'measured',
+      steps: Math.round(minutes * 100),
+      distanceKm: Math.round(minutes * 0.08 * 100) / 100,
+      caloriesKcal: Math.round(minutes * 5),
+      averageHeartRate: 110,
+      overlaps: [],
+    },
+  };
+}
+
+function withoutReading(log: HealthLog): HealthLog {
+  if (log.kind !== 'workout') return log;
+  const { measured: _, ...given } = log;
+  return given;
+}
+
 const logDrafts: { owner: string; requestKey: string; first: string; action: HealthAction }[] = [];
 let nextDraft = 0;
 
@@ -405,13 +428,14 @@ export const mockClient: ApiClient = {
       const { action } = ownedDraft(id);
       return { ...action, log: { ...action.log } };
     }),
-  proposeAction: (requestKey, log) =>
+  proposeAction: (requestKey, given) =>
     later(() => {
+      const log = withMockReading(given);
       validateLog(log);
       const owner = actionAccount().id;
       const existing = logDrafts.find((d) => d.owner === owner && d.requestKey === requestKey);
       if (existing) {
-        if (existing.first !== JSON.stringify(log))
+        if (existing.first !== JSON.stringify(withoutReading(log)))
           throw new ApiError('Request key already used.', 'request_conflict', 409);
         return { ...existing.action, log: { ...existing.action.log } };
       }
@@ -439,11 +463,12 @@ export const mockClient: ApiClient = {
         createdAt: now,
         updatedAt: now,
       };
-      logDrafts.push({ owner, requestKey, first: JSON.stringify(log), action });
+      logDrafts.push({ owner, requestKey, first: JSON.stringify(withoutReading(log)), action });
       return { ...action, log: { ...action.log } };
     }),
-  reviseAction: (id, version, log: HealthLog) =>
+  reviseAction: (id, version, given: HealthLog) =>
     later(() => {
+      const log = withMockReading(given);
       validateLog(log);
       const record = ownedDraft(id, version);
       if (log.kind !== record.action.log.kind)
