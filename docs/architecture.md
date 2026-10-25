@@ -203,6 +203,11 @@ still planned. The provider writer is tested with fake HTTP, and one real food c
 2026-10-25, and one real workout create and delete after PR #57. Real writes are gated by
 `FA_GOOGLE_WRITES_ENABLED`, off by default.
 
+A workout draft also carries the tracker's reading for its interval (`measured`), read by the
+server with Google's range roll-ups whenever the draft is created or saved again. It is never
+taken from the model or the app, and it never blocks a draft: without a sign-in or on any Google
+error it is marked unavailable and only the given values are sent.
+
 The following requirements also cover the remaining capabilities:
 
 Workout and nutrition logging are a core planned extension; see

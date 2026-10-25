@@ -56,7 +56,25 @@ from Google and deleted by undo (see [experiments.md](experiments.md#first-real-
 one real workout (no distance) was created and undone the same way after PR #57. Reconciliation of pending operations or process crashes
 remains a prerequisite to leaving writes on. A refresh reads the saved status;
 it does not currently poll Google operations. Nutrition history/mapping, food lookup, serving
-arithmetic, workout telemetry summaries, photo input and hydration are still planned.
+arithmetic, photo input and hydration are still planned.
+
+**What the tracker recorded is added to a workout** (built after the first real workout write).
+When a workout draft is created or saved again, the server reads Google's roll-ups for exactly
+that interval: steps, distance, total calories and average heart rate. It also lists exercises
+already recorded over the same time. The result is stored in the draft as `measured`; whatever the
+model or the app puts in that field is replaced. Decided with the user:
+- **The person's values win**; the tracker fills in the rest (today only distance can conflict).
+- **An overlapping exercise is a warning on the card**, not a refusal: logging it would add a
+  second workout, but the tracker may have the wrong type.
+- **No tracker data** (no heart rate in the interval: not worn, or not synced yet) logs only the
+  given values; the card says so and offers "Refresh from Fitbit", which saves the same draft
+  again and reads the tracker again. Without heart rate no calories are sent, because Google's
+  total calories exist even then, estimated from resting burn.
+- Total calories, not active ones: on 8 of the owner's recorded exercises the roll-up over the
+  exercise's own interval matched Fitbit's summary exactly for steps, distance and heart rate and
+  within 2% for calories, while active calories were 30-50% lower.
+- Only the summary is written; no minute-level data, since the tracker already wrote it and a
+  summary does not change the daily totals.
 
 ## Tools to build around user tasks
 
@@ -70,7 +88,7 @@ extensions. `propose_food_log` and `propose_workout_log` exist; execution is out
 | Adjust a known serving | `scale_nutrients` | Pure unit/serving arithmetic over fetched or user-supplied values; never model arithmetic. Do not convert cups/pieces to grams without a food-specific conversion. |
 | Record a meal with known numbers | `propose_food_log` | Preserve supplied energy/macros and missing values. A missing macro is not zero; calorie estimates do not independently verify user input. |
 | Record a workout | `propose_workout_log`, existing-session lookup | Resolve time, type and duration; inspect overlap with device sessions before creating another entry. |
-| Understand a workout window | `summarize_workout` | New intraday fetch plus deterministic sample coverage, HR/steps summaries; avoid extrapolating from daily totals or across gaps. |
+| Understand a workout window | built into workout drafts (`app/actions/measure.py`) | Google's roll-ups over the exact interval (steps, distance, total calories, average heart rate) plus overlapping exercises; no heart rate means no tracker data. |
 | Record an entry from a photo | `estimate_food`, then food lookup and a draft | Extract candidate foods/portion assumptions; ask about hidden ingredients, amount or preparation when needed. Show uncertainty and allow editing. No invented precision. |
 | Fix a draft | `get_draft`, `revise_draft`, `cancel_draft` | Owned server state; revision invalidates prior confirmation. Cancellation before execution makes no remote write. |
 | Apply or undo a reviewed action | Confirmed executor, provider reconciliation, delete | Server-controlled operations, absent from the model's unrestricted toolbox. Durable status, IDs and audit; retry only when outcome is known. |

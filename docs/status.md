@@ -56,7 +56,11 @@ Validated with fake Google and a scripted model end to end, browser review/edit/
 unknown/cancel states in light/dark on desktop/mobile widths, and two paid synthetic draft checks.
 The second created one draft and submitted in two model calls. Both together cost about $0.0086.
 
-Still planned: food lookup and serving arithmetic, intraday workout summaries, nutrition sync and
+Workout drafts now carry what the tracker recorded over their interval (steps, distance, calories,
+average heart rate) and warn about an exercise the tracker already recorded then; see
+[agent-actions.md](agent-actions.md#what-the-tracker-recorded-is-added-to-a-workout).
+
+Still planned: food lookup and serving arithmetic, more workout types, nutrition sync and
 provider deduplication, photo estimates (kept for the demo), and hydration. The optional
 [recorded routes/regions extra](product.md#recorded-routes-and-regions-optional-planned) needs GPS
 exercise data and separate location consent; daily step totals cannot reconstruct locations.
@@ -190,9 +194,9 @@ Next, in order:
 2. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
    score (Sprint 2).
 3. Tracing (Langfuse) and the first evaluation (Sprint 2).
-4. Logging, continued: the tracker's measurements on logged workouts (`summarize_workout`),
-   reconciliation of pending writes, food lookup,
-   nutrition mapping and photo estimates. See
+4. Logging, continued: more workout types (the tracker records weightlifting and elliptical,
+   which drafts cannot log yet), a real write of a measured workout, reconciliation of pending
+   writes, food lookup, nutrition mapping and photo estimates. See
    [agent-actions.md](agent-actions.md).
 
 ## What has been tested
