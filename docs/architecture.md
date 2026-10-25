@@ -214,7 +214,10 @@ single thread as the first). A run is given its own conversation's recent turns;
 person's and shared by all of them: facts, findings, answers, and verified claims from their other
 conversations of the last 60 days (memory kind `chat`, with their evidence), which the context
 builder picks by the question's metrics, so an answer can point to what another chat found.
-Deleting a conversation deletes its messages; facts and findings stay.
+Deleting a conversation deletes its messages; facts and findings stay. Conversations can be renamed
+and pinned (migration 0008). Editing a question, or retrying an answer, sends the new text with
+`replaces`: that question and everything after it in the conversation are removed, only once no
+other answer is running for the person, and the new text is answered as usual.
 
 Questions about one day use `compare_day` (one day against the middle half of the 28 days before,
 the rule the Today screen uses). Its claims have their own kind, `day`, whose direction must match

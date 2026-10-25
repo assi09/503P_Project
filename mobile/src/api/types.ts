@@ -107,6 +107,7 @@ export interface SendOptions {
   depth: Depth;
   attachment?: Attachment;
   conversationId?: string; // without one: the latest conversation
+  replaces?: string; // editing or retrying: this question and what followed it are replaced
 }
 
 export interface ChatMessage {
@@ -128,6 +129,7 @@ export interface ChatMessage {
 export interface Conversation {
   id: string;
   title: string; // the first question until renamed
+  pinned: boolean; // listed first
   messages: number;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
@@ -222,7 +224,7 @@ export interface ApiClient {
   getChat(conversationId?: string): Promise<ChatMessage[]>; // without one: the latest used
   getConversations(): Promise<Conversation[]>; // most recently used first
   createConversation(): Promise<Conversation>;
-  renameConversation(id: string, title: string): Promise<Conversation>;
+  updateConversation(id: string, changes: { title?: string; pinned?: boolean }): Promise<Conversation>;
   deleteConversation(id: string): Promise<void>;
   sendMessage(text: string, options: SendOptions): Promise<ChatMessage[]>; // returns the new messages
   getReminders(): Promise<Reminder[]>;

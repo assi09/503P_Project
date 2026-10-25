@@ -20,7 +20,7 @@ import type { Attachment, Depth, ExpertChoice, Finding } from '@/api/types';
 import { AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
 import { Composer } from '@/components/composer';
-import { ConversationList } from '@/components/conversations';
+import { ConversationList, IconButton } from '@/components/conversations';
 import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
@@ -35,6 +35,25 @@ const MAX_LENGTH = 500;
 // On wide screens the conversation is a quarter wider than other pages' column, beside the list.
 const WIDE_CHAT = 900;
 const SIDEBAR = 272;
+const RAIL = 56; // the hidden sidebar's width: room for its two buttons
+const SIDEBAR_KEY = 'patterns.chatsOpen';
+
+// Remembered in the browser only, like the theme; phones show the chats as a page instead.
+function storedSidebar(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SIDEBAR_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
+
+function storeSidebar(open: boolean) {
+  try {
+    globalThis.localStorage?.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
+  } catch {
+    // Blocked storage: the choice lasts until reload.
+  }
+}
 
 // The composer moves from the middle of the empty page down to the bottom of the conversation.
 const MOVE = LinearTransition.duration(DURATION.normal).easing(EASE_OUT);
@@ -56,6 +75,11 @@ export default function AskScreen() {
     c?: string; // a conversation to open, e.g. from the chats page
   }>();
   const wide = useWide();
+  const [sidebarOpen, setSidebarOpen] = useState(storedSidebar);
+  const toggleSidebar = (open: boolean) => {
+    setSidebarOpen(open);
+    storeSidebar(open);
+  };
   const [target, setTarget] = useState<ChatTarget>('latest');
   const [seenChat, setSeenChat] = useState<string>();
   if (c !== seenChat) {
@@ -118,7 +142,11 @@ export default function AskScreen() {
     () => Object.fromEntries(findings.map((f) => [f.id, f.title])),
     [findings],
   );
-  const messages = chat.data ?? [];
+  // While an edited or retried question is on its way, what it replaces is already gone.
+  const replacing = send.isPending ? send.variables?.options.replaces : undefined;
+  const all = chat.data ?? [];
+  const cut = replacing ? all.findIndex((m) => m.id === replacing) : -1;
+  const messages = cut >= 0 ? all.slice(0, cut) : all;
   const pendingText = send.isPending ? send.variables?.text : undefined;
   const pendingExpert = send.variables?.options.expert ?? expert;
   const started = messages.length > 0 || pendingText !== undefined;
@@ -145,6 +173,20 @@ export default function AskScreen() {
           setDraft('');
           setAttachment(undefined);
           // A new chat now exists: keep showing it by its id.
+          const id = added[0]?.conversationId;
+          if (id && target !== id) setTarget(id);
+        },
+      },
+    );
+  }
+
+  /** Sends `text` in place of the question `replaces`: an edit, or a retry of the same text. */
+  function resend(text: string, replaces: string) {
+    if (send.isPending) return;
+    send.mutate(
+      { text, options: { expert, depth, replaces }, target },
+      {
+        onSuccess: (added) => {
           const id = added[0]?.conversationId;
           if (id && target !== id) setTarget(id);
         },
@@ -202,14 +244,26 @@ export default function AskScreen() {
               contentContainerStyle={[styles.messages, width]}
               keyboardShouldPersistTaps="handled"
             >
-              {messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  knownEvidence={report.data?.evidence ?? {}}
-                  findingTitles={findingTitles}
-                />
-              ))}
+              {messages.map((message, index) => {
+                // An answer is retried by asking its question again, in place.
+                const question =
+                  message.role === 'assistant' && messages[index - 1]?.role === 'user'
+                    ? messages[index - 1]
+                    : undefined;
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    knownEvidence={report.data?.evidence ?? {}}
+                    findingTitles={findingTitles}
+                    busy={send.isPending}
+                    onEdit={
+                      message.role === 'user' ? (text) => resend(text, message.id) : undefined
+                    }
+                    onRetry={question ? () => resend(question.text, question.id) : undefined}
+                  />
+                );
+              })}
               {pendingText !== undefined && (
                 <>
                   <View
@@ -303,19 +357,33 @@ export default function AskScreen() {
   if (!wide) return conversation;
   return (
     <View style={[styles.split, { backgroundColor: colors.background }]}>
-      <View
-        style={[
-          styles.sidebar,
-          { borderColor: colors.border, paddingTop: insets.top + spacing.lg },
-        ]}
-      >
-        <ConversationList
-          current={openId}
-          newOpen={target === 'new'}
-          onSelect={(id) => openChat(id)}
-          onNew={() => openChat('new')}
-        />
-      </View>
+      {sidebarOpen ? (
+        <View
+          style={[
+            styles.sidebar,
+            { borderColor: colors.border, paddingTop: insets.top + spacing.lg },
+          ]}
+        >
+          <ConversationList
+            current={openId}
+            newOpen={target === 'new'}
+            onSelect={(id) => openChat(id)}
+            onNew={() => openChat('new')}
+            onCollapse={() => toggleSidebar(false)}
+          />
+        </View>
+      ) : (
+        <View
+          style={[styles.rail, { borderColor: colors.border, paddingTop: insets.top + spacing.lg }]}
+        >
+          <IconButton
+            icon="chevron-forward"
+            label="Show your chats"
+            onPress={() => toggleSidebar(true)}
+          />
+          <IconButton icon="create-outline" label="New chat" onPress={() => openChat('new')} />
+        </View>
+      )}
       {conversation}
     </View>
   );
@@ -398,6 +466,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   split: { flex: 1, flexDirection: 'row' },
+  rail: {
+    width: RAIL,
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
   sidebar: {
     width: SIDEBAR,
     paddingHorizontal: spacing.md,

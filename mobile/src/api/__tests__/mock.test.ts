@@ -201,11 +201,46 @@ describe('conversations', () => {
     expect(sleep.every((m) => m.conversationId === first.id)).toBe(true);
     expect((await mockClient.getChat())[0].text).toBe('Steps this week?'); // the latest
 
-    await mockClient.renameConversation(first.id, 'Sleep');
+    await mockClient.updateConversation(first.id, { title: 'Sleep' });
     await mockClient.deleteConversation(second.id);
     const left = await mockClient.getConversations();
     expect(left.map((c) => c.title)).toContain('Sleep');
     expect(left.some((c) => c.id === second.id)).toBe(false);
     await expect(mockClient.getChat(second.id)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('editing and organising chats', () => {
+  const OPTIONS = { expert: 'auto' as const, depth: 'quick' as const };
+
+  it('lists pinned chats first', async () => {
+    const older = await mockClient.createConversation();
+    await mockClient.sendMessage('Older', { ...OPTIONS, conversationId: older.id });
+    const newer = await mockClient.createConversation();
+    await mockClient.sendMessage('Newer', { ...OPTIONS, conversationId: newer.id });
+    await mockClient.updateConversation(older.id, { pinned: true });
+    const list = await mockClient.getConversations();
+    expect(list[0]).toMatchObject({ id: older.id, pinned: true });
+  });
+
+  it('replaces an edited question and what followed it, in its own chat', async () => {
+    const chat = await mockClient.createConversation();
+    const [first] = await mockClient.sendMessage('How did I sleep?', {
+      ...OPTIONS,
+      conversationId: chat.id,
+    });
+    await mockClient.sendMessage('And on weekends?', { ...OPTIONS, conversationId: chat.id });
+    const edited = await mockClient.sendMessage('How did I sleep in October?', {
+      ...OPTIONS,
+      replaces: first.id,
+    });
+    expect(edited[0].conversationId).toBe(chat.id);
+    const texts = (await mockClient.getChat(chat.id)).map((m) => m.text);
+    expect(texts[0]).toBe('How did I sleep in October?');
+    expect(texts).toHaveLength(2);
+    const answer = (await mockClient.getChat(chat.id))[1];
+    await expect(
+      mockClient.sendMessage('Again', { ...OPTIONS, replaces: answer.id }),
+    ).rejects.toMatchObject({ status: 404 }); // an answer is not a question
   });
 });

@@ -70,6 +70,15 @@ export function useConversations() {
   return useQuery({ queryKey: keys.conversations, queryFn: api.getConversations });
 }
 
+export function useUpdateConversation() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: { title?: string; pinned?: boolean } }) =>
+      api.updateConversation(id, changes),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.conversations }),
+  });
+}
+
 export function useDeleteConversation() {
   const client = useQueryClient();
   return useMutation({
@@ -103,9 +112,13 @@ export function useSendMessage() {
       return api.sendMessage(text, { ...options, conversationId });
     },
     // Append directly so the conversation never flickers while it refetches.
-    onSuccess: (added, { target }) => {
+    onSuccess: (added, { target, options }) => {
       const id = added[0]?.conversationId;
-      const append = (old: ChatMessage[] = []) => [...old, ...added];
+      // An edited or retried question replaced itself and everything after it.
+      const append = (old: ChatMessage[] = []) => {
+        const cut = options.replaces ? old.findIndex((m) => m.id === options.replaces) : -1;
+        return [...(cut >= 0 ? old.slice(0, cut) : old), ...added];
+      };
       if (id) client.setQueryData<ChatMessage[]>([...keys.chat, id], append);
       if (target === 'latest') client.setQueryData<ChatMessage[]>([...keys.chat, 'latest'], append);
       client.invalidateQueries({ queryKey: keys.conversations });

@@ -190,9 +190,14 @@ describe('conversations', () => {
     await client.getChat('c 1');
     await client.getConversations();
     await client.createConversation();
-    await client.renameConversation('c1', 'Sleep');
+    await client.updateConversation('c1', { title: 'Sleep' });
     await client.deleteConversation('c1');
-    await client.sendMessage('Hi', { expert: 'auto', depth: 'quick', conversationId: 'c1' });
+    await client.sendMessage('Hi', {
+      expert: 'auto',
+      depth: 'quick',
+      conversationId: 'c1',
+      replaces: 'm4',
+    });
     const calls = fetchMock.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET']);
     expect(calls).toEqual([
       ['http://api.test/chat', 'GET'],
@@ -204,6 +209,9 @@ describe('conversations', () => {
       ['http://api.test/chat', 'POST'],
     ]);
     expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({ title: 'Sleep' });
-    expect(JSON.parse(fetchMock.mock.calls[6][1].body)).toMatchObject({ conversationId: 'c1' });
+    expect(JSON.parse(fetchMock.mock.calls[6][1].body)).toMatchObject({
+      conversationId: 'c1',
+      replaces: 'm4',
+    });
   });
 });
