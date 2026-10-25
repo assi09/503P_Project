@@ -76,30 +76,9 @@ model or the app puts in that field is replaced. Decided with the user:
 - Only the summary is written; no minute-level data, since the tracker already wrote it and a
   summary does not change the daily totals.
 
-**Every workout type, with the metrics Fitbit records for its kind.** Drafts accept all of
-Google's exercise types (about 190, `app/actions/exercises.py`); the agent picks the closest one
-(tennis is `TENNIS`, kickboxing `KICKBOXING`, `OTHER` if nothing fits). Which metrics a kind gets
-comes from Fitbit's own summaries of the owner's 119 tracked workouts:
-
-| Kind | Examples | From the tracker | Seen on the owner's workouts |
-|---|---|---|---|
-| Every workout, when worn | all | total calories, average heart rate, time in each heart-rate zone, Active Zone Minutes (left out when none) | all 12 types |
-| On foot | walk, run, hike, treadmill, rucking | + steps, distance, pace | walk (42) |
-| Court and field sports | tennis, soccer, basketball, padel, golf | + steps, distance (no pace) | soccer, tennis, volleyball, sport |
-| Step-based | elliptical, stair climber, dance, jump rope | + steps | elliptical |
-| Swimming | pool, open water | + pool lengths (counted only on swims: stray "lengths" appear outside them) | none |
-| Everything else | weights, yoga, cycling, rowing, boxing, martial arts | heart-based only | weightlifting, strength, cardio, workout |
-
-Types the owner has not done are placed by the same rule and are not verified on real data. A
-distance the person gives is sent for any kind, with pace on foot and speed for bikes, boats,
-swims and skates (not for court sports, where Fitbit shows neither); speed limits per kind catch
-typos. Checked by logging each of the owner's tracked workouts again in simulation: our summary
-matched Fitbit's on every field for soccer, tennis, volleyball, sport, cardio and the elliptical,
-and on walks except calories and zones once each; on gym sessions calories differed on 11 of 45,
-where Fitbit leaves out paused time that a logged workout does not have. Active Zone Minutes is
-the plain sum of the roll-up's three zones (78 of 79 exact, one off by a minute).
-Elevation gain, splits and GPS routes are not added: no climbing or GPS data was available to
-check them against.
+**Every workout type, with the metrics Fitbit records for its kind** (PR #59): drafts accept all
+181 of Google's exercise types, and each kind of workout gets what Fitbit puts on it. The types,
+kinds, field mappings, API details and how each was checked are in [workouts.md](workouts.md).
 
 ## Tools to build around user tasks
 
