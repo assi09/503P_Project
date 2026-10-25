@@ -111,7 +111,8 @@ export default function MetricScreen() {
               <Button
                 label={`Ask about ${label.toLowerCase()}`}
                 icon="sparkles-outline"
-                onPress={() => router.push({ pathname: '/ask', params: { metric } })}
+                // dismissTo returns to the Ask tab; push would stack a second set of tabs.
+                onPress={() => router.dismissTo({ pathname: '/ask', params: { metric } })}
               />
             </View>
           </View>

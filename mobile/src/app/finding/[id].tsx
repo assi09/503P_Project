@@ -2,13 +2,14 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { useReport } from '@/api/hooks';
-import { EvidenceCard } from '@/components/evidence';
 import { LineChart } from '@/components/LineChart';
+import { Row, Section } from '@/components/list';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { Button, Card, ChangeBadge, SectionTitle } from '@/components/ui';
+import { Button, ChangeBadge } from '@/components/ui';
+import { answer, question } from '@/lib/evidence';
 import { metricLabel, windowLabel } from '@/lib/format';
-import { metricFamily, METRIC_COLORS, spacing, useMetricColor } from '@/theme';
+import { spacing, useMetricColor } from '@/theme';
 
 export default function FindingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,7 +34,6 @@ function FindingDetail({ findingId }: { findingId: string }) {
   const report = useReport().data!;
   const finding = report.findings.find((f) => f.id === findingId)!;
   const color = useMetricColor(finding.metric);
-  const family = metricFamily(finding.metric);
 
   return (
     <>
@@ -46,32 +46,39 @@ function FindingDetail({ findingId }: { findingId: string }) {
       </View>
       <Text>{finding.summary}</Text>
 
-      <Card glow={family ? METRIC_COLORS[family].gradient[0] : undefined}>
+      <View style={{ gap: spacing.xs }}>
         <LineChart
           points={finding.series}
           metric={finding.metric}
           highlight={finding.highlight}
           height={180}
           showAxis
+          fill={false}
         />
         {finding.highlight && (
           <Text variant="caption" color="faint">
             Shaded: {windowLabel(finding.highlight)}
           </Text>
         )}
-      </Card>
+      </View>
 
-      <SectionTitle>How we know</SectionTitle>
-      {finding.evidenceIds.map((evidenceId) => {
-        const evidence = report.evidence[evidenceId];
-        return evidence ? (
-          <EvidenceCard key={evidenceId} evidence={evidence} />
-        ) : (
-          <Text key={evidenceId} color="danger">
-            Missing evidence {evidenceId}.
-          </Text>
-        );
-      })}
+      <Section title="How we know">
+        {finding.evidenceIds.map((evidenceId) => {
+          const evidence = report.evidence[evidenceId];
+          return evidence ? (
+            <Row
+              key={evidenceId}
+              icon="stats-chart-outline"
+              iconColor={color}
+              title={question(evidence)}
+              detail={answer(evidence).text}
+              onPress={() => router.push(`/evidence/${evidenceId}`)}
+            />
+          ) : (
+            <Row key={evidenceId} title="This computation is no longer available" />
+          );
+        })}
+      </Section>
 
       <Button
         label="Ask about this"
