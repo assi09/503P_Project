@@ -92,6 +92,56 @@ export interface DaySummary {
   first: ISODate; // the days there is data for
   last: ISODate;
   metrics: DayMetric[];
+  recovery?: Recovery | null; // our own estimate, with at least two of its three inputs
+}
+
+/** Where last night's HRV, resting heart rate and sleep sit among the 28 days before (0–100). */
+export interface Recovery {
+  score: number;
+  parts: Record<string, number>; // each input's share of the 28 days before that it beat
+}
+
+/** A workout the tracker or an app recorded, with its summary. */
+export interface Workout {
+  id: string;
+  exerciseType: string;
+  name: string;
+  start: ISODateTime;
+  end: ISODateTime;
+  activeSeconds: number | null;
+  steps?: number | null;
+  distanceKm?: number | null;
+  caloriesKcal?: number | null;
+  averageHeartRate?: number | null;
+  activeZoneMinutes?: number | null;
+  zoneSeconds?: Partial<Record<'light' | 'moderate' | 'vigorous' | 'peak', number>> | null;
+  source?: string | null;
+}
+
+export interface DayWorkouts {
+  available: boolean; // false without a Google Health connection
+  workouts: Workout[];
+}
+
+export interface HourlySteps {
+  available: boolean;
+  steps: (number | null)[]; // 24 local hours
+}
+
+export const CHECKIN_TAGS = [
+  'hard_training',
+  'alcohol',
+  'late_meal',
+  'stress',
+  'travel',
+  'feeling_sick',
+] as const;
+
+/** The morning "how do you feel?" rating, 1 to 5, with optional tags. */
+export interface CheckIn {
+  day: ISODate;
+  rating: number;
+  tags: (typeof CHECKIN_TAGS)[number][];
 }
 
 export interface MetricSeries {
@@ -218,6 +268,10 @@ export interface ApiClient {
   disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;
   getDay(date: ISODate | 'latest'): Promise<DaySummary>;
+  getWorkouts(date: ISODate): Promise<DayWorkouts>;
+  getHourlySteps(date: ISODate): Promise<HourlySteps>;
+  getCheckIn(date: ISODate): Promise<CheckIn | null>;
+  saveCheckIn(checkIn: CheckIn): Promise<CheckIn>; // today only
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;

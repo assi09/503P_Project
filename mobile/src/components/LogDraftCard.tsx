@@ -49,8 +49,11 @@ const ICONS: Record<string, IconName> = {
 };
 
 export function logIcon(log: HealthLog): IconName {
-  if (log.kind === 'food') return 'restaurant-outline';
-  const type = log.exerciseType;
+  return log.kind === 'food' ? 'restaurant-outline' : exerciseIcon(log.exerciseType);
+}
+
+/** An icon for a workout type, e.g. a tennis ball for TENNIS. */
+export function exerciseIcon(type: string): IconName {
   return ICONS[type] ?? ICONS[workoutGroup(type)] ?? 'fitness-outline';
 }
 

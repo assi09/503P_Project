@@ -79,6 +79,7 @@ const FAMILY_BY_METRIC: Record<string, MetricFamily> = {
   hrv_ms: 'heart',
   respiratory_rate: 'heart',
   readiness: 'recovery',
+  recovery_score: 'recovery',
   skin_temp_variation_c: 'temperature',
 };
 

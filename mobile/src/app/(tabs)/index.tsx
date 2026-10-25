@@ -5,9 +5,17 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
-import { useDay, useReport } from '@/api/hooks';
+import { useDay, useHourlySteps, useReport, useWorkouts } from '@/api/hooks';
 import type { DaySummary, Finding, ISODate } from '@/api/types';
-import { DayHeader, KeyNumber, MetricRow, StagesBar } from '@/components/day';
+import { CheckInSection } from '@/components/checkin';
+import {
+  DayHeader,
+  HourlyBars,
+  KeyNumber,
+  MetricRow,
+  StagesBar,
+  WorkoutRow,
+} from '@/components/day';
 import { QuestionCard } from '@/components/insights';
 import { Section } from '@/components/list';
 import { Screen } from '@/components/Screen';
@@ -19,10 +27,12 @@ import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
 import { isHovered } from '@/lib/platform';
 
+// Recovery leads; wide screens fit resting heart rate too, phones keep it under Heart and body.
 const KEY_NUMBERS = [
-  { metric: 'sleep_minutes', label: 'Sleep', short: 'Sleep' },
-  { metric: 'steps', label: 'Steps', short: 'Steps' },
-  { metric: 'resting_hr', label: 'Resting heart rate', short: 'Resting HR' },
+  { metric: 'recovery_score', label: 'Recovery' },
+  { metric: 'sleep_minutes', label: 'Sleep' },
+  { metric: 'steps', label: 'Steps' },
+  { metric: 'resting_hr', label: 'Resting heart rate', wideOnly: true },
 ];
 const ACTIVITY = [
   'active_zone_minutes',
@@ -31,7 +41,7 @@ const ACTIVITY = [
   'very_active_minutes',
   'moderately_active_minutes',
 ];
-const HEART = ['hrv_ms', 'respiratory_rate', 'skin_temp_variation_c'];
+const HEART = ['resting_hr', 'hrv_ms', 'respiratory_rate', 'skin_temp_variation_c'];
 
 export default function TodayScreen() {
   const [date, setDate] = useState<ISODate | 'latest'>('latest');
@@ -154,12 +164,15 @@ function DayBody({
   const bedtime = metricOf(day, 'bedtime_hour');
   const wake = wakeHour(bedtime.value, metricOf(day, 'time_in_bed').value);
 
+  const workouts = useWorkouts(day.date);
+  const hourly = useHourlySteps(day.date);
+
   const keys = (
     <View style={[styles.keys, { borderColor: colors.border }]}>
-      {KEY_NUMBERS.map(({ metric, label, short }) => (
+      {KEY_NUMBERS.filter((k) => wide || !k.wideOnly).map(({ metric, label }) => (
         <KeyNumber
           key={metric}
-          label={wide ? label : short}
+          label={label}
           metric={metricOf(day, metric)}
           partial={day.partial}
           large={wide}
@@ -211,6 +224,9 @@ function DayBody({
           : undefined
       }
     >
+      {hourly.data?.steps.some((s) => s !== null) ? (
+        <HourlyBars steps={hourly.data.steps} />
+      ) : null}
       {ACTIVITY.map((metric) => (
         <MetricRow
           key={metric}
@@ -222,6 +238,34 @@ function DayBody({
       ))}
     </Section>
   );
+
+  // Without a Google Health connection there is nothing to read workouts from: say nothing.
+  const sessions = workouts.data?.available ? (
+    <Section title="Workouts">
+      {workouts.data.workouts.length ? (
+        workouts.data.workouts.map((workout) => (
+          <WorkoutRow
+            key={workout.id}
+            workout={workout}
+            onPress={() =>
+              router.push({
+                pathname: '/workout/[id]',
+                params: { id: workout.id, date: day.date },
+              })
+            }
+          />
+        ))
+      ) : (
+        <View style={styles.none}>
+          <Text color="muted">
+            {day.partial ? 'No workouts yet today.' : 'No workouts this day.'} Tell the Ask tab
+            about one and it can log it with what your tracker recorded.
+          </Text>
+        </View>
+      )}
+    </Section>
+  ) : null;
+  const checkIn = <CheckInSection day={day.date} today={day.partial} />;
 
   const heart = (
     <Section title="Heart and body">
@@ -241,8 +285,10 @@ function DayBody({
     return (
       <>
         {keys}
+        {checkIn}
         {sleep}
         {activity}
+        {sessions}
         {heart}
         {changes}
       </>
@@ -253,12 +299,14 @@ function DayBody({
       {keys}
       <View style={styles.columns}>
         <View style={styles.column}>
+          {checkIn}
           {sleep}
-          {changes}
+          {sessions}
         </View>
         <View style={styles.column}>
           {activity}
           {heart}
+          {changes}
         </View>
       </View>
     </>

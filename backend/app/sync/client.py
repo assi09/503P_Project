@@ -112,6 +112,24 @@ class HealthClient:
         points = body.get("rollupDataPoints", [])
         return points[0] if points else {}
 
+    def rollup_windows(
+        self, data_type: str, start: datetime, end: datetime, window_s: int
+    ) -> list[dict]:
+        """Roll-ups over consecutive windows of `window_s` seconds from start to end."""
+        request = {
+            "range": {"startTime": _utc(start), "endTime": _utc(end)},
+            "windowSize": f"{window_s}s",
+        }
+        points: list[dict] = []
+        while True:
+            url = f"{API_BASE}/{data_type}/dataPoints:rollUp"
+            body = self._request("POST", url, json=request)
+            points.extend(body.get("rollupDataPoints", []))
+            token = body.get("nextPageToken")
+            if not token:
+                return points
+            request = {**request, "pageToken": token}
+
     def _request(self, method: str, url: str, **kwargs) -> dict:
         error: ApiError | None = None
         for attempt in range(self._max_retries + 1):

@@ -33,6 +33,7 @@ export const METRIC_LABELS: Record<string, string> = {
   hrv_ms: 'Heart rate variability',
   respiratory_rate: 'Breathing rate',
   readiness: 'Readiness',
+  recovery_score: 'Recovery',
   sedentary_minutes: 'Sedentary time',
   lightly_active_minutes: 'Light activity',
   moderately_active_minutes: 'Moderate activity',

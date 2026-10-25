@@ -244,3 +244,26 @@ describe('editing and organising chats', () => {
     ).rejects.toMatchObject({ status: 404 }); // an answer is not a question
   });
 });
+
+describe('the rest of Today', () => {
+  it("saves only today's check-in, with a rating from 1 to 5", async () => {
+    const { last } = await mockClient.getDay('latest');
+    expect(await mockClient.getCheckIn(last)).toBeNull();
+    await mockClient.saveCheckIn({ day: last, rating: 4, tags: ['stress'] });
+    expect(await mockClient.getCheckIn(last)).toEqual({ day: last, rating: 4, tags: ['stress'] });
+    await expect(mockClient.saveCheckIn({ day: last, rating: 6, tags: [] })).rejects.toMatchObject({
+      status: 422,
+    });
+    await expect(
+      mockClient.saveCheckIn({ day: '2000-01-01', rating: 3, tags: [] }),
+    ).rejects.toMatchObject({ code: 'invalid_checkin' });
+  });
+
+  it('serves a day with its recovery, workouts and 24 hours of steps', async () => {
+    const day = await mockClient.getDay('latest');
+    expect(day.recovery?.score).toBeGreaterThan(0);
+    expect((await mockClient.getHourlySteps(day.last)).steps).toHaveLength(24);
+    const { workouts } = await mockClient.getWorkouts(day.last);
+    expect(workouts[0]).toMatchObject({ exerciseType: 'WALKING', activeSeconds: 2100 });
+  });
+});

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { DayMetric, ISODate } from '@/api/types';
+import type { DayMetric, ISODate, Workout } from '@/api/types';
+import { exerciseIcon } from '@/components/LogDraftCard';
 import { LineChart } from '@/components/LineChart';
 import { Text } from '@/components/Text';
 import {
@@ -310,6 +311,83 @@ export function StagesBar({ stages }: { stages: Stage[] }) {
   );
 }
 
+/** Steps in each hour of the day as thin bars, to see when the person moved. */
+export function HourlyBars({ steps }: { steps: (number | null)[] }) {
+  const colors = useColors();
+  const color = useMetricColor('steps');
+  const most = Math.max(1, ...steps.map((s) => s ?? 0));
+  const peak = steps.indexOf(Math.max(...steps.map((s) => s ?? -1)));
+  return (
+    <View
+      style={styles.hourly}
+      accessible
+      accessibilityLabel={peak >= 0 ? `Steps by hour; most at ${peak}:00` : 'Steps by hour'}
+    >
+      <View style={styles.bars}>
+        {steps.map((count, hour) => (
+          <View key={hour} style={styles.barSlot}>
+            <View
+              style={[
+                styles.hourBar,
+                count
+                  ? { height: `${Math.max(6, (count / most) * 100)}%`, backgroundColor: color }
+                  : { height: 3, backgroundColor: colors.track },
+              ]}
+            />
+          </View>
+        ))}
+      </View>
+      <View style={styles.hours}>
+        {['00', '06', '12', '18', '24'].map((label) => (
+          <Text key={label} variant="caption" color="faint" style={styles.hourLabel}>
+            {label}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function clock(iso: string): string {
+  const moment = new Date(iso);
+  return `${String(moment.getHours()).padStart(2, '0')}:${String(moment.getMinutes()).padStart(2, '0')}`;
+}
+
+/** "07:30–08:05 · 35 min", in the device's time zone. */
+export function workoutTime(workout: Workout): string {
+  const seconds =
+    workout.activeSeconds ?? (Date.parse(workout.end) - Date.parse(workout.start)) / 1000;
+  return `${clock(workout.start)}–${clock(workout.end)} · ${valueText('active_zone_minutes', seconds / 60)}`;
+}
+
+/** A workout as a row: its type, when, and the figures the tracker recorded. */
+export function WorkoutRow({ workout, onPress }: { workout: Workout; onPress: () => void }) {
+  const colors = useColors();
+  const color = useMetricColor('active_zone_minutes');
+  const figures = [
+    workout.distanceKm ? `${workout.distanceKm} km` : null,
+    workout.steps ? `${workout.steps.toLocaleString('en-US')} steps` : null,
+    workout.caloriesKcal != null ? `${Math.round(workout.caloriesKcal)} kcal` : null,
+    workout.averageHeartRate ? `avg ${workout.averageHeartRate} bpm` : null,
+  ].filter(Boolean);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={(state) => [styles.row, isHovered(state) && { backgroundColor: colors.track }]}
+    >
+      <Ionicons name={exerciseIcon(workout.exerciseType)} size={20} color={color} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text>{workout.name}</Text>
+        <Text variant="caption" color="muted" numberOfLines={1}>
+          {[workoutTime(workout), ...figures].join(' · ')}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -358,4 +436,10 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: 4 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
+  hourly: { gap: 4, paddingVertical: spacing.md },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', height: 48, gap: 2 },
+  barSlot: { flex: 1, height: '100%', justifyContent: 'flex-end' },
+  hourBar: { borderRadius: 2 },
+  hours: { flexDirection: 'row', justifyContent: 'space-between' },
+  hourLabel: { fontSize: 11, fontVariant: ['tabular-nums'] },
 });

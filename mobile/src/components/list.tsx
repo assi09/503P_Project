@@ -154,7 +154,7 @@ export function Stat({
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing.sm, marginTop: spacing.md },
+  section: { gap: spacing.sm, marginTop: spacing.lg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rows: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
   divider: { height: StyleSheet.hairlineWidth },

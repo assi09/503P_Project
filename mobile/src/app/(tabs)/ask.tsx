@@ -76,10 +76,11 @@ function attachmentLabel(attachment: Attachment | undefined, findings: Finding[]
 
 export default function AskScreen() {
   const colors = useColors();
-  const { findingId, metric, c } = useLocalSearchParams<{
+  const { findingId, metric, c, q } = useLocalSearchParams<{
     findingId?: string;
     metric?: string;
     c?: string; // a conversation to open, e.g. from the chats page
+    q?: string; // a question to start from, e.g. from a workout page
   }>();
   const wide = useWide();
   const [sidebarOpen, setSidebarOpen] = useState(storedSidebar);
@@ -106,6 +107,15 @@ export default function AskScreen() {
   const report = useReport();
   const send = useSendMessage();
   const [draft, setDraft] = useState('');
+  // A suggested question fills the composer; the person reads it and sends it.
+  const [seenQuestion, setSeenQuestion] = useState<string>();
+  if (q !== seenQuestion) {
+    setSeenQuestion(q);
+    if (q) setDraft(q);
+  }
+  useEffect(() => {
+    if (q) router.setParams({ q: undefined });
+  }, [q]);
   const [expert, setExpert] = useState<ExpertChoice>('auto');
   const [depth, setDepth] = useState<Depth>('quick');
   const [attachment, setAttachment] = useState<Attachment>();
