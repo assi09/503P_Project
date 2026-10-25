@@ -146,7 +146,14 @@ neat, not a stack of rounded boxes. Each step below ships as its own pull reques
    Google's return); logged entries moved to their own page as rows. The Journal tab is added with
    step 4, so no tab ships empty; profile fields come with step 6, which needs them.
 2. **Today with the day's numbers**: `GET /days/{date}`, the day switcher, sleep/activity/heart
-   sections vs usual, metric pages with a 30-day chart.
+   sections vs usual, metric pages with a 30-day chart. **Done**: `GET /days/{date|latest}` and
+   `GET /metrics/{metric}` (`app/analysis/day.py`): each value with the middle half of the 28 days
+   before (at least 7 days; low-wear days left out of activity) and its last 14 days. Today: the day
+   with arrows (swipe on phones, arrow keys on the web), three key numbers with trend lines, Sleep
+   with a stages bar and wake time, Activity, Heart and body, and what changed lately, in two
+   columns on wide screens. Today's running totals say "so far" instead of "below usual". Each
+   value opens a metric page: 7, 30 or 90 days with the usual band, average, lowest, highest, the
+   days one by one, and "Ask about" with the metric attached.
 3. **Workouts**: sync and list, workout page, weekly summary.
 4. **Journal**: calendar, habit tags, habit impact tool and its explanations.
 5. **Reminders for real**: backend, agent proposals, phone notifications.
