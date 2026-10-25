@@ -29,7 +29,7 @@ def proposal_tools(
         schema.pop("title", None)
         # The tracker's reading is the server's to add, so the model is not offered the field.
         schema.get("properties", {}).pop("measured", None)
-        for name in ("Measured", "Overlap"):
+        for name in ("Measured", "Overlap", "ZoneSeconds"):
             schema.get("$defs", {}).pop(name, None)
         if not schema.get("$defs"):
             schema.pop("$defs", None)
@@ -81,10 +81,12 @@ def proposal_tools(
             "offset given at the top of the task: 'just now' is the current local time there, "
             "and 'this morning' or 'yesterday at lunch' are worked out from it. Ask only for "
             "details that are truly missing. Never estimate nutrients, invent measurements or "
-            "claim it was logged. For a workout, the server adds what the tracker recorded "
-            "during it (steps, distance, calories, heart rate) and any exercise already recorded "
-            "then; the review card shows them, so do not repeat them as findings. This tool "
-            "cannot confirm, execute or delete a Google record.",
+            "claim it was logged. For a workout, pick the exerciseType closest to what they did "
+            "(tennis is TENNIS, kickboxing KICKBOXING; OTHER only if nothing fits); the server "
+            "adds what the tracker recorded during it (calories, heart rate and zones, plus "
+            "steps, distance or swim lengths where Fitbit records them) and any exercise already "
+            "recorded then. The review card shows those, so do not repeat them as findings. This "
+            "tool cannot confirm, execute or delete a Google record.",
             schema,
             run,
         )

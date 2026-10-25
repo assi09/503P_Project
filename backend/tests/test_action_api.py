@@ -353,7 +353,7 @@ def test_workout_drafts_carry_the_trackers_reading_and_revising_reads_it_again(s
     readings = iter([Measured(status="no_data"), Measured(status="measured", steps=900)])
     asked = []
 
-    def measure_workout(db, user_id, start, end):
+    def measure_workout(db, user_id, start, end, exercise_type):
         asked.append((start, end))
         return next(readings)
 
