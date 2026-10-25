@@ -23,7 +23,7 @@ priority**; the UI and data plumbing exist to serve them.
 | Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
 | API | `/health`, `/data/status`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: `GET /chat`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
 | App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** on the Data tab (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; Today, Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders, Data; Expo SDK 58, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 610 backend and 71 mobile tests |
+| Engineering | protected `main`, PRs with both CI jobs required, 626 backend and 78 mobile tests |
 
 **Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
 check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
@@ -43,10 +43,12 @@ snapshots and chat references, and has been applied to local project Postgres. W
 entry-identity duplicate protection, scope checks, no blind retry, and unknown-outcome states.
 Google consent can request just food or workout logging while preserving analysis access.
 
-**Real Google writes remain disabled by default** (`FA_GOOGLE_WRITES_ENABLED=false`). No Google
-record has been created or deleted in validation. A real test needs approval of the exact entry
-and cleanup, granted write permission and the flag enabled. Pending Google operations or crashes
-remain blocked for reconciliation; automatic provider reconciliation/polling is not built yet.
+**Real Google writes are off by default** (`FA_GOOGLE_WRITES_ENABLED=false`). They have been
+tested once for real, on 2026-10-25 with the flag on for the test: the owner logged a test snack
+from the app, edited it, granted the nutrition write scope, confirmed it, saw it in the Fitbit app,
+read it back from Google and undid it ([experiments.md](experiments.md#first-real-google-write-and-answers-that-read-like-one-reply-2026-10-25)).
+Workout writes have not been tried for real. Pending Google operations or crashes remain blocked
+for reconciliation; automatic provider reconciliation/polling is not built yet.
 
 Validated with fake Google and a scripted model end to end, browser review/edit/confirm/undo and
 unknown/cancel states in light/dark on desktop/mobile widths, and two paid synthetic draft checks.
@@ -173,19 +175,22 @@ password and could not sign in (#42); the first question's error was invisible o
 by their edges took the file's pixel size, and the scroll hero did not animate until it read a
 derived value (#39, #46).
 
-Next, in order (local logging foundation moved first at the user's request):
+Then, on 2026-10-24/25, confirmed logging (#50 request intent, #52 drafts, review, confirm and
+undo), the first real Google connection and write from the app (#53), chat fixes it led to (#54:
+local time in the task, logging follow-ups, one natural reply, named evidence chips) and Expo SDK
+58 (#55).
 
-1. **Agent-assisted logging, locally first:** the draft/review/executor foundation works with
-   fakes. Next validate explicitly approved Google writes and reconciliation, then food lookup,
-   nutrition mapping and workout summaries. See [agent-actions.md](agent-actions.md).
-2. **Try connecting Google with a real sign-in** (the owner, from the browser): the flow is tested
-   with a fake Google and reaches Google's page, but no real sign-in has gone through yet.
-3. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
+Next, in order:
+
+1. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
    Postgres) with a public HTTPS address, a "Web application" OAuth client listing its
    `/google/callback`, the web build on Vercel, and the app in Expo Go pointing at the API.
-4. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
+2. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
    score (Sprint 2).
-5. Tracing (Langfuse) and the first evaluation (Sprint 2).
+3. Tracing (Langfuse) and the first evaluation (Sprint 2).
+4. Logging, continued: reconciliation of pending writes, a real workout write, food lookup,
+   nutrition mapping, workout summaries (`summarize_workout`) and photo estimates. See
+   [agent-actions.md](agent-actions.md).
 
 ## What has been tested
 
@@ -217,8 +222,12 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   each account state, people never seeing each other's data or chat, spending caps, slow answers,
   and the Google flow end to end with a fake Google. The screens were clicked through with
   Playwright on phone and desktop sizes, in light and dark.
+- **Logging and the first real Google write:** two paid synthetic runs prepared drafts ($0.0086).
+  Then the owner connected Google from the app for real (4 read scopes), logged a test snack,
+  confirmed it, read it back from Google and undid it; the chat problems this showed were fixed in
+  PR #54 and rechecked with three more real runs.
 
-Spent so far on real runs: about $0.59 of OpenAI and $0.004 of Jev ([costs.md](costs.md)).
+Spent so far on real runs: about $0.62 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
 
 ## Open issues
 

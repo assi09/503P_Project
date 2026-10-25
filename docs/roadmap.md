@@ -165,8 +165,9 @@ Local-first sequence (confirmed 2026-10-24; tool research and details in
 
 1. **First local slice built:** intent-gated food/workout proposal tools, durable drafts,
    clarification follow-ups, versioned review/edit/confirm cards, cancellation, audit, duplicate
-   protection, gated Google create/undo writer and optional write consent. Tested with fake Google;
-   real-account create/delete and unknown-operation reconciliation are next.
+   protection, gated Google create/undo writer and optional write consent. Tested with fake Google,
+   then one real food create and undo on 2026-10-25 (#53). Unknown-operation reconciliation and a
+   real workout write are next.
 2. Workout logging through Activity: missing-detail conversation, intraday evidence summaries,
    review/edit/confirm cards, Google execution and sync reconciliation.
 3. Food logging through Nutrition with supplied values or food-database serving calculations;
@@ -177,10 +178,10 @@ Local-first sequence (confirmed 2026-10-24; tool research and details in
    rate, numerical correctness, undo/recovery success, latency and cost. Include injection attempts
    in food names/photos and ambiguous provider failures. Use held-out tasks and scripted CI tests.
 
-Local development of this workstream now precedes deployment, per the user: use fake services
-first. Phone OAuth still needs a public backend before phone testing. Deliver focused PRs;
-keep recovery, tracing and held-out agent evaluation on the schedule. Do not enable real Google
-writes or run paid vision calls merely to validate the plan.
+The local foundation was built before deployment, per the user; with it in place, deployment is
+next (phone OAuth needs a public backend). Deliver focused PRs; keep recovery, tracing and
+held-out agent evaluation on the schedule. Enable real Google writes only for an approved test
+entry with cleanup, and do not run paid vision calls merely to validate the plan.
 
 Optional extra, after core logging: [recorded routes/regions](product.md#recorded-routes-and-regions-optional-planned).
 Research supports GPS-recorded exercise routes with separate location permission, not the location

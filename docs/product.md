@@ -29,8 +29,8 @@ to a computed statistic.
 The agent helps the person record workouts and food through conversation, alongside analysing
 patterns. Activity owns workout proposals; Nutrition owns food proposals. The first local
 implementation supports supplied-value food/workout drafts through Auto, review/edit/confirm
-cards, cancellation and undo, plus saved entries on Data. Real Google writes stay disabled
-until explicitly validated. Food lookup, telemetry summaries and photos remain planned.
+cards, cancellation and undo, plus saved entries on Data. Real Google writes are off by
+default; one real food entry was created and undone on 2026-10-25. Food lookup, telemetry summaries and photos remain planned.
 
 The shared flow is **collect missing details → propose → review/edit → confirm → execute → undo**.
 The agent cannot grant approval or write to Google directly. Each confirmation applies to one

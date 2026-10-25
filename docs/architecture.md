@@ -199,8 +199,9 @@ record/operation IDs, checks the granted write scope, prevents duplicate entry i
 name/time or workout type/interval), and never blindly retries a create. Food names and timestamps
 are not put in proposal-tool trace metadata; SQL errors are handled without logging bound values.
 Unknown/pending operations and interrupted execution stay blocked; automatic reconciliation is
-still planned. The provider writer is validated with fake HTTP only. Real writes are gated by
-`FA_GOOGLE_WRITES_ENABLED`, off by default, and need explicit real-account validation.
+still planned. The provider writer is tested with fake HTTP, and one real food create and delete went through on
+2026-10-25; workout writes are untested for real. Real writes are gated by
+`FA_GOOGLE_WRITES_ENABLED`, off by default.
 
 The following requirements also cover the remaining capabilities:
 
