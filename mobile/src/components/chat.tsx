@@ -19,7 +19,7 @@ import { LogDraftCard } from '@/components/LogDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { evidenceLabel, metricLabel } from '@/lib/format';
-import { isHovered } from '@/lib/platform';
+import { canHover, isHovered } from '@/lib/platform';
 import { fonts, radius, spacing, useColors } from '@/theme';
 
 const ENTER = FadeInDown.duration(260);
@@ -51,6 +51,14 @@ export const MessageBubble = memo(function MessageBubble({
   const colors = useColors();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text);
+  // Copy, Edit and Retry show while the pointer is over the message; always on touch screens.
+  const [hovered, setHovered] = useState(false);
+  const [hoverable] = useState(canHover);
+  const showActions = !hoverable || hovered;
+  const hover = {
+    onHoverIn: () => setHovered(true),
+    onHoverOut: () => setHovered(false),
+  };
 
   if (message.role === 'user' && editing) {
     const send = () => {
@@ -110,80 +118,90 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.role === 'user') {
     return (
       <Animated.View entering={ENTER} style={styles.mineColumn}>
-        <View
-          style={[
-            styles.mine,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-          ]}
-        >
-          {message.attachment && (
-            <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
-              About:{' '}
-              {message.attachment.kind === 'finding'
-                ? (findingTitles[message.attachment.id] ?? 'a finding')
-                : metricLabel(message.attachment.metric)}
-            </Text>
-          )}
-          <Text selectable>{message.text}</Text>
-        </View>
-        <View style={[styles.actions, styles.actionsMine]}>
-          <CopyButton text={message.text} />
-          {onEdit && (
-            <ActionButton
-              icon="pencil-outline"
-              label="Edit"
-              disabled={busy}
-              onPress={() => {
-                setDraft(message.text);
-                setEditing(true);
-              }}
-            />
-          )}
-        </View>
+        <Pressable {...hover} style={styles.hoverArea}>
+          <View
+            style={[
+              styles.mine,
+              { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+            ]}
+          >
+            {message.attachment && (
+              <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
+                About:{' '}
+                {message.attachment.kind === 'finding'
+                  ? (findingTitles[message.attachment.id] ?? 'a finding')
+                  : metricLabel(message.attachment.metric)}
+              </Text>
+            )}
+            <Text selectable>{message.text}</Text>
+          </View>
+          <View
+            style={[styles.actions, styles.actionsMine, !showActions && styles.hidden]}
+            pointerEvents={showActions ? 'auto' : 'none'}
+          >
+            <CopyButton text={message.text} />
+            {onEdit && (
+              <ActionButton
+                icon="pencil-outline"
+                label="Edit"
+                disabled={busy}
+                onPress={() => {
+                  setDraft(message.text);
+                  setEditing(true);
+                }}
+              />
+            )}
+          </View>
+        </Pressable>
       </Animated.View>
     );
   }
 
   return (
-    <Animated.View entering={ENTER} style={styles.theirs}>
-      <Avatar expert={message.refused ? undefined : (message.answeredBy ?? 'general')} />
-      <View style={styles.theirsBody}>
-        {message.answeredBy && !message.refused && <AnswerHeader message={message} />}
-        {message.refused ? (
-          <View
-            style={[
-              styles.refused,
-              { backgroundColor: `${colors.warning}14`, borderColor: `${colors.warning}55` },
-            ]}
-          >
-            <View style={styles.refusedHeader}>
-              <Ionicons name="shield-checkmark" size={14} color={colors.warning} />
-              <Text variant="caption" color="warning">
-                Outside what I can answer
-              </Text>
+    <Animated.View entering={ENTER}>
+      <Pressable {...hover} style={styles.theirs}>
+        <Avatar expert={message.refused ? undefined : (message.answeredBy ?? 'general')} />
+        <View style={styles.theirsBody}>
+          {message.answeredBy && !message.refused && <AnswerHeader message={message} />}
+          {message.refused ? (
+            <View
+              style={[
+                styles.refused,
+                { backgroundColor: `${colors.warning}14`, borderColor: `${colors.warning}55` },
+              ]}
+            >
+              <View style={styles.refusedHeader}>
+                <Ionicons name="shield-checkmark" size={14} color={colors.warning} />
+                <Text variant="caption" color="warning">
+                  Outside what I can answer
+                </Text>
+              </View>
+              <Text>{message.text}</Text>
             </View>
+          ) : (
             <Text>{message.text}</Text>
-          </View>
-        ) : (
-          <Text>{message.text}</Text>
-        )}
-        {message.actionIds?.map((id) => (
-          <LogDraftCard key={id} id={id} />
-        ))}
-        {message.evidenceIds.length > 0 && (
-          <View style={styles.chips}>
-            {message.evidenceIds.map((id) => (
-              <AnswerEvidenceChip key={id} id={id} known={knownEvidence[id]} />
-            ))}
-          </View>
-        )}
-        <View style={styles.actions}>
-          <CopyButton text={message.text} />
-          {onRetry && (
-            <ActionButton icon="refresh" label="Retry" disabled={busy} onPress={onRetry} />
           )}
+          {message.actionIds?.map((id) => (
+            <LogDraftCard key={id} id={id} />
+          ))}
+          {message.evidenceIds.length > 0 && (
+            <View style={styles.chips}>
+              {message.evidenceIds.map((id) => (
+                <AnswerEvidenceChip key={id} id={id} known={knownEvidence[id]} />
+              ))}
+            </View>
+          )}
+          <View
+            style={[styles.actions, !showActions && styles.hidden]}
+            pointerEvents={showActions ? 'auto' : 'none'}
+          >
+            <CopyButton text={message.text} />
+            {onRetry && (
+              <ActionButton icon="refresh" label="Retry" disabled={busy} onPress={onRetry} />
+            )}
+          </View>
         </View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 });
@@ -311,6 +329,8 @@ export function Thinking({ expert }: { expert: ExpertChoice }) {
 const styles = StyleSheet.create({
   mineColumn: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '82%', gap: 2 },
   actions: { flexDirection: 'row', gap: 2, marginLeft: -6 },
+  hidden: { opacity: 0 }, // kept in the layout, so nothing jumps when they appear
+  hoverArea: { alignItems: 'flex-end', gap: 2 },
   actionsMine: { marginLeft: 0, marginRight: -6 },
   action: {
     flexDirection: 'row',
