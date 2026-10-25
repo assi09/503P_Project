@@ -49,12 +49,53 @@ def _value(value: object) -> float | None:
     return None if pd.isna(value) else round(float(value), 2)
 
 
+# Our own recovery score: where last night's HRV, resting heart rate and time asleep sit among the
+# person's previous 28 days, averaged with equal weights. Higher HRV and more sleep count up, a
+# higher resting heart rate counts down. An estimate to compare with the morning check-in.
+RECOVERY = "recovery_score"
+RECOVERY_INPUTS = {"hrv_ms": 1, "resting_hr": -1, "sleep_minutes": 1}
+MIN_RECOVERY_INPUTS = 2
+
+
+def recovery_parts(frame: pd.DataFrame, day: date) -> dict[str, float]:
+    """Each input's share (0 to 100) of the 28 days before that the day beat; ties count half."""
+    stamp = pd.Timestamp(day)
+    if stamp not in frame.index:
+        return {}
+    before = frame.loc[stamp - pd.Timedelta(days=USUAL_DAYS) : stamp - pd.Timedelta(days=1)]
+    parts = {}
+    for metric, sign in RECOVERY_INPUTS.items():
+        if metric not in frame.columns:
+            continue
+        value, usual_days = frame.loc[stamp, metric], before[metric].dropna()
+        if pd.isna(value) or len(usual_days) < MIN_USUAL_DAYS:
+            continue
+        beaten = ((usual_days < value).sum() + 0.5 * (usual_days == value).sum()) / len(usual_days)
+        parts[metric] = round(100 * (beaten if sign > 0 else 1 - beaten), 1)
+    return parts
+
+
+def recovery_score(parts: dict[str, float]) -> float | None:
+    if len(parts) < MIN_RECOVERY_INPUTS:
+        return None
+    return float(round(sum(parts.values()) / len(parts)))
+
+
+def with_recovery(frame: pd.DataFrame) -> pd.DataFrame:
+    """The frame with the recovery score as one more daily metric."""
+    if RECOVERY in frame.columns:
+        return frame
+    scores = [recovery_score(recovery_parts(frame, stamp.date())) for stamp in frame.index]
+    return frame.assign(**{RECOVERY: pd.Series(scores, index=frame.index, dtype=float)})
+
+
 def day_summary(frame: pd.DataFrame, day: date) -> list[DayMetric]:
     """Every metric on `day`, with its usual range from the USUAL_DAYS days before it.
 
     Activity totals on low-wear days are left out of the usual range and the trend line (as in
     the screen), but the day's own value is shown as it is; the caller flags a low-wear day.
     """
+    frame = with_recovery(frame)
     cleaned = without_low_wear(frame)
     stamp = pd.Timestamp(day)
     before = cleaned.loc[stamp - pd.Timedelta(days=USUAL_DAYS) : stamp - pd.Timedelta(days=1)]
@@ -76,14 +117,14 @@ def series(
     frame: pd.DataFrame, metric: str, end: date, days: int
 ) -> list[tuple[date, float | None]]:
     """The metric's daily values for the `days` days ending on `end`; gaps stay as None."""
-    cleaned = without_low_wear(frame)
+    cleaned = without_low_wear(with_recovery(frame) if metric == RECOVERY else frame)
     index = pd.date_range(pd.Timestamp(end) - pd.Timedelta(days=days - 1), pd.Timestamp(end))
     values = cleaned[metric].reindex(index)
     return [(stamp.date(), _value(value)) for stamp, value in values.items()]
 
 
 def usual_before(frame: pd.DataFrame, metric: str, day: date) -> Usual | None:
-    cleaned = without_low_wear(frame)
+    cleaned = without_low_wear(with_recovery(frame) if metric == RECOVERY else frame)
     stamp = pd.Timestamp(day)
     return usual(
         cleaned[metric].loc[stamp - timedelta(days=USUAL_DAYS) : stamp - timedelta(days=1)]

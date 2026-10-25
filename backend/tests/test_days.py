@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
@@ -10,6 +11,7 @@ from app.api.auth import now
 from app.api.main import create_app
 from app.api.store import analyze, get_data
 from app.ingest.takeout import DailyData
+from app.sync.client import HealthClient
 from app.synthetic import LowWear, generate
 
 START = date(2026, 7, 1)
@@ -21,11 +23,16 @@ def frame_of(values: dict[str, list[float]], start: date = START) -> pd.DataFram
     return pd.DataFrame(values, index=pd.date_range(start, periods=length))
 
 
+def only(metrics):
+    """The resting heart rate, the one input of these frames (the recovery score is added too)."""
+    return next(m for m in metrics if m.metric == "resting_hr")
+
+
 def test_usual_is_the_middle_half_of_the_days_before_and_skips_the_day_itself():
     # 28 days of 1..28, then the day itself far outside them.
     frame = frame_of({"resting_hr": [*range(1, 29), 500.0]})
     day = START + timedelta(days=28)
-    (metric,) = day_summary(frame, day)
+    metric = only(day_summary(frame, day))
     assert metric.value == 500
     assert metric.usual.median == 14.5 and metric.usual.days == USUAL_DAYS
     assert (metric.usual.low, metric.usual.high) == (7.75, 21.25)
@@ -35,14 +42,14 @@ def test_usual_is_the_middle_half_of_the_days_before_and_skips_the_day_itself():
 def test_only_the_28_days_before_count_and_gaps_stay_gaps():
     values = [1000.0] * 10 + [60.0] * 28 + [np.nan]
     frame = frame_of({"resting_hr": values})
-    (metric,) = day_summary(frame, START + timedelta(days=38))
+    metric = only(day_summary(frame, START + timedelta(days=38)))
     assert metric.value is None and metric.usual.median == 60
     assert metric.recent[-1] is None
 
 
 def test_too_few_days_give_no_usual_range():
     frame = frame_of({"resting_hr": [60.0] * (MIN_USUAL_DAYS - 1) + [61.0]})
-    (metric,) = day_summary(frame, START + timedelta(days=MIN_USUAL_DAYS - 1))
+    metric = only(day_summary(frame, START + timedelta(days=MIN_USUAL_DAYS - 1)))
     assert metric.usual is None
     assert usual(pd.Series([1.0] * MIN_USUAL_DAYS)) is not None
 
@@ -83,7 +90,9 @@ def test_day_endpoint_uses_the_app_contract(synthetic):
     last = START + timedelta(days=44)
     client = client_for(synthetic, today=datetime(2026, 8, 14, 9, tzinfo=UTC))
     body = client.get(f"/days/{last.isoformat()}").json()
-    assert set(body) == {"date", "partial", "lowWear", "first", "last", "metrics"}
+    assert set(body) == {"date", "partial", "lowWear", "first", "last", "metrics", "recovery"}
+    assert set(body["recovery"]) == {"score", "parts"} and 0 <= body["recovery"]["score"] <= 100
+    assert "recovery_score" in {m["metric"] for m in body["metrics"]}
     assert body["partial"] is True and body["lowWear"] is False  # Aug 14 is today, Beirut
     assert (body["first"], body["last"]) == (START.isoformat(), last.isoformat())
     steps = next(m for m in body["metrics"] if m["metric"] == "steps")
@@ -122,3 +131,174 @@ def test_metric_endpoint_gives_the_span_and_the_usual_range(synthetic):
 def test_days_need_an_approved_sign_in(synthetic):
     app = create_app()
     assert TestClient(app).get("/days/2026-07-10").status_code == 401
+
+
+def test_recovery_scores_where_last_night_sits_among_the_weeks_before():
+    from app.analysis.day import recovery_parts, recovery_score, with_recovery
+
+    days = 30
+    frame = frame_of(
+        {
+            "hrv_ms": [50.0] * (days - 1) + [70.0],  # above every usual day: 100
+            "resting_hr": [60.0] * (days - 1) + [60.0],  # equal to all: half, so 50
+            "sleep_minutes": [float(400 + i) for i in range(days - 1)] + [380.0],  # below all: 0
+        }
+    )
+    last = START + timedelta(days=days - 1)
+    assert recovery_parts(frame, last) == {
+        "hrv_ms": 100.0,
+        "resting_hr": 50.0,
+        "sleep_minutes": 0.0,
+    }
+    assert recovery_score(recovery_parts(frame, last)) == 50
+    assert recovery_score({"hrv_ms": 80.0}) is None  # one input is not enough
+    scores = with_recovery(frame)["recovery_score"]
+    assert scores.iloc[:MIN_USUAL_DAYS].isna().all() and scores.iloc[-1] == 50
+    # A higher resting heart rate counts down.
+    higher = frame.assign(resting_hr=[60.0] * (days - 1) + [70.0])
+    assert recovery_parts(higher, last)["resting_hr"] == 0.0
+
+
+# Read live from Google Health, and the check-in
+
+
+def fake_google(handler) -> HealthClient:
+    import httpx2
+
+    http = httpx2.Client(transport=httpx2.MockTransport(handler))
+    return HealthClient(lambda: "token", http=http, max_retries=0)
+
+
+def signed_in_client(tmp_path, frame, today=None):
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine, select
+
+    from app.api import auth
+    from app.db.models import User
+    from app.db.session import session_scope
+
+    url = f"sqlite:///{tmp_path / 'test.db'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    client = client_for(frame, today)
+
+    def db():
+        with session_scope(engine) as session:
+            yield session
+
+    client.app.dependency_overrides[auth.get_db] = db
+    token = client.post(
+        "/auth/signup", json={"email": "p@example.com", "password": "correct horse battery"}
+    ).json()["token"]
+    with session_scope(engine) as session:
+        session.scalar(select(User)).status = "approved"
+    return client, {"Authorization": f"Bearer {token}"}
+
+
+def test_the_days_workouts_come_from_google_with_their_summary(tmp_path, synthetic, monkeypatch):
+    import httpx2
+
+    from app.api import days as api
+
+    asked = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        asked.append(request)
+        exercise = {
+            "name": "users/1/dataTypes/exercise/dataPoints/abc",
+            "dataSource": {"device": {"displayName": "Fitbit Air"}},
+            "exercise": {
+                "exerciseType": "TENNIS",
+                "displayName": "Tennis",
+                "interval": {
+                    "startTime": "2026-08-10T15:00:00Z",
+                    "endTime": "2026-08-10T16:00:00Z",
+                },
+                "activeDuration": "3500s",
+                "metricsSummary": {
+                    "steps": "2400",
+                    "distanceMillimeters": 1800000,
+                    "caloriesKcal": 410,
+                    "averageHeartRateBeatsPerMinute": "131",
+                    "activeZoneMinutes": "38",
+                    "heartRateZoneDurations": {"lightTime": "600s", "moderateTime": "1200s"},
+                },
+            },
+        }
+        return httpx2.Response(200, json={"dataPoints": [exercise]})
+
+    monkeypatch.setattr(api, "_live", {})
+    monkeypatch.setattr(api, "_health", lambda db, user_id: fake_google(handler))
+    client, headers = signed_in_client(tmp_path, synthetic)
+    body = client.get("/days/2026-08-10/workouts", headers=headers).json()
+    assert body["available"] is True
+    (workout,) = body["workouts"]
+    assert workout["exerciseType"] == "TENNIS" and workout["id"] == "abc"
+    assert workout["steps"] == 2400 and workout["distanceKm"] == 1.8
+    assert workout["averageHeartRate"] == 131 and workout["activeZoneMinutes"] == 38
+    assert workout["zoneSeconds"] == {"light": 600, "moderate": 1200}
+    assert workout["activeSeconds"] == 3500 and workout["source"] == "Fitbit Air"
+    assert "civil_start_time" in asked[0].url.params["filter"]
+    client.get("/days/2026-08-10/workouts", headers=headers)
+    assert len(asked) == 1  # kept for a few minutes
+
+
+def test_steps_by_hour_and_no_google(tmp_path, synthetic, monkeypatch):
+    import httpx2
+
+    from app.api import days as api
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        assert body["windowSize"] == "3600s"
+        start = datetime.fromisoformat(body["range"]["startTime"].replace("Z", "+00:00"))
+        points = [
+            {
+                "startTime": (start + timedelta(hours=h)).isoformat(),
+                "steps": {"countSum": str(h * 10)},
+            }
+            for h in (7, 8)
+        ]
+        return httpx2.Response(200, json={"rollupDataPoints": points})
+
+    monkeypatch.setattr(api, "_live", {})
+    monkeypatch.setattr(api, "_health", lambda db, user_id: fake_google(handler))
+    client, headers = signed_in_client(tmp_path, synthetic)
+    steps = client.get("/days/2026-08-10/hourly", headers=headers).json()["steps"]
+    assert len(steps) == 24 and steps[7] == 70 and steps[8] == 80 and steps[0] is None
+    monkeypatch.setattr(api, "_health", lambda db, user_id: None)
+    assert client.get("/days/2026-08-11/hourly", headers=headers).json() == {
+        "available": False,
+        "steps": [],
+    }
+    assert client.get("/days/2026-08-11/workouts", headers=headers).json()["available"] is False
+
+
+def test_only_todays_check_in_can_be_set(tmp_path, synthetic):
+    today = datetime(2026, 8, 14, 6, tzinfo=UTC)
+    client, headers = signed_in_client(tmp_path, synthetic, today)
+    assert client.get("/checkins/2026-08-14", headers=headers).json() is None
+    saved = client.put(
+        "/checkins/2026-08-14",
+        json={"day": "2026-08-14", "rating": 4, "tags": ["stress"]},
+        headers=headers,
+    )
+    assert saved.json() == {"day": "2026-08-14", "rating": 4, "tags": ["stress"]}
+    assert client.get("/checkins/2026-08-14", headers=headers).json()["rating"] == 4
+    past = client.put(
+        "/checkins/2026-08-10", json={"day": "2026-08-10", "rating": 3}, headers=headers
+    )
+    assert past.json()["error"]["code"] == "invalid_checkin"
+    bad = client.put(
+        "/checkins/2026-08-14", json={"day": "2026-08-14", "rating": 9}, headers=headers
+    )
+    assert bad.status_code == 422
+    unknown = client.put(
+        "/checkins/2026-08-14",
+        json={"day": "2026-08-14", "rating": 3, "tags": ["nope"]},
+        headers=headers,
+    )
+    assert unknown.json()["error"]["code"] == "invalid_checkin"

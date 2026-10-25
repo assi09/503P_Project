@@ -81,6 +81,11 @@ class DayMetric(ApiModel):
     recent: list[float | None]  # the 14 days ending with this one, oldest first
 
 
+class Recovery(ApiModel):
+    score: float
+    parts: dict[str, float]  # each input's share (0 to 100) of the 28 days before it beat
+
+
 class Day(ApiModel):
     date: date
     partial: bool  # today, still filling in
@@ -88,6 +93,39 @@ class Day(ApiModel):
     first: date  # the range of days there is data for, for moving between days
     last: date
     metrics: list[DayMetric]
+    recovery: Recovery | None = None  # with at least two of HRV, resting heart rate, sleep
+
+
+class Workout(ApiModel):
+    id: str
+    exercise_type: str
+    name: str
+    start: datetime
+    end: datetime
+    active_seconds: int | None
+    steps: int | None = None
+    distance_km: float | None = None
+    calories_kcal: float | None = None
+    average_heart_rate: int | None = None
+    active_zone_minutes: int | None = None
+    zone_seconds: dict[str, float] | None = None  # light, moderate, vigorous, peak
+    source: str | None = None  # the device or app that recorded it
+
+
+class DayWorkouts(ApiModel):
+    available: bool  # false without a Google Health connection to read them from
+    workouts: list[Workout]
+
+
+class HourlySteps(ApiModel):
+    available: bool
+    steps: list[int | None]  # 24 local hours; None for an hour with no data
+
+
+class CheckIn(ApiModel):
+    day: date
+    rating: int = Field(ge=1, le=5)
+    tags: list[str] = []
 
 
 class MetricSeries(ApiModel):
