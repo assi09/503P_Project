@@ -195,7 +195,7 @@ Next, in order:
    score (Sprint 2).
 3. Tracing (Langfuse) and the first evaluation (Sprint 2).
 4. Logging, continued: more workout types (the tracker records weightlifting and elliptical,
-   which drafts cannot log yet), a real write of a measured workout, reconciliation of pending
+   which drafts cannot log yet), reconciliation of pending
    writes, food lookup, nutrition mapping and photo estimates. See
    [agent-actions.md](agent-actions.md).
 

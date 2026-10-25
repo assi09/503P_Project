@@ -295,5 +295,8 @@ exercises needs a filter on `exercise.interval.civil_start_time` in local time w
 measured (steps and heart rate exact, distance within 0.1%, calories within 2%) and the walk
 came back as an overlap. The card was checked with Playwright on the local API in light and dark,
 at phone and desktop widths, with no console errors; the draft was then cancelled.
-**Not yet tested:** a real write of a measured workout, and the "no data" case on real data (a
-period without heart rate); both are covered by scripted tests.
+**Real write:** a measured 15-minute walk over a quiet period (no recorded exercise) was confirmed
+through the API. Google stored steps, distance, calories and heart rate exactly as sent, and
+recomputed the pace from the duration and distance (the same value, unrounded).
+**Not yet tested:** the "no data" case on real data (a period without heart rate); it is covered
+by scripted tests.
