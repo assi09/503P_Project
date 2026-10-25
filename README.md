@@ -14,7 +14,7 @@ with every insight backed by a computed statistic the user can inspect.
 |---|---|
 | `backend/` | FastAPI service: data ingestion, analysis tools, agent, API |
 | `mobile/` | Expo (React Native) app for iOS, Android and web |
-| `eval/` | Evaluation suite: synthetic data, baselines, adversarial tests |
+| `eval/` | Evaluation scripts that call paid APIs on purpose (advice guard, logging smoke check, multiple testing); the full suite with baselines and attacks is planned |
 | `docs/` | [Status](docs/status.md) (start here), product, architecture, metrics, [roadmap](docs/roadmap.md); later API, failure matrix, threat model |
 
 ## Contributing
@@ -25,8 +25,8 @@ coding agents read it automatically (`CLAUDE.md` points to it).
 
 ## Data and privacy
 
-Personal Fitbit exports (Google Takeout) are **never committed**. Place an export under `data/raw/`
-(git-ignored) to run the pipeline locally.
+Personal Fitbit exports (Google Takeout) are **never committed**. Unzip an export into `Takeout/`
+(git-ignored) and point `FA_EXPORT_DIR` at it to run the pipeline locally.
 
 ## Setup
 
@@ -109,6 +109,12 @@ expires the sign-in after 7 days, after which `connect` has to be run again.
 `FA_TOKEN_KEY` in `.env` (see `.env.example`), and the browser and the API on the same machine:
 Google sends the browser back to `FA_PUBLIC_URL/google/callback` (`http://127.0.0.1:8000` by
 default), which phones can only reach once the backend is deployed.
+
+**Logging food and workouts** (from the Ask screen): the agent prepares a draft, and nothing is
+written to Google until the person confirms it in the app. Writes also need
+`FA_GOOGLE_WRITES_ENABLED=true` in `.env` (off by default) and the write-only scope
+(`googlehealth.nutrition.writeonly` or `googlehealth.activity_and_fitness.writeonly`), which the
+app asks for the first time someone logs. Add both scopes to the consent screen's data access.
 
 ### Mobile app
 

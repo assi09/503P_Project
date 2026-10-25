@@ -17,9 +17,9 @@ agent and its evaluation are the priority.
 
 | Path | Contents |
 |---|---|
-| `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
+| `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the agent (`app/agent`: LLM layer, router, experts, verifier, guard), accounts (`app/auth`, `python -m app.auth`), confirmed logging and Google writes (`app/actions`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 58) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
+| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `agent-actions.md` (confirmed food and workout logging), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
 | `eval/` | evaluation sets and scripts that call paid APIs on purpose (never run in CI) |
 | `docker-compose.yml` | local Postgres on port 5433 |
@@ -33,7 +33,7 @@ endpoint exists in the backend, the app uses the in-memory mock in `mobile/src/a
   and `.env` are git-ignored; keep it that way. Test fixtures and mock data use **made-up
   values**; only headers and formats may be copied from a real export. Before every commit, check
   the diff for real values, personal paths and secrets.
-- **Secrets stay local.** The OAuth client ID and secret, `FA_OPENAI_API_KEY` and
+- **Secrets stay local.** The OAuth client ID and secret, `FA_TOKEN_KEY`, `FA_OPENAI_API_KEY` and
   `FA_TYPESAFE_API_KEY` live only in `.env`; the Google sign-in in `data/google_token.json`. Never print, log or paste tokens, and never print personal health
   values in commands, PRs or chat: report aggregates (counts, agreement rates).
 - **Paid APIs cost real, limited money** (about $5 each on OpenAI and Jev). Tests and CI never call
