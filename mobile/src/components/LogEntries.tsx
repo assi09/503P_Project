@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { StyleSheet, View } from 'react-native';
 
 import { api } from '@/api';
+import { Row, Section } from '@/components/list';
 import { LogDraftCard } from '@/components/LogDraftCard';
-import { Text } from '@/components/Text';
-import { Card } from '@/components/ui';
-import { spacing } from '@/theme';
+
+const CLOSED = ['cancelled', 'undone'];
 
 /** Every food and workout entry, so one stays reachable after its chat message scrolls away. */
 export function LogEntries() {
@@ -13,38 +12,52 @@ export function LogEntries() {
 
   if (query.isPending) {
     return (
-      <Card>
-        <Text color="muted">Loading your entries…</Text>
-      </Card>
+      <Section>
+        <Row title="Loading your entries…" />
+      </Section>
     );
   }
   if (query.isError) {
     return (
-      <Card>
-        <Text color="danger">Could not load your entries.</Text>
-      </Card>
+      <Section>
+        <Row
+          icon="alert-circle-outline"
+          title="Could not load your entries"
+          detail="Tap to try again"
+          onPress={() => query.refetch()}
+        />
+      </Section>
     );
   }
   if (!query.data.length) {
     return (
-      <Card>
-        <Text color="muted">
-          Nothing logged yet. Tell Patterns what you ate or a workout you did, and it prepares an
-          entry for you to check.
-        </Text>
-      </Card>
+      <Section>
+        <Row
+          title="Nothing logged yet"
+          detail="Tell Patterns what you ate or a workout you did, and it prepares an entry for you to check."
+        />
+      </Section>
     );
   }
-  // One card per entry: tapping it shows its actions in place.
+  // Tapping an entry shows its actions in place. Cancelled and removed ones go last.
+  const open = query.data.filter((entry) => !CLOSED.includes(entry.status));
+  const closed = query.data.filter((entry) => CLOSED.includes(entry.status));
   return (
-    <View style={styles.list}>
-      {query.data.map((entry) => (
-        <LogDraftCard key={entry.id} id={entry.id} initial={entry} collapsible />
-      ))}
-    </View>
+    <>
+      {open.length > 0 && (
+        <Section title="Drafts and logged">
+          {open.map((entry) => (
+            <LogDraftCard key={entry.id} id={entry.id} initial={entry} collapsible />
+          ))}
+        </Section>
+      )}
+      {closed.length > 0 && (
+        <Section title="Cancelled and removed">
+          {closed.map((entry) => (
+            <LogDraftCard key={entry.id} id={entry.id} initial={entry} collapsible />
+          ))}
+        </Section>
+      )}
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  list: { gap: spacing.sm },
-});

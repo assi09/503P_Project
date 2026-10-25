@@ -105,7 +105,7 @@ The sign-in is stored in `data/google_token.json` (git-ignored, readable only by
 scopes are restricted, so the app stays in Testing mode: only test users can sign in, and Google
 expires the sign-in after 7 days, after which `connect` has to be run again.
 
-**From the app** (any approved person): Data → *Your data source* → **Connect**. This needs
+**From the app** (any approved person): Settings → *Google Health* → **Connect**. This needs
 `FA_TOKEN_KEY` in `.env` (see `.env.example`), and the browser and the API on the same machine:
 Google sends the browser back to `FA_PUBLIC_URL/google/callback` (`http://127.0.0.1:8000` by
 default), which phones can only reach once the backend is deployed.

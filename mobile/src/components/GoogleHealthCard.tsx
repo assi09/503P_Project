@@ -7,7 +7,7 @@ import { keys, useGoogleAction, useGoogleStatus } from '@/api/hooks';
 import { ApiError } from '@/api/http';
 import { api } from '@/api';
 import { Text } from '@/components/Text';
-import { Button, Card } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { timeAgo } from '@/lib/format';
 import { radius, spacing, useColors } from '@/theme';
 
@@ -59,7 +59,7 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
         // The mock connects without a Google page.
         await client.invalidateQueries({ queryKey: keys.google });
       } else if (Platform.OS === 'web') {
-        window.location.assign(url); // Google sends the browser back to the Data tab
+        window.location.assign(url); // Google sends the browser back to Settings
         return;
       } else {
         await Linking.openURL(url);
@@ -93,7 +93,7 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
   const error = openError ?? action.error?.message ?? google?.lastError ?? null;
 
   return (
-    <Card>
+    <View style={styles.block}>
       {notice && (
         <View
           style={[
@@ -105,17 +105,15 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
         </View>
       )}
       <View style={styles.row}>
-        <View style={[styles.icon, { backgroundColor: colors.accentSoft }]}>
-          {connected && google.syncing ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : (
-            <Ionicons
-              name={connected ? 'checkmark-circle' : 'logo-google'}
-              size={18}
-              color={colors.accent}
-            />
-          )}
-        </View>
+        {connected && google.syncing ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : (
+          <Ionicons
+            name={connected ? 'checkmark-circle' : 'logo-google'}
+            size={20}
+            color={connected ? colors.accent : colors.text}
+          />
+        )}
         <View style={{ flex: 1, gap: 2 }}>
           <Text variant="headline">{title}</Text>
           <Text variant="caption" color="muted">
@@ -162,19 +160,13 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
           />
         )}
       </View>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  block: { gap: spacing.sm, paddingVertical: spacing.md },
   notice: { padding: spacing.md, borderRadius: radius.md },
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   actions: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs, flexWrap: 'wrap' },
 });

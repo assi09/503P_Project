@@ -141,7 +141,10 @@ neat, not a stack of rounded boxes. Each step below ships as its own pull reques
 
 1. **Design foundation and tabs**: type scale with large numerals, section and row components,
    hairline dividers, fewer cards; the five tabs; Settings with the Data tab's content, profile
-   and appearance. No new data yet.
+   and appearance. No new data yet. **Done**: `Section`, `Row` and `Stat` (`components/list.tsx`)
+   and a `hero` figure style; Settings replaces the Data tab (`/data` redirects there, and so does
+   Google's return); logged entries moved to their own page as rows. The Journal tab is added with
+   step 4, so no tab ships empty; profile fields come with step 6, which needs them.
 2. **Today with the day's numbers**: `GET /days/{date}`, the day switcher, sleep/activity/heart
    sections vs usual, metric pages with a 30-day chart.
 3. **Workouts**: sync and list, workout page, weekly summary.
