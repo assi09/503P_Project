@@ -1,8 +1,8 @@
 import { memo, useId, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import type { Point, Window } from '@/api/types';
+import type { ISODate, Point, Usual, Window } from '@/api/types';
 import { Text } from '@/components/Text';
 import { chartGeometry } from '@/lib/chart';
 import { formatValue, shortDate } from '@/lib/format';
@@ -14,6 +14,10 @@ interface Props {
   highlight?: Window;
   height?: number;
   showAxis?: boolean; // min/max values and first/last dates
+  usual?: Usual | null; // drawn as a band behind the line
+  marker?: ISODate; // a dot on this day's value
+  strokeWidth?: number;
+  fill?: boolean; // the soft area under the line; off where a usual band is drawn large
 }
 
 /** A line with a soft fill in the metric's color. Days without data stay as gaps. */
@@ -23,14 +27,20 @@ export const LineChart = memo(function LineChart({
   highlight,
   height = 48,
   showAxis = false,
+  usual,
+  marker,
+  strokeWidth = 2,
+  fill = true,
 }: Props) {
   const color = useMetricColor(metric);
   const fillId = useId().replace(/:/g, '');
   const [width, setWidth] = useState(0);
   const geometry = useMemo(
-    () => chartGeometry(points, width, height, highlight, 3),
-    [points, width, height, highlight],
+    () => chartGeometry(points, width, height, highlight, 3, usual ?? undefined),
+    [points, width, height, highlight, usual],
   );
+  const markerIndex = marker ? points.findIndex((p) => p.date === marker) : -1;
+  const dot = markerIndex >= 0 ? geometry.coords[markerIndex] : null;
 
   return (
     <View
@@ -58,7 +68,18 @@ export const LineChart = memo(function LineChart({
                   rx={6}
                 />
               )}
-              {geometry.areas.map((d) => (
+              {geometry.band && (
+                <Rect
+                  x={0}
+                  y={geometry.band.y}
+                  width={width}
+                  height={geometry.band.height}
+                  fill={color}
+                  fillOpacity={0.1}
+                  rx={3}
+                />
+              )}
+              {fill && geometry.areas.map((d) => (
                 <Path key={`area-${d}`} d={d} fill={`url(#${fillId})`} />
               ))}
               {geometry.paths.map((d) => (
@@ -66,12 +87,13 @@ export const LineChart = memo(function LineChart({
                   key={d}
                   d={d}
                   stroke={color}
-                  strokeWidth={2}
+                  strokeWidth={strokeWidth}
                   fill="none"
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
               ))}
+              {dot && <Circle cx={dot.x} cy={dot.y} r={strokeWidth + 2} fill={color} />}
             </Svg>
           )}
         </View>

@@ -4,6 +4,8 @@ export interface ChartGeometry {
   paths: string[]; // one SVG path per run of consecutive days with data
   areas: string[]; // the same runs closed down to the bottom edge, for a filled area
   highlight: { x: number; width: number } | null;
+  band: { y: number; height: number } | null; // the usual range, as a horizontal strip
+  coords: ({ x: number; y: number } | null)[]; // each day's point, null on days without data
   min: number;
   max: number;
 }
@@ -18,13 +20,15 @@ export function chartGeometry(
   height: number,
   highlight?: Window,
   padding = 2,
+  usual?: { low: number; high: number },
 ): ChartGeometry {
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
   if (points.length === 0 || values.length === 0 || width <= 0 || height <= 0) {
-    return { paths: [], areas: [], highlight: null, min: 0, max: 0 };
+    return { paths: [], areas: [], highlight: null, band: null, coords: [], min: 0, max: 0 };
   }
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  // The usual range stays in view even when every value sits above or below it.
+  const min = Math.min(...values, ...(usual ? [usual.low] : []));
+  const max = Math.max(...values, ...(usual ? [usual.high] : []));
   const span = max - min || 1; // flat series sit in the middle
   const step = points.length > 1 ? (width - 2 * padding) / (points.length - 1) : 0;
   const x = (i: number) => padding + i * step;
@@ -61,7 +65,13 @@ export function chartGeometry(
       band = { x: round(left), width: round(right - left) };
     }
   }
-  return { paths, areas, highlight: band, min, max };
+  const usualBand = usual
+    ? { y: round(y(usual.high)), height: round(Math.max(1, y(usual.low) - y(usual.high))) }
+    : null;
+  const coords = points.map((p, i) =>
+    p.value === null ? null : { x: round(x(i)), y: round(y(p.value)) },
+  );
+  return { paths, areas, highlight: band, band: usualBand, coords, min, max };
 }
 
 function round(value: number): number {
