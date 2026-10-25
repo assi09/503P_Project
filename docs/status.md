@@ -18,16 +18,18 @@ priority**; the UI and data plumbing exist to serve them.
 | Area | State |
 |---|---|
 | Data | Takeout import (legacy layout); **live Google Health API** client and mapping to the daily table, verified against Takeout ([metrics.md](metrics.md#from-the-google-health-api)); each person connects their own Google account from the app (encrypted token, background sync of the whole history) |
-| Storage | Postgres in Docker, six migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer; logging drafts, audit events and clarification state); `python -m app.sync pull` stores live days |
-| Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline) |
-| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers. Reachable through `POST /chat` |
-| API | `/health`, `/data/status`, `/days/{date}`, `/metrics/{metric}`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: conversations (`GET`/`POST /conversations`, `PATCH` (rename, pin) and `DELETE /conversations/{id}`; editing or retrying a question with `replaces`), `GET /chat?conversation=`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
-| App | a landing page, **sign up / sign in** (session kept in the keychain, or localStorage on the web), a waiting screen until approval and an Access requests list for the owner, **Connect Google Health** in Settings (connect, sync now, disconnect, progress while the history syncs), before the app, in the "Track day" palette with light and dark; tabs Today (the day's sleep, activity and heart numbers against the person's usual range, with metric pages), Ask (expert picker, quick/deep, attachments, real routed answers from the agent), Reminders and Settings (account, appearance, Google Health, data coverage, logged entries), built from flat sections and rows; Expo SDK 58, runs in Expo Go and on the web |
-| Engineering | protected `main`, PRs with both CI jobs required, 662 backend and 82 mobile tests |
+| Storage | Postgres in Docker, eight migrations (users, Google connections, daily metrics, sync runs; chat messages and cited evidence; findings, context questions, check-ins, memory facts; sign-up status and sessions; the cost of each answer; logging drafts, audit events and clarification state; conversations (0007) and pinning them (0008)); `python -m app.sync pull` stores live days |
+| Analysis | deterministic tools returning `Evidence` (incl. change points with a permutation test, weekday split, and `compare_day`: one day against the middle half of the 28 days before); 14-vs-28-day screen with FDR correction and a templated report (the no-LLM baseline); our own **recovery score** (`app/analysis/day.py`) |
+| Agent | LLM layer with cost accounting and budgets; validated toolbox; **general agent** (hypothesis-test loop, `submit_findings`, one repair round) and the **claim verifier**; **experts** (sleep, recovery, activity; nutrition defined, waiting for data) with ownership of claims and `consult`; **router** (Jev: topic, request intent and a yes/no per expert; keyword fallback; LLM router for comparison) and `ask()`, which routes and answers; questions about one day use `compare_day` with its own `day` claim kind; a consulted expert's verified claims are carried into the answer when the summary uses them; claims from the person's other conversations are memory items (kind `chat`). Reachable through `POST /chat` |
+| API | `/health`, `/data/status`, `/days/{date|latest}` (with the recovery score and its parts), `/days/{date}/workouts` and `/days/{date}/hourly` (read live from Google, kept 5 minutes), `/checkins/{day}`, `/metrics/{metric}`, `/reports/latest`, `/evidence/{id}` (behind sign-in; each person's own live Google Health days from the database, the owner falling back to the Takeout export only with no live data at all; analyses cached until the next sync); **accounts**: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`, and approval of sign-ups (`/admin/access-requests`, `python -m app.auth`); **chat**: conversations (`GET`/`POST /conversations`, `PATCH` (rename, pin) and `DELETE /conversations/{id}`; editing or retrying a question with `replaces`), `GET /chat?conversation=`, `POST /chat` (the agent with the person's conversation and memory, waits up to 55 s and stores slower answers when ready, one question at a time, daily caps of $0.10 per person and $0.50 in all from stored answer costs); **Google Health per person**: `POST /google/connect`, `GET /google/callback`, `POST /google/sync`, `POST /google/disconnect`, `GET /google/status` (tokens encrypted with `FA_TOKEN_KEY`, PKCE, first sync of the whole history newest first, later syncs reread the last 3 days) |
+| App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (mock data) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
+| Engineering | protected `main`, PRs with both CI jobs required, 695 backend and 102 mobile tests |
 
-**Not built yet:** deployment (so phones cannot connect Google yet), the recovery score and
-check-in, nutrition columns, the daily run and reminders, a screen to approve facts the agent
-proposes, tracing and metrics, the evaluation suite, the failure matrix and threat model.
+**Not built yet:** deployment (so phones cannot connect Google yet); the evaluation suite, tracing
+and metrics, the failure matrix and threat model; the daily run (and the agent's note on Today,
+skipped for now at the user's request); real reminders (the tab runs on the mock); the journal
+with habit impact; fitness age; the weekly workout summary; nutrition columns; a screen to approve
+facts the agent proposes.
 
 ## Core logging: first local implementation
 
@@ -188,18 +190,23 @@ undo), the first real Google connection and write from the app (#53), chat fixes
 local time in the task, logging follow-ups, one natural reply, named evidence chips) and Expo SDK
 58 (#55).
 
-Next, in order (the app and UI plan agreed on 2026-10-25 is in [ui-plan.md](ui-plan.md); its
-first two steps run alongside these):
+On 2026-10-25: workouts (#57-#60: Google's required fields, the tracker's reading on drafts,
+all 181 types, [workouts.md](workouts.md)); the [UI plan](ui-plan.md) (#61); Settings in place of
+Data (#62); Today with the day's numbers (#63) and finished with recovery, check-in, steps by hour
+and workouts (#69); answers about today and consults kept with the answer (#64); the evidence page
+(#65); conversations with shared memory (#66), their controls (#67) and chat polish (#68). Both
+test entries left in the owner's Google were undone.
 
-1. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
-   Postgres) with a public HTTPS address, a "Web application" OAuth client listing its
-   `/google/callback`, the web build on Vercel, and the app in Expo Go pointing at the API.
-2. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
-   score (Sprint 2).
-3. Tracing (Langfuse) and the first evaluation (Sprint 2).
-4. Logging, continued: reconciliation of pending
-   writes, food lookup, nutrition mapping and photo estimates. See
-   [agent-actions.md](agent-actions.md).
+Next, in order:
+
+1. **Deployment**: Railway (API and Postgres) with a public HTTPS address, a "Web application"
+   OAuth client listing its `/google/callback`, the web build on Vercel, the app in Expo Go.
+2. **Tracing (Langfuse) and the first evaluation** (40% of the grade), then the attack suite.
+3. UI plan steps 3-6: weekly workout summary, journal with habit impact, real reminders as phone
+   notifications, fitness age ([ui-plan.md](ui-plan.md)).
+4. The daily run after sync (the agent's note on Today when the user wants it).
+5. Logging, continued: reconciliation of pending writes, food lookup, nutrition mapping, photo
+   estimates ([agent-actions.md](agent-actions.md)).
 
 ## What has been tested
 
@@ -240,7 +247,7 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   the owner's 119 tracked workouts; real agent runs drafted `KICKBOXING` and `TENNIS` at the right
   local times. Fitbit labels our writes "Cronometer" (issue 22).
 
-Spent so far on real runs: about $0.64 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
+Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
 
 ## Open issues
 
@@ -324,3 +331,13 @@ Spent so far on real runs: about $0.64 in all, almost all OpenAI (Jev under $0.0
     callback should be left out of request logging.
 22. **Google labels our writes as "Cronometer"** in the Fitbit app (seen on the first real workout
     write). We send no `dataSource`; how Google picks the label is not documented yet.
+23. **The router's consults are not always followed.** Asked "am i recovered today?", the router
+    wanted activity too, but the Recovery lead never consulted it (a note says so), and it ran five
+    correlation tests the question did not need.
+24. **The recovery score is not validated.** Equal weights over three inputs, by design
+    transparent; morning check-ins are the ground truth to compare it with once there are enough.
+25. **Workouts and steps by hour need a Google Health connection**; the owner's Takeout fallback
+    shows none.
+26. **Not seen in a real run yet** (the day's chat cap was reached): pointers between
+    conversations, and sending an edited or retried question. Both are covered by scripted tests.
+27. **Answers stored before #64 keep the old note wording** ("does not cover the ... side").

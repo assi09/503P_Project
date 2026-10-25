@@ -219,6 +219,15 @@ and pinned (migration 0008). Editing a question, or retrying an answer, sends th
 `replaces`: that question and everything after it in the conversation are removed, only once no
 other answer is running for the person, and the new text is answered as usual.
 
+**Today.** `GET /days/{date}` returns every daily metric with the person's usual range (the middle
+half of the 28 days before, at least 7 days; low-wear days left out of activity) and the last 14
+days. The **recovery score** is our own: each of last night's HRV, resting heart rate (counting
+down) and time asleep gets the share of the 28 days before that it beat, and the score is their
+mean (0-100, at least two inputs); it is computed from the daily table, never stored, and its parts
+are returned with the day. The day's workouts and steps by hour are not in the daily table: they
+are read from the person's Google Health when asked (range roll-ups, the exercise list) and kept
+five minutes. The morning check-in (1-5 and tags) is stored per day; only today's can be set.
+
 Questions about one day use `compare_day` (one day against the middle half of the 28 days before,
 the rule the Today screen uses). Its claims have their own kind, `day`, whose direction must match
 where the day sits (up above the range, down below, none within); it describes the day and is

@@ -154,12 +154,19 @@ neat, not a stack of rounded boxes. Each step below ships as its own pull reques
    columns on wide screens. Today's running totals say "so far" instead of "below usual". Each
    value opens a metric page: 7, 30 or 90 days with the usual band, average, lowest, highest, the
    days one by one, and "Ask about" with the metric attached.
-3. **Workouts**: sync and list, workout page, weekly summary.
+3. **Workouts**: sync and list, workout page, weekly summary. **Partly done** (#69): the day's
+   workouts on Today, read live from Google, and a page each; the weekly summary is left.
 4. **Journal**: calendar, habit tags, habit impact tool and its explanations.
 5. **Reminders for real**: backend, agent proposals, phone notifications.
 6. **Fitness age**: profile fields, the tool, its card and page.
 7. **The agent on Today**: the daily note from the daily run, "Ask about this" everywhere, Ask
-   restyled.
+   restyled. **Partly done:** "Ask about" on metric, evidence and workout pages; the daily note is
+   skipped for now at the user's request.
+
+Also done on 2026-10-25, beyond the steps: Today's recovery score (our own, its parts on its page;
+the user chose it over waiting), the morning check-in and steps by hour (#69); the evidence page
+(#65); Ask with separate conversations sharing memory, a collapsible sidebar, pin, rename, delete,
+copy, edit and retry, and attach as a popup on the web (#66-#68).
 
 Every UI step: mock, types and http client together; light and dark, phone and desktop, clicked
 through with Playwright; empty and error states.
