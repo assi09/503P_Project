@@ -14,6 +14,7 @@ import {
   logTitle,
   MEALS,
   STATUS,
+  trackerSummary,
   WORKOUTS,
   type LogForm,
 } from '@/lib/actionLog';
@@ -111,6 +112,8 @@ export function LogDraftCard({
   }
 
   const busy = action.isPending;
+  const tracker = trackerSummary(row.log);
+  const editable = row.status === 'draft' || row.status === 'failed';
   const code = (action.error as { code?: string } | null)?.code;
   const run = (call: () => Promise<HealthAction>) => action.mutate(call);
 
@@ -167,6 +170,36 @@ export function LogDraftCard({
 
       {expanded && (
         <>
+          {tracker && !form && (
+            <View style={styles.tracker}>
+              {tracker.values.length > 0 && (
+                <Text variant="caption" color="muted">
+                  <Text variant="caption" style={{ fontFamily: fonts.semibold }}>
+                    From your Fitbit:{' '}
+                  </Text>
+                  {tracker.values.join(' · ')}
+                </Text>
+              )}
+              {tracker.note && (
+                <Text variant="caption" color="muted">
+                  {tracker.note}
+                </Text>
+              )}
+              {tracker.overlaps.length > 0 && editable && (
+                <Text variant="caption" color="warning">
+                  Your Fitbit already recorded {tracker.overlaps.join(', ')} at this time. Logging
+                  this too would add a second workout.
+                </Text>
+              )}
+              {tracker.canRefresh && editable && (
+                <TextButton
+                  label="Refresh from Fitbit"
+                  disabled={busy}
+                  onPress={() => run(() => api.reviseAction(id, row.version, row.log))}
+                />
+              )}
+            </View>
+          )}
           {row.status === 'failed' && row.error && (
             <Text variant="caption" color="danger">
               {row.error}
@@ -259,7 +292,9 @@ export function LogDraftCard({
             <Text variant="caption" color="faint">
               {usingMock
                 ? 'Demo: logging is only simulated.'
-                : 'Log it adds this entry to Google Health, with the values you gave.'}
+                : tracker?.values.length
+                  ? "Log it adds this entry to Google Health, with your values and your Fitbit's."
+                  : 'Log it adds this entry to Google Health, with the values you gave.'}
             </Text>
           )}
         </>
@@ -386,6 +421,7 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.pill },
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
   question: { width: '100%' },
+  tracker: { gap: spacing.xs, alignItems: 'flex-start' },
   textButton: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   form: { gap: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },

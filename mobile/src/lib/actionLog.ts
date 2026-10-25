@@ -106,6 +106,49 @@ export function logDetails(log: HealthLog): string[] {
   ];
 }
 
+/** "WEIGHTLIFTING" -> "Weightlifting", with the app's own names for the types it logs. */
+function exerciseName(type: string): string {
+  if (type in WORKOUTS) return WORKOUTS[type as WorkoutLog['exerciseType']];
+  const words = type.toLowerCase().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export interface TrackerSummary {
+  values: string[]; // e.g. ["2,400 steps", "120 kcal", "avg 101 bpm"]
+  note?: string; // why there are no values
+  overlaps: string[]; // e.g. ["Walk 13:28–13:44"]
+  canRefresh: boolean;
+}
+
+/** What the tracker recorded during a workout, for the card; null for food. */
+export function trackerSummary(log: HealthLog): TrackerSummary | null {
+  if (log.kind !== 'workout' || !log.measured) return null;
+  const reading = log.measured;
+  const offset = wall(log.startTime).offset;
+  const overlaps = (reading.overlaps ?? []).map((o) => {
+    const start = wall(withOffset(new Date(o.startTime), offset)).time;
+    const end = wall(withOffset(new Date(o.endTime), offset)).time;
+    return `${exerciseName(o.exerciseType)} ${start}–${end}`;
+  });
+  if (reading.status !== 'measured') {
+    const note =
+      reading.status === 'no_data'
+        ? 'No Fitbit data for this time yet. If you wore it, sync your tracker and refresh.'
+        : 'Could not read your Fitbit data for this time.';
+    return { values: [], note, overlaps, canRefresh: true };
+  }
+  const values = [
+    reading.steps ? `${reading.steps.toLocaleString('en-US')} steps` : null,
+    // The person's own distance is already in the summary line and is the one sent.
+    log.distanceKm == null && reading.distanceKm
+      ? `${Math.round(reading.distanceKm * 100) / 100} km`
+      : null,
+    reading.caloriesKcal != null ? `${Math.round(reading.caloriesKcal)} kcal` : null,
+    reading.averageHeartRate ? `avg ${reading.averageHeartRate} bpm` : null,
+  ].filter((value): value is string => value !== null);
+  return { values, overlaps, canRefresh: false };
+}
+
 /** The edit form's fields: plain text, local date and time, duration as h:mm. */
 export type LogForm = Record<string, string>;
 

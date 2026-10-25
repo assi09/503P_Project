@@ -204,7 +204,22 @@ export type HealthLog =
       activeSeconds: number;
       distanceKm?: number | null;
       provenance: 'user_entered';
+      measured?: TrackerReading | null; // added by the server; anything the app sends is replaced
     };
+
+/** What the tracker recorded during a workout, read from Google by the server. */
+export interface TrackerReading {
+  status: 'measured' | 'no_data' | 'unavailable'; // no_data: not worn, or not synced yet
+  steps?: number | null;
+  distanceKm?: number | null;
+  caloriesKcal?: number | null;
+  averageHeartRate?: number | null;
+  overlaps?: {
+    exerciseType: string;
+    startTime: ISODateTime;
+    endTime: ISODateTime;
+  }[];
+}
 
 export type HealthActionStatus =
   'draft' | 'executing' | 'succeeded' | 'failed' | 'unknown' | 'cancelled' | 'undoing' | 'undone';

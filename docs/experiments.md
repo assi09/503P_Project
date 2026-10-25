@@ -281,3 +281,22 @@ Two observations:
   the proposal; warn on the card when the tracker already recorded an exercise over that time;
   log with only the given values when there is no tracker data; values the person gave win over
   measured ones (decided with the user).
+
+## The tracker's reading on workout drafts (2026-10-25)
+
+**Tested:** whether Google's range roll-ups reproduce what Fitbit shows for an exercise, before
+building on them (free reads, values not printed). On 8 of the owner's exercises recorded by the
+tracker in the past week (walks, elliptical, weightlifting, a workout), rolling up each exercise's
+own interval gave steps, distance and average heart rate equal to Fitbit's summary, and total
+calories within 0-2%; active calories were 30-50% lower, so total calories are used. Listing
+exercises needs a filter on `exercise.interval.civil_start_time` in local time without an offset;
+`total-calories` cannot be listed, only rolled up.
+**Then:** with the new code against the real API, a draft over the tracker's own walk was
+measured (steps and heart rate exact, distance within 0.1%, calories within 2%) and the walk
+came back as an overlap. The card was checked with Playwright on the local API in light and dark,
+at phone and desktop widths, with no console errors; the draft was then cancelled.
+**Real write:** a measured 15-minute walk over a quiet period (no recorded exercise) was confirmed
+through the API. Google stored steps, distance, calories and heart rate exactly as sent, and
+recomputed the pace from the duration and distance (the same value, unrounded).
+**Not yet tested:** the "no data" case on real data (a period without heart rate); it is covered
+by scripted tests.

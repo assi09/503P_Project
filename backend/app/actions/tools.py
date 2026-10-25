@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.actions import store
+from app.actions.measure import Measurer, with_measurement
 from app.actions.schemas import FoodLog, WorkoutLog
 from app.agent.agent import ExtraTool
 from app.api.errors import ApiError
@@ -21,15 +22,25 @@ def proposal_tools(
     question_id: uuid.UUID,
     now: datetime,
     prepared: list[str],
+    measurer: Measurer | None = None,
 ) -> dict[str, list[ExtraTool]]:
     def tool(model: type[FoodLog] | type[WorkoutLog], expert: str) -> ExtraTool:
         schema = model.model_json_schema(by_alias=True)
         schema.pop("title", None)
+        # The tracker's reading is the server's to add, so the model is not offered the field.
+        schema.get("properties", {}).pop("measured", None)
+        for name in ("Measured", "Overlap"):
+            schema.get("$defs", {}).pop(name, None)
+        if not schema.get("$defs"):
+            schema.pop("$defs", None)
 
         def run(arguments: dict | None) -> tuple[str, dict]:
             try:
-                log = model.model_validate(arguments or {})
-                payload = log.model_dump(mode="json", by_alias=True, exclude_none=True)
+                given = {k: v for k, v in (arguments or {}).items() if k != "measured"}
+                log = model.model_validate(given)
+                payload = with_measurement(
+                    log.model_dump(mode="json", by_alias=True, exclude_none=True), measurer
+                )
                 # Repeated identical calls in this question prepare one draft, across restarts.
                 key = uuid.uuid5(question_id, payload["kind"])
                 with sessions() as db:
@@ -70,7 +81,10 @@ def proposal_tools(
             "offset given at the top of the task: 'just now' is the current local time there, "
             "and 'this morning' or 'yesterday at lunch' are worked out from it. Ask only for "
             "details that are truly missing. Never estimate nutrients, invent measurements or "
-            "claim it was logged. This tool cannot confirm, execute or delete a Google record.",
+            "claim it was logged. For a workout, the server adds what the tracker recorded "
+            "during it (steps, distance, calories, heart rate) and any exercise already recorded "
+            "then; the review card shows them, so do not repeat them as findings. This tool "
+            "cannot confirm, execute or delete a Google record.",
             schema,
             run,
         )

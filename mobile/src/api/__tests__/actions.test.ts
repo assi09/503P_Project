@@ -1,4 +1,11 @@
-import { formFromLog, logDetails, logFromForm, logTitle, validateLog } from '@/lib/actionLog';
+import {
+  formFromLog,
+  logDetails,
+  logFromForm,
+  logTitle,
+  trackerSummary,
+  validateLog,
+} from '@/lib/actionLog';
 
 import { httpClient } from '../http';
 import { DEMO_OWNER, mockClient } from '../mock';
@@ -149,4 +156,57 @@ it('refuses the same implausible entries as the backend', () => {
     ),
   ).toThrow('24 hours');
   expect(() => validateLog(RUN, now)).not.toThrow();
+});
+
+const WALK: HealthLog = {
+  kind: 'workout',
+  exerciseType: 'WALKING',
+  startTime: '2026-10-25T13:00:00+02:00',
+  endTime: '2026-10-25T13:20:00+02:00',
+  activeSeconds: 1200,
+  provenance: 'user_entered',
+};
+
+it("summarizes the tracker's reading, the person's distance first, and overlaps in local time", () => {
+  expect(trackerSummary(FOOD)).toBeNull();
+  expect(trackerSummary(WALK)).toBeNull();
+  const reading = {
+    status: 'measured' as const,
+    steps: 2400,
+    distanceKm: 1.234,
+    caloriesKcal: 119.6,
+    averageHeartRate: 101,
+    overlaps: [
+      { exerciseType: 'WALKING', startTime: '2026-10-25T11:05:00Z', endTime: '2026-10-25T11:15:00Z' },
+      {
+        exerciseType: 'WEIGHTLIFTING',
+        startTime: '2026-10-25T10:50:00Z',
+        endTime: '2026-10-25T11:02:00Z',
+      },
+    ],
+  };
+  expect(trackerSummary({ ...WALK, measured: reading })).toEqual({
+    values: ['2,400 steps', '1.23 km', '120 kcal', 'avg 101 bpm'],
+    overlaps: ['Walk 13:05–13:15', 'Weightlifting 12:50–13:02'],
+    canRefresh: false,
+  });
+  // The person's own distance is the one sent, so the tracker's is not shown beside it.
+  expect(trackerSummary({ ...WALK, distanceKm: 2, measured: reading })?.values).toEqual([
+    '2,400 steps',
+    '120 kcal',
+    'avg 101 bpm',
+  ]);
+  const missing = trackerSummary({ ...WALK, measured: { status: 'no_data' } });
+  expect(missing).toMatchObject({ values: [], canRefresh: true });
+  expect(missing?.note).toMatch('No Fitbit data');
+});
+
+it('the demo replaces a reading the app sends with its own, and keeps one draft per request', async () => {
+  const forged = { ...WALK, measured: { status: 'measured' as const, caloriesKcal: 9000 } };
+  const draft = await mockClient.proposeAction('walk', forged);
+  expect(draft.log).toMatchObject({ measured: { status: 'measured', caloriesKcal: 100 } });
+  await expect(mockClient.proposeAction('walk', WALK)).resolves.toMatchObject({ id: draft.id });
+  const refreshed = await mockClient.reviseAction(draft.id, 1, draft.log);
+  expect(refreshed).toMatchObject({ version: 2, log: { measured: { caloriesKcal: 100 } } });
+  await mockClient.cancelAction(draft.id, 2);
 });

@@ -85,7 +85,10 @@ def test_payload_units_unknown_values_and_timezones():
     assert "totalFat" not in food and "totalCarbohydrate" not in food
     assert food["interval"]["startUtcOffset"] == "10800s"
     workout = LOG.validate_python(WORKOUT).google_payload()["exercise"]
-    assert workout["metricsSummary"] == {"distanceMillimeters": 5_000_000}
+    assert workout["metricsSummary"] == {
+        "distanceMillimeters": 5_000_000,
+        "averagePaceSecondsPerMeter": 0.3,
+    }
     assert workout["activeDuration"] == "1500s" and "dataSource" not in workout
     assert workout["displayName"] == "Run"
 
