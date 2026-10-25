@@ -114,7 +114,7 @@ def callback(
 
     def back(result: str) -> RedirectResponse:
         query = urlencode({"google": result})
-        return RedirectResponse(f"{settings.app_url.rstrip('/')}/data?{query}", status_code=303)
+        return RedirectResponse(f"{settings.app_url.rstrip('/')}/settings?{query}", status_code=303)
 
     pending = sign_ins.finish(state, clock)
     if pending is None:

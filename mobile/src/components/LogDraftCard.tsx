@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ComponentProps } from 'react';
-import { Linking, Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { useState, type ComponentProps, type ReactNode } from 'react';
+import {
+  Linking,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextInputProps,
+  type ViewStyle,
+} from 'react-native';
 
 import { api, usingMock } from '@/api';
 import type { HealthAction, HealthLog } from '@/api/types';
@@ -139,7 +148,8 @@ export function LogDraftCard({
   }
 
   return (
-    <Card style={[styles.card, !collapsible && styles.inChat]}>
+    // In a list it is a row between hairlines; in a chat answer, a card to act on.
+    <Container style={collapsible ? styles.listRow : [styles.card, styles.inChat]}>
       <Pressable
         accessibilityRole={collapsible ? 'button' : undefined}
         accessibilityState={collapsible ? { expanded } : undefined}
@@ -310,8 +320,13 @@ export function LogDraftCard({
           )}
         </>
       )}
-    </Card>
+    </Container>
   );
+}
+
+function Container({ style, children }: { style: StyleProp<ViewStyle>; children: ReactNode }) {
+  if (Array.isArray(style)) return <Card style={style}>{children}</Card>;
+  return <View style={style}>{children}</View>;
 }
 
 function TextButton({
@@ -418,6 +433,7 @@ function EditForm({
 
 const styles = StyleSheet.create({
   card: { gap: spacing.md },
+  listRow: { gap: spacing.md, paddingVertical: spacing.md },
   inChat: { marginTop: spacing.sm }, // below the answer's text
   header: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   chevron: { marginTop: 4 },

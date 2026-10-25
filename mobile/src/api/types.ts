@@ -169,7 +169,7 @@ export interface ApiClient {
   getAccessRequests(): Promise<AccessRequest[]>; // admins only
   decideAccessRequest(id: string, approve: boolean): Promise<Account>; // admins only
   getGoogleStatus(): Promise<GoogleStatus>;
-  connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /data
+  connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /settings
   syncGoogle(): Promise<GoogleStatus>;
   disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;

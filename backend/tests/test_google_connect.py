@@ -195,7 +195,7 @@ def test_connecting_stores_an_encrypted_token_and_syncs_the_whole_history(
     headers = signed_in(client, engine)
     response, _ = connect(client, headers)
     assert response.status_code == 303
-    assert response.headers["location"] == "http://app.test/data?google=connected"
+    assert response.headers["location"] == "http://app.test/settings?google=connected"
     assert oauth.exchanged[0][0] == "the-code"
 
     with session_scope(engine) as session:

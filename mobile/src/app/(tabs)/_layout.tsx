@@ -19,7 +19,7 @@ const TABS: { name: string; title: string; icon: IconName; iconActive: IconName 
     icon: 'notifications-outline',
     iconActive: 'notifications',
   },
-  { name: 'data', title: 'Data', icon: 'server-outline', iconActive: 'server' },
+  { name: 'settings', title: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
 ];
 
 export default function TabLayout() {

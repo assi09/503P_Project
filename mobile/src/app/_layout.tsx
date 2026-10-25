@@ -87,6 +87,8 @@ function Navigation() {
         <Stack.Protected guard={approved} redirectTo={home}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="finding/[id]" options={{ title: '' }} />
+          <Stack.Screen name="entries" options={{ title: 'Logged food and workouts' }} />
+          <Stack.Screen name="data" options={{ headerShown: false }} />
           <Stack.Screen
             name="evidence/[id]"
             options={{
