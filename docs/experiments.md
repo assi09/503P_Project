@@ -300,3 +300,24 @@ through the API. Google stored steps, distance, calories and heart rate exactly 
 recomputed the pace from the duration and distance (the same value, unrounded).
 **Not yet tested:** the "no data" case on real data (a period without heart rate); it is covered
 by scripted tests.
+
+## Every workout type, with Fitbit's metrics for its kind (2026-10-25)
+
+**Asked by the user:** a logged workout should carry what Fitbit puts on that kind of workout, for
+any sport a person might do, not only the four types drafts accepted.
+**Tested (free reads, values not printed):** the summaries of all 119 workouts the tracker recorded
+for the owner, across 12 types. Every type had calories, average heart rate, heart-rate zones and
+(when any) Active Zone Minutes; walks added steps, distance and pace; soccer, tennis, volleyball and
+"sport" steps and distance; the elliptical steps; gym types neither. Rolling up each workout's own
+interval matched Fitbit: steps and distance within 2% on all (60, 59), zones exact on almost all
+113, heart rate within 2% on 118 of 119, calories within 2% on 101 of 113. Active Zone Minutes is
+the plain sum of its three zone sums (78 of 79). Simulating a log of every one of those workouts
+with the new code matched Fitbit's summary field by field, except calories on gym sessions with
+pauses. Swim-length points exist outside any swim, so they are counted only on swims.
+**Real runs ($0.0134):** "45 minutes of kickboxing yesterday at 6pm" gave a KICKBOXING draft at the
+right local time with calories, heart rate and zones, but the reply ended with "does not cover the
+activity side of the question" and the run spent a repair round on it: the coverage check (PR #35)
+treated a log-only request as an unanswered question. Fixed: a request only to log has no
+coverage check; a mixed one keeps it. After the fix, "tennis for an hour this morning at 9" gave
+a TENNIS draft with no note (no steps that hour, so none were added). Both drafts were cancelled.
+**Not tested:** types the owner has never done on real data (placed by rule), swims, elevation.

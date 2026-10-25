@@ -56,11 +56,13 @@ Validated with fake Google and a scripted model end to end, browser review/edit/
 unknown/cancel states in light/dark on desktop/mobile widths, and two paid synthetic draft checks.
 The second created one draft and submitted in two model calls. Both together cost about $0.0086.
 
-Workout drafts now carry what the tracker recorded over their interval (steps, distance, calories,
-average heart rate) and warn about an exercise the tracker already recorded then; see
+Workout drafts accept every Google exercise type and carry what the tracker recorded over their
+interval, the metrics Fitbit records for that kind of workout (calories, heart rate and zones,
+Active Zone Minutes, and steps, distance or swim lengths where they apply), and warn about an
+exercise the tracker already recorded then; see
 [agent-actions.md](agent-actions.md#what-the-tracker-recorded-is-added-to-a-workout).
 
-Still planned: food lookup and serving arithmetic, more workout types, nutrition sync and
+Still planned: food lookup and serving arithmetic, nutrition sync and
 provider deduplication, photo estimates (kept for the demo), and hydration. The optional
 [recorded routes/regions extra](product.md#recorded-routes-and-regions-optional-planned) needs GPS
 exercise data and separate location consent; daily step totals cannot reconstruct locations.
@@ -194,8 +196,7 @@ Next, in order:
 2. A daily sync and run after it, then check-ins as data the tools can analyse, with the recovery
    score (Sprint 2).
 3. Tracing (Langfuse) and the first evaluation (Sprint 2).
-4. Logging, continued: more workout types (the tracker records weightlifting and elliptical,
-   which drafts cannot log yet), reconciliation of pending
+4. Logging, continued: reconciliation of pending
    writes, food lookup, nutrition mapping and photo estimates. See
    [agent-actions.md](agent-actions.md).
 
@@ -234,7 +235,7 @@ spend money. Real runs, all on synthetic people, are logged with their findings 
   confirmed it, read it back from Google and undid it; the chat problems this showed were fixed in
   PR #54 and rechecked with three more real runs.
 
-Spent so far on real runs: about $0.63 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
+Spent so far on real runs: about $0.64 in all, almost all OpenAI (Jev under $0.005) ([costs.md](costs.md)).
 
 ## Open issues
 
