@@ -148,6 +148,9 @@ const TOOL_LABELS: Record<string, string> = {
   compare_windows: 'Compared two periods',
   trend: 'Trend over time',
   correlate: 'Relationship between metrics',
+  compare_day: 'One day against your usual',
+  change_point: 'When a change began',
+  weekday_split: 'Weekends and weekdays',
 };
 
 export function toolLabel(tool: string): string {
