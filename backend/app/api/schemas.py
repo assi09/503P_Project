@@ -67,6 +67,35 @@ class Finding(ApiModel):
     evidence_ids: list[str]
 
 
+class Usual(ApiModel):
+    median: float
+    low: float  # the middle half of the 28 days before: 25th to 75th percentile
+    high: float
+    days: int
+
+
+class DayMetric(ApiModel):
+    metric: str
+    value: float | None
+    usual: Usual | None
+    recent: list[float | None]  # the 14 days ending with this one, oldest first
+
+
+class Day(ApiModel):
+    date: date
+    partial: bool  # today, still filling in
+    low_wear: bool  # under 10 hours of wear: activity totals are not representative
+    first: date  # the range of days there is data for, for moving between days
+    last: date
+    metrics: list[DayMetric]
+
+
+class MetricSeries(ApiModel):
+    metric: str
+    points: list[Point]
+    usual: Usual | None  # the usual range before the last day
+
+
 class ContextQuestion(ApiModel):
     id: str
     prompt: str

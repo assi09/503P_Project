@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/PressableScale';
+import { WIDE_CONTENT } from '@/lib/layout';
 import { floatingTabBar } from '@/lib/platform';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
@@ -15,9 +16,19 @@ interface ScreenProps {
   subtitle?: string;
   refreshing?: boolean;
   onRefresh?: () => unknown; // enables pull to refresh
+  header?: ReactNode; // a custom top, in place of the title; gets the same safe-area spacing
+  wide?: boolean; // a wider column, for screens laid out in two columns on large displays
 }
 
-export function Screen({ children, title, subtitle, refreshing = false, onRefresh }: ScreenProps) {
+export function Screen({
+  children,
+  title,
+  subtitle,
+  refreshing = false,
+  onRefresh,
+  header,
+  wide = false,
+}: ScreenProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   // On iOS the tab bar floats over the content, so leave room for it.
@@ -28,7 +39,8 @@ export function Screen({ children, title, subtitle, refreshing = false, onRefres
     <ScrollView
       contentContainerStyle={[
         styles.content,
-        { paddingTop: title ? insets.top + spacing.md : spacing.lg },
+        wide && { maxWidth: WIDE_CONTENT },
+        { paddingTop: title || header ? insets.top + spacing.md : spacing.lg },
         { paddingBottom: tabBarHeight + spacing.xl },
       ]}
       scrollIndicatorInsets={{ bottom: tabBarHeight }}
@@ -43,7 +55,8 @@ export function Screen({ children, title, subtitle, refreshing = false, onRefres
         )
       }
     >
-      {title && (
+      {header}
+      {title && !header && (
         <View style={styles.header}>
           {subtitle && (
             <Text variant="label" color="muted">

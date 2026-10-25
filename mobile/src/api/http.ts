@@ -8,9 +8,11 @@ import type {
   ChatMessage,
   Credentials,
   DataStatus,
+  DaySummary,
   Evidence,
   GoogleStatus,
   HealthAction,
+  MetricSeries,
   Report,
   SignedIn,
 } from './types';
@@ -115,6 +117,12 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
+    getDay: (date) => request<DaySummary>(baseUrl, `/days/${encodeURIComponent(date)}`),
+    getMetricSeries: (metric, { end, days }) =>
+      request<MetricSeries>(
+        baseUrl,
+        `/metrics/${encodeURIComponent(metric)}?days=${days}${end ? `&end=${end}` : ''}`,
+      ),
     getEvidence: (id) => request<Evidence>(baseUrl, `/evidence/${encodeURIComponent(id)}`),
     getChat: () => request<ChatMessage[]>(baseUrl, '/chat'),
     getGoogleStatus: () => request<GoogleStatus>(baseUrl, '/google/status'),

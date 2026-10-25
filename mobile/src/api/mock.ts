@@ -13,6 +13,8 @@ import type {
   ChatMessage,
   ContextQuestion,
   DataStatus,
+  DayMetric,
+  DaySummary,
   Depth,
   Evidence,
   Expert,
@@ -21,9 +23,11 @@ import type {
   HealthAction,
   HealthLog,
   ISODate,
+  MetricSeries,
   NotificationSettings,
   Point,
   Reminder,
+  Usual,
   Report,
   SendOptions,
   SignedIn,
@@ -54,6 +58,101 @@ function series(seed: number, base: number, noise: number, shift: number, shiftD
     const value = base + (next() - 0.5) * 2 * noise + (daysAgo < shiftDay ? shift : 0);
     return { date: isoDate(daysAgo), value: Math.round(value * 10) / 10 };
   });
+}
+
+// A made-up daily history for Today: [metric, typical value, day-to-day spread, decimals].
+const HISTORY_DAYS = 120;
+const DAILY: [string, number, number, number][] = [
+  ['sleep_minutes', 445, 40, 0],
+  ['time_in_bed', 490, 40, 0],
+  ['sleep_efficiency', 91, 3, 0],
+  ['bedtime_hour', 0.6, 0.6, 2],
+  ['deep_sleep_minutes', 78, 15, 0],
+  ['light_sleep_minutes', 255, 30, 0],
+  ['rem_sleep_minutes', 98, 18, 0],
+  ['awake_in_bed_minutes', 45, 12, 0],
+  ['steps', 9200, 2800, 0],
+  ['calories', 2480, 260, 0],
+  ['distance_km', 6.8, 2, 2],
+  ['active_zone_minutes', 34, 18, 0],
+  ['lightly_active_minutes', 210, 40, 0],
+  ['moderately_active_minutes', 22, 10, 0],
+  ['very_active_minutes', 18, 12, 0],
+  ['resting_hr', 58, 2, 0],
+  ['hrv_ms', 46, 7, 1],
+  ['respiratory_rate', 14.6, 0.6, 1],
+  ['skin_temp_variation_c', 0, 0.3, 1],
+  ['wear_minutes', 1320, 60, 0],
+];
+
+function dailyValue(metric: number, daysAgo: number): number {
+  const [, base, spread, decimals] = DAILY[metric];
+  const value = base + (random(metric * 7919 + daysAgo * 104729)() - 0.5) * 2 * spread;
+  return Math.round(Math.max(0, value) * 10 ** decimals) / 10 ** decimals;
+}
+
+function daysAgoOf(date: ISODate): number {
+  return Math.round((Date.parse(isoDate(0)) - Date.parse(date)) / 86_400_000);
+}
+
+// The same usual range as the backend: the middle half of the 28 days before, at least 7 days.
+function quantile(sorted: number[], q: number): number {
+  const position = (sorted.length - 1) * q;
+  const below = Math.floor(position);
+  const above = Math.min(below + 1, sorted.length - 1);
+  return sorted[below] + (sorted[above] - sorted[below]) * (position - below);
+}
+
+function mockUsual(metric: number, daysAgo: number): Usual | null {
+  const values = Array.from({ length: 28 }, (_, i) => daysAgo + 1 + i)
+    .filter((ago) => ago < HISTORY_DAYS)
+    .map((ago) => dailyValue(metric, ago))
+    .sort((a, b) => a - b);
+  if (values.length < 7) return null;
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return {
+    median: round(quantile(values, 0.5)),
+    low: round(quantile(values, 0.25)),
+    high: round(quantile(values, 0.75)),
+    days: values.length,
+  };
+}
+
+function mockDay(date: ISODate): DaySummary {
+  const ago = daysAgoOf(date);
+  if (ago < 0 || ago >= HISTORY_DAYS) {
+    throw new ApiError('There is no data for that day.', 'no_data', 404);
+  }
+  const metrics = DAILY.map<DayMetric>(([metric], index) => ({
+    metric,
+    value: dailyValue(index, ago),
+    usual: mockUsual(index, ago),
+    recent: Array.from({ length: 14 }, (_, i) => ago + 13 - i).map((a) =>
+      a < HISTORY_DAYS ? dailyValue(index, a) : null,
+    ),
+  }));
+  return {
+    date,
+    partial: ago === 0,
+    lowWear: false,
+    first: isoDate(HISTORY_DAYS - 1),
+    last: isoDate(0),
+    metrics,
+  };
+}
+
+function mockSeries(metric: string, days: number, end?: ISODate): MetricSeries {
+  const index = DAILY.findIndex(([name]) => name === metric);
+  if (index === -1) throw new ApiError('There is no such metric.', 'unknown_metric', 404);
+  const endAgo = Math.max(0, end ? daysAgoOf(end) : 0);
+  return {
+    metric,
+    points: Array.from({ length: days }, (_, i) => endAgo + days - 1 - i).map((ago) => ({
+      date: isoDate(ago),
+      value: ago < HISTORY_DAYS ? dailyValue(index, ago) : null,
+    })),
+    usual: mockUsual(index, endAgo),
+  };
 }
 
 const recent = { start: isoDate(13), end: isoDate(0) };
@@ -590,6 +689,10 @@ export const mockClient: ApiClient = {
       questions,
       evidence,
     }),
+
+  getDay: (date) => later(() => mockDay(date === 'latest' ? isoDate(0) : date)),
+
+  getMetricSeries: (metric, { end, days }) => later(() => mockSeries(metric, days, end)),
 
   getEvidence: (id) =>
     evidence[id] ? delay(evidence[id]) : Promise.reject(new Error('This evidence no longer exists.')),

@@ -44,7 +44,7 @@ function attachmentLabel(attachment: Attachment | undefined, findings: Finding[]
 
 export default function AskScreen() {
   const colors = useColors();
-  const { findingId } = useLocalSearchParams<{ findingId?: string }>();
+  const { findingId, metric } = useLocalSearchParams<{ findingId?: string; metric?: string }>();
   const chat = useChat();
   const report = useReport();
   const send = useSendMessage();
@@ -61,14 +61,23 @@ export default function AskScreen() {
 
   // "Ask about this" on a finding opens this tab with the finding attached. The parameter is then
   // cleared, so asking about the same finding again attaches it again.
+  // A metric page's "Ask about" works the same way with the metric.
   const [seenFindingId, setSeenFindingId] = useState<string>();
   if (findingId !== seenFindingId) {
     setSeenFindingId(findingId);
     if (findingId) setAttachment({ kind: 'finding', id: findingId });
   }
+  const [seenMetric, setSeenMetric] = useState<string>();
+  if (metric !== seenMetric) {
+    setSeenMetric(metric);
+    if (metric) setAttachment({ kind: 'metric', metric });
+  }
   useEffect(() => {
     if (findingId) router.setParams({ findingId: undefined });
   }, [findingId]);
+  useEffect(() => {
+    if (metric) router.setParams({ metric: undefined });
+  }, [metric]);
 
   // Once a slow answer shows up in the chat, its "taking longer" message has done its job.
   const lastRole = chat.data?.at(-1)?.role;

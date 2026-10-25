@@ -164,3 +164,19 @@ describe('chat', () => {
     await expect(sending).rejects.toMatchObject({ code: 'timeout' });
   });
 });
+
+describe('days', () => {
+  it('asks for a day and a metric series by path', async () => {
+    const fetchMock = respond(200, {});
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.getDay('latest');
+    await client.getMetricSeries('resting_hr', { days: 30, end: '2026-10-24' });
+    await client.getMetricSeries('steps', { days: 7 });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      'http://api.test/days/latest',
+      'http://api.test/metrics/resting_hr?days=30&end=2026-10-24',
+      'http://api.test/metrics/steps?days=7',
+    ]);
+  });
+});

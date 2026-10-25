@@ -69,6 +69,37 @@ export type ExpertChoice = 'auto' | Expert;
 export type Depth = 'quick' | 'deep';
 
 /** Context the user attached to a question. */
+/** The middle half of the 28 days before a day: what is usual for this person. */
+export interface Usual {
+  median: number;
+  low: number; // 25th percentile
+  high: number; // 75th percentile
+  days: number;
+}
+
+export interface DayMetric {
+  metric: string;
+  value: number | null;
+  usual: Usual | null; // null with fewer than 7 days to compare with
+  recent: (number | null)[]; // the 14 days ending with this one, oldest first
+}
+
+/** One day's numbers, for Today. */
+export interface DaySummary {
+  date: ISODate;
+  partial: boolean; // today, still filling in
+  lowWear: boolean; // under 10 hours of wear: activity totals are not representative
+  first: ISODate; // the days there is data for
+  last: ISODate;
+  metrics: DayMetric[];
+}
+
+export interface MetricSeries {
+  metric: string;
+  points: Point[];
+  usual: Usual | null; // before the last day
+}
+
 export type Attachment = { kind: 'finding'; id: string } | { kind: 'metric'; metric: string };
 
 export interface SendOptions {
@@ -173,6 +204,8 @@ export interface ApiClient {
   syncGoogle(): Promise<GoogleStatus>;
   disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;
+  getDay(date: ISODate | 'latest'): Promise<DaySummary>;
+  getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;
   getChat(): Promise<ChatMessage[]>;
