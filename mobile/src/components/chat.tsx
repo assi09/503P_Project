@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -55,10 +55,19 @@ export const MessageBubble = memo(function MessageBubble({
   const [hovered, setHovered] = useState(false);
   const [hoverable] = useState(canHover);
   const showActions = !hoverable || hovered;
-  const hover = {
-    onHoverIn: () => setHovered(true),
-    onHoverOut: () => setHovered(false),
+  // Moving onto a button inside counts as leaving the message on the web, so hiding waits a
+  // moment and the buttons keep the message hovered; otherwise they flicker on and off.
+  const leaving = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const enter = () => {
+    clearTimeout(leaving.current);
+    setHovered(true);
   };
+  const leave = () => {
+    clearTimeout(leaving.current);
+    leaving.current = setTimeout(() => setHovered(false), 150);
+  };
+  useEffect(() => () => clearTimeout(leaving.current), []);
+  const hover = { onHoverIn: enter, onHoverOut: leave };
 
   if (message.role === 'user' && editing) {
     const send = () => {
@@ -139,11 +148,12 @@ export const MessageBubble = memo(function MessageBubble({
             style={[styles.actions, styles.actionsMine, !showActions && styles.hidden]}
             pointerEvents={showActions ? 'auto' : 'none'}
           >
-            <CopyButton text={message.text} />
+            <CopyButton text={message.text} hover={hover} />
             {onEdit && (
               <ActionButton
                 icon="pencil-outline"
                 label="Edit"
+                hover={hover}
                 disabled={busy}
                 onPress={() => {
                   setDraft(message.text);
@@ -195,9 +205,15 @@ export const MessageBubble = memo(function MessageBubble({
             style={[styles.actions, !showActions && styles.hidden]}
             pointerEvents={showActions ? 'auto' : 'none'}
           >
-            <CopyButton text={message.text} />
+            <CopyButton text={message.text} hover={hover} />
             {onRetry && (
-              <ActionButton icon="refresh" label="Retry" disabled={busy} onPress={onRetry} />
+              <ActionButton
+                icon="refresh"
+                label="Retry"
+                hover={hover}
+                disabled={busy}
+                onPress={onRetry}
+              />
             )}
           </View>
         </View>
@@ -207,7 +223,9 @@ export const MessageBubble = memo(function MessageBubble({
 });
 
 /** Copies a message's text, and says so for a moment. */
-function CopyButton({ text }: { text: string }) {
+type Hover = { onHoverIn: () => void; onHoverOut: () => void };
+
+function CopyButton({ text, hover }: { text: string; hover?: Hover }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -216,6 +234,7 @@ function CopyButton({ text }: { text: string }) {
   }, [copied]);
   return (
     <ActionButton
+      hover={hover}
       icon={copied ? 'checkmark' : 'copy-outline'}
       label={copied ? 'Copied' : 'Copy'}
       onPress={() => {
@@ -230,11 +249,13 @@ function ActionButton({
   label,
   onPress,
   disabled = false,
+  hover,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  hover?: Hover; // keeps the message hovered while the pointer is on the button
 }) {
   const colors = useColors();
   return (
@@ -244,6 +265,7 @@ function ActionButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      {...hover}
       hitSlop={4}
       style={(state) => [
         styles.action,
