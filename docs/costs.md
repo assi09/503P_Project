@@ -80,3 +80,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-25 | Answer and time fixes, owner's data: the sleep question again (one natural reply, 4 claims), "log a snack… just now" (still asked for the time: the tool's own description said to) | $0.0140 |
 | 2026-10-25 | "Log a snack… eaten just now" after the tool-description fix: draft at the current local time with no question back (draft cancelled) | $0.0076 |
 | 2026-10-25 | First real workout write: "Log a 20 minute walk that ended just now" (one answer, draft; confirmed, read back and undone) | $0.0104 |
+| 2026-10-25 | Any workout type: "45 minutes of kickboxing yesterday at 6pm" (KICKBOXING draft; showed the wrong "not covered" note and a repair round) and "tennis for an hour this morning at 9" after the fix (TENNIS draft, no note); both cancelled | $0.0134 |

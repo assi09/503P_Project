@@ -353,7 +353,7 @@ def test_workout_drafts_carry_the_trackers_reading_and_revising_reads_it_again(s
     readings = iter([Measured(status="no_data"), Measured(status="measured", steps=900)])
     asked = []
 
-    def measure_workout(db, user_id, start, end):
+    def measure_workout(db, user_id, start, end, exercise_type):
         asked.append((start, end))
         return next(readings)
 
@@ -393,3 +393,30 @@ def test_without_google_a_workout_draft_is_kept_unmeasured(setup):
     created = propose(client, headers, workout)
     assert created.status_code == 201
     assert created.json()["log"]["measured"]["status"] == "unavailable"
+
+
+def test_a_log_only_workout_request_is_not_told_it_left_activity_uncovered(setup):
+    client, _, agent = setup
+    headers = sign_in(setup)
+    workout = {
+        "kind": "workout",
+        "exerciseType": "KICKBOXING",
+        "startTime": "2026-10-24T18:00:00+03:00",
+        "endTime": "2026-10-24T18:45:00+03:00",
+        "activeSeconds": 2700,
+    }
+    agent.llm.turns.extend(
+        [
+            ScriptedLLM.call("propose_workout_log", **workout),
+            ScriptedLLM.call(SUBMIT, summary="Draft ready for review.", claims=[]),
+        ]
+    )
+    response = client.post(
+        "/chat",
+        headers=headers,
+        json={"text": "Log my 45 minute kickboxing workout yesterday at 6pm."},
+    )
+    reply = response.json()[-1]
+    assert reply["answeredBy"] == "activity" and len(reply["actionIds"]) == 1
+    assert "does not cover" not in reply["text"]
+    assert len(agent.llm.requests) == 2  # no repair round asking for activity claims

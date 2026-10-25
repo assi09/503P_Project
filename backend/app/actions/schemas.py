@@ -6,6 +6,8 @@ from typing import Annotated, Literal, Self
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.alias_generators import to_camel
 
+from app.actions import exercises
+from app.actions.exercises import Kind
 from app.agent.sanitize import clean, reads_like_instruction
 
 Number = Annotated[float, Field(ge=0, le=100000, strict=True)]
@@ -16,15 +18,8 @@ MAX_KCAL = 5000  # one food or meal
 MAX_MACRO_G = 500  # protein, carbohydrate or fat in one entry
 MAX_WORKOUT = timedelta(hours=24)
 MAX_DISTANCE_KM = 300
-MAX_SPEED_KMH = {"RUNNING": 25, "WALKING": 10, "BIKING": 80}  # over the active time
 FUTURE_GRACE = timedelta(minutes=15)  # clock drift between the phone and the server
-# The names the app shows, so the entry reads the same in Fitbit.
-WORKOUT_NAMES = {
-    "RUNNING": "Run",
-    "WALKING": "Walk",
-    "BIKING": "Ride",
-    "AEROBIC_WORKOUT": "Workout",
-}
+ExerciseType = Literal[exercises.TYPES]  # every type Google accepts
 
 
 def now() -> datetime:
@@ -105,6 +100,15 @@ class Overlap(LogModel):
     end_time: AwareDatetime
 
 
+class ZoneSeconds(LogModel):
+    """Seconds in each of Fitbit's heart-rate zones."""
+
+    light: Annotated[float, Field(ge=0)] = 0
+    moderate: Annotated[float, Field(ge=0)] = 0
+    vigorous: Annotated[float, Field(ge=0)] = 0
+    peak: Annotated[float, Field(ge=0)] = 0
+
+
 class Measured(LogModel):
     """What the tracker recorded during the workout. Only the server fills this in."""
 
@@ -113,12 +117,15 @@ class Measured(LogModel):
     distance_km: Annotated[float, Field(ge=0)] | None = None
     calories_kcal: Annotated[float, Field(ge=0)] | None = None
     average_heart_rate: Annotated[int, Field(gt=0)] | None = None
+    zone_seconds: ZoneSeconds | None = None
+    active_zone_minutes: Annotated[int, Field(ge=0)] | None = None
+    swim_lengths: Annotated[int, Field(ge=0)] | None = None
     overlaps: list[Overlap] = Field(default_factory=list, max_length=20)
 
 
 class WorkoutLog(LogModel):
     kind: Literal["workout"] = "workout"
-    exercise_type: Literal["RUNNING", "WALKING", "BIKING", "AEROBIC_WORKOUT"]
+    exercise_type: ExerciseType
     start_time: AwareDatetime
     end_time: AwareDatetime
     active_seconds: Annotated[int, Field(gt=0, strict=True)]
@@ -137,7 +144,7 @@ class WorkoutLog(LogModel):
         if self.distance_km is not None:
             if self.distance_km > MAX_DISTANCE_KM:
                 raise ValueError(f"One workout can cover at most {MAX_DISTANCE_KM} km.")
-            limit = MAX_SPEED_KMH.get(self.exercise_type)
+            limit = exercises.max_speed_kmh(self.exercise_type)
             if limit and self.distance_km / (self.active_seconds / 3600) > limit:
                 raise ValueError("That distance is too far for the active time.")
         return self
@@ -146,7 +153,7 @@ class WorkoutLog(LogModel):
         # Google requires displayName and metricsSummary, even when there is no metric to give.
         exercise = {
             "exerciseType": self.exercise_type,
-            "displayName": WORKOUT_NAMES[self.exercise_type],
+            "displayName": exercises.name(self.exercise_type),
             "interval": interval(self.start_time, self.end_time),
             "activeDuration": f"{self.active_seconds:g}s",
             "metricsSummary": self._summary(),
@@ -154,10 +161,12 @@ class WorkoutLog(LogModel):
         return {"exercise": exercise}
 
     def _summary(self) -> dict:
-        # What the person said wins; the tracker's measurements fill in the rest. Nothing is
+        # What the person said wins; the tracker's measurements fill in the rest, the same ones
+        # Fitbit puts on a workout of this kind (the server measures only those). Nothing is
         # estimated, and no minute-level data is written: the tracker already wrote it, and a
         # summary does not change the daily totals, so nothing is counted twice.
         measured = self.measured if self.measured and self.measured.status == "measured" else None
+        kind = exercises.kind(self.exercise_type)
         summary: dict = {}
         distance_km = self.distance_km
         if distance_km is None and measured and measured.distance_km:
@@ -165,17 +174,33 @@ class WorkoutLog(LogModel):
         if distance_km is not None:
             # Whole millimetres: 5.1 km is 5_100_000, not 5_099_999.999999999.
             summary["distanceMillimeters"] = round(distance_km * 1_000_000)
-            if distance_km > 0:
-                summary["averagePaceSecondsPerMeter"] = round(
-                    self.active_seconds / (distance_km * 1000), 3
+            metres = distance_km * 1000
+            if metres > 0 and kind == Kind.ON_FOOT:
+                summary["averagePaceSecondsPerMeter"] = round(self.active_seconds / metres, 3)
+            elif metres > 0 and kind != Kind.FIELD:  # bikes, boats, swims: speed, as Fitbit
+                summary["averageSpeedMillimetersPerSecond"] = round(
+                    metres * 1000 / self.active_seconds, 1
                 )
         if measured:
+            # 64-bit integers travel as strings, durations as "123s".
             if measured.steps:
-                summary["steps"] = str(measured.steps)  # 64-bit integers travel as strings
+                summary["steps"] = str(measured.steps)
             if measured.calories_kcal is not None:
                 summary["caloriesKcal"] = measured.calories_kcal
             if measured.average_heart_rate:
                 summary["averageHeartRateBeatsPerMinute"] = str(measured.average_heart_rate)
+            if measured.zone_seconds:
+                zones = measured.zone_seconds
+                summary["heartRateZoneDurations"] = {
+                    "lightTime": f"{zones.light:g}s",
+                    "moderateTime": f"{zones.moderate:g}s",
+                    "vigorousTime": f"{zones.vigorous:g}s",
+                    "peakTime": f"{zones.peak:g}s",
+                }
+            if measured.active_zone_minutes:  # Fitbit leaves it out when there are none
+                summary["activeZoneMinutes"] = str(measured.active_zone_minutes)
+            if measured.swim_lengths:
+                summary["totalSwimLengths"] = measured.swim_lengths
         return summary
 
 

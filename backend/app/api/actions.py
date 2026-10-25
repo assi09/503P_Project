@@ -69,13 +69,15 @@ def response(row: HealthAction) -> Action:
     )
 
 
-def measure_workout(db: Session, user_id: uuid.UUID, start: datetime, end: datetime) -> Measured:
+def measure_workout(
+    db: Session, user_id: uuid.UUID, start: datetime, end: datetime, exercise_type: str
+) -> Measured:
     """The tracker's data for a workout's interval; "unavailable" without a working sign-in."""
     try:
         token = credentials_for(db, get_google().box, user_id).token
     except (ApiError, SyncError, GoogleAuthError):
         return Measured(status="unavailable")
-    return measure(HealthClient(lambda: token, max_retries=1), start, end)
+    return measure(HealthClient(lambda: token, max_retries=1), start, end, exercise_type)
 
 
 def get_writer(db: Session, user_id: uuid.UUID, kind: str) -> Writer:
@@ -120,7 +122,7 @@ def propose(body: NewDraft, db: Db, user: Person, clock: Now) -> Action:
             body.request_key,
             with_measurement(
                 body.log.model_dump(mode="json", by_alias=True),
-                lambda start, end: measure_workout(db, user.id, start, end),
+                lambda start, end, kind: measure_workout(db, user.id, start, end, kind),
             ),
             clock,
         )
@@ -138,7 +140,7 @@ def revise(action_id: uuid.UUID, body: RevisedDraft, db: Db, user: Person, clock
             # Saving a workout again reads the tracker again: a new time, or data synced since.
             with_measurement(
                 body.log.model_dump(mode="json", by_alias=True),
-                lambda start, end: measure_workout(db, user.id, start, end),
+                lambda start, end, kind: measure_workout(db, user.id, start, end, kind),
             ),
             clock,
         )

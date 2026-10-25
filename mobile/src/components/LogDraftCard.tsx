@@ -15,7 +15,8 @@ import {
   MEALS,
   STATUS,
   trackerSummary,
-  WORKOUTS,
+  workoutChoices,
+  workoutGroup,
   type LogForm,
 } from '@/lib/actionLog';
 import { fonts, METRIC_COLORS, radius, spacing, useColors, useScheme, type Colors } from '@/theme';
@@ -23,15 +24,25 @@ import { fonts, METRIC_COLORS, radius, spacing, useColors, useScheme, type Color
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 const ICONS: Record<string, IconName> = {
-  food: 'restaurant-outline',
-  RUNNING: 'walk-outline',
-  WALKING: 'footsteps-outline',
-  BIKING: 'bicycle-outline',
-  AEROBIC_WORKOUT: 'barbell-outline',
+  run: 'walk-outline',
+  foot: 'footsteps-outline',
+  wheels: 'bicycle-outline',
+  swim: 'water-outline',
+  TENNIS: 'tennisball-outline',
+  PADEL: 'tennisball-outline',
+  SOCCER: 'football-outline',
+  FOOTBALL_AMERICAN: 'american-football-outline',
+  BASKETBALL: 'basketball-outline',
+  YOGA: 'body-outline',
+  PILATES: 'body-outline',
+  WEIGHTLIFTING: 'barbell-outline',
+  STRENGTH_TRAINING: 'barbell-outline',
 };
 
 export function logIcon(log: HealthLog): IconName {
-  return ICONS[log.kind === 'food' ? 'food' : log.exerciseType];
+  if (log.kind === 'food') return 'restaurant-outline';
+  const type = log.exerciseType;
+  return ICONS[type] ?? ICONS[workoutGroup(type)] ?? 'fitness-outline';
 }
 
 /** The status as a small colored label. */
@@ -363,7 +374,7 @@ function EditForm({
     </View>
   );
   const number = { keyboardType: 'decimal-pad' as const, placeholder: 'Not known' };
-  const choices = log.kind === 'food' ? MEALS : WORKOUTS;
+  const choices = log.kind === 'food' ? MEALS : workoutChoices(log.exerciseType);
   const choiceKey = log.kind === 'food' ? 'mealType' : 'exerciseType';
 
   return (

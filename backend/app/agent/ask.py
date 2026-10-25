@@ -278,7 +278,11 @@ def ask(
             evidence=context.evidence,
             owners=context.owners,
             guard=guard,
-            needs=(route.expert, *route.consult),
+            # A request only to log asks nothing about the data, so no part of it can be left
+            # uncovered; a mixed request still needs its question answered.
+            needs=()
+            if logging_tools and (route.classification.intent == Intent.LOG or continuing)
+            else (route.expert, *route.consult),
             extra_tools=tools,
             allow_logging=bool(logging_tools),
         )

@@ -1,10 +1,12 @@
 import {
+  exerciseName,
   formFromLog,
   logDetails,
   logFromForm,
   logTitle,
   trackerSummary,
   validateLog,
+  workoutChoices,
 } from '@/lib/actionLog';
 
 import { httpClient } from '../http';
@@ -177,7 +179,11 @@ it("summarizes the tracker's reading, the person's distance first, and overlaps 
     caloriesKcal: 119.6,
     averageHeartRate: 101,
     overlaps: [
-      { exerciseType: 'WALKING', startTime: '2026-10-25T11:05:00Z', endTime: '2026-10-25T11:15:00Z' },
+      {
+        exerciseType: 'WALKING',
+        startTime: '2026-10-25T11:05:00Z',
+        endTime: '2026-10-25T11:15:00Z',
+      },
       {
         exerciseType: 'WEIGHTLIFTING',
         startTime: '2026-10-25T10:50:00Z',
@@ -209,4 +215,36 @@ it('the demo replaces a reading the app sends with its own, and keeps one draft 
   const refreshed = await mockClient.reviseAction(draft.id, 1, draft.log);
   expect(refreshed).toMatchObject({ version: 2, log: { measured: { caloriesKcal: 100 } } });
   await mockClient.cancelAction(draft.id, 2);
+});
+
+it("names and checks any of Google's workout types, not only the common ones", () => {
+  const now = Date.parse('2026-10-25T12:00:00Z');
+  const tennis: HealthLog = { ...WALK, exerciseType: 'TENNIS' };
+  expect(logTitle(tennis)).toBe('Tennis');
+  expect(exerciseName('KICKBOXING')).toBe('Kickboxing');
+  expect(exerciseName('PICKELBALL')).toBe('Pickleball');
+  expect(() => validateLog(tennis, now)).not.toThrow();
+  expect(() => validateLog({ ...WALK, exerciseType: 'tennis<b>' }, now)).toThrow('workout type');
+  // 20 minutes: 4 km is too fast to swim, fine to cycle.
+  expect(() => validateLog({ ...WALK, exerciseType: 'SWIMMING', distanceKm: 4 }, now)).toThrow(
+    'too far',
+  );
+  expect(() => validateLog({ ...WALK, exerciseType: 'BIKING', distanceKm: 4 }, now)).not.toThrow();
+  expect(Object.keys(workoutChoices('TENNIS'))[0]).toBe('TENNIS');
+  expect(workoutChoices('WALKING')).not.toHaveProperty('TENNIS');
+  const edited = logFromForm(tennis, { ...formFromLog(tennis), duration: '0:15' });
+  expect(edited).toMatchObject({ exerciseType: 'TENNIS', activeSeconds: 900 });
+});
+
+it('lists Active Zone Minutes and swim lengths when the tracker recorded them', () => {
+  const swim: HealthLog = {
+    ...WALK,
+    exerciseType: 'SWIMMING_POOL',
+    measured: { status: 'measured', averageHeartRate: 120, activeZoneMinutes: 14, swimLengths: 24 },
+  };
+  expect(trackerSummary(swim)?.values).toEqual([
+    'avg 120 bpm',
+    '14 Active Zone Minutes',
+    '24 lengths',
+  ]);
 });

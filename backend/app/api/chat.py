@@ -222,12 +222,12 @@ def _answer(
             )
         prepared: list[str] = []
 
-        def measurer(start: datetime, end: datetime) -> Measured:
+        def measurer(start: datetime, end: datetime, exercise_type: str) -> Measured:
             # Imported here: the actions routes import Google's, which import this module.
             from app.api.actions import measure_workout
 
             with sessions() as db:
-                return measure_workout(db, user_id, start, end)
+                return measure_workout(db, user_id, start, end, exercise_type)
 
         draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared, measurer)
         try:

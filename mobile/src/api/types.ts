@@ -198,7 +198,7 @@ export type HealthLog =
     }
   | {
       kind: 'workout';
-      exerciseType: 'RUNNING' | 'WALKING' | 'BIKING' | 'AEROBIC_WORKOUT';
+      exerciseType: string; // any of Google's ExerciseType values, such as TENNIS
       startTime: ISODateTime;
       endTime: ISODateTime;
       activeSeconds: number;
@@ -214,6 +214,9 @@ export interface TrackerReading {
   distanceKm?: number | null;
   caloriesKcal?: number | null;
   averageHeartRate?: number | null;
+  zoneSeconds?: { light: number; moderate: number; vigorous: number; peak: number } | null;
+  activeZoneMinutes?: number | null;
+  swimLengths?: number | null;
   overlaps?: {
     exerciseType: string;
     startTime: ISODateTime;
