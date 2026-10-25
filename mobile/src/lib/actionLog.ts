@@ -10,12 +10,82 @@ export const MEALS: Record<FoodLog['mealType'], string> = {
   SNACK: 'Snack',
 };
 
-export const WORKOUTS: Record<WorkoutLog['exerciseType'], string> = {
+// The same names and speed limits as backend/app/actions/exercises.py. The agent can log any of
+// Google's workout types; the edit form offers the common ones and the entry's own.
+const NAMES: Record<string, string> = {
   RUNNING: 'Run',
   WALKING: 'Walk',
-  BIKING: 'Ride',
-  AEROBIC_WORKOUT: 'Workout',
+  BIKING: 'Bike',
+  HIKING: 'Hike',
+  AEROBIC_WORKOUT: 'Aerobic workout',
+  PICKELBALL: 'Pickleball',
+  HIIT: 'HIIT',
+  TRX: 'TRX',
+  FOOTBALL_AMERICAN: 'American football',
+  FOOTBALL_AUSTRALIAN: 'Australian football',
+  FRISBEE_PLAYING_GENERAL: 'Frisbee',
+  VOLLEYBALL_BEACH: 'Beach volleyball',
+  SWIMMING_POOL: 'Pool swim',
+  SWIMMING_OPEN_WATER: 'Open water swim',
+  YOGA_BIKRAM: 'Bikram yoga',
+  YOGA_HATHA: 'Hatha yoga',
+  YOGA_POWER: 'Power yoga',
+  YOGA_VINYASA: 'Vinyasa yoga',
+  WALK_WITH_WEIGHTS: 'Walk with weights',
+  MEDITATE: 'Meditation',
+  OTHER: 'Other workout',
 };
+
+/** "WEIGHTLIFTING" -> "Weightlifting", "RUNNING" -> "Run". */
+export function exerciseName(type: string): string {
+  if (type in NAMES) return NAMES[type];
+  const words = type.toLowerCase().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const COMMON_WORKOUTS = ['WALKING', 'RUNNING', 'BIKING', 'WEIGHTLIFTING', 'YOGA', 'WORKOUT'];
+
+/** The types the edit form offers: the common ones, and the entry's own if it is another. */
+export function workoutChoices(current: string): Record<string, string> {
+  const types = COMMON_WORKOUTS.includes(current) ? COMMON_WORKOUTS : [current, ...COMMON_WORKOUTS];
+  return Object.fromEntries(types.map((type) => [type, exerciseName(type)]));
+}
+
+const RUN = ['RUNNING', 'TRAIL_RUN', 'TREADMILL', 'INCLINE_RUN', 'ORIENTEERING', 'TRACK_AND_FIELD'];
+// prettier-ignore
+const ON_FOOT = [
+  ...RUN,
+  'WALKING', 'HIKING', 'TREADMILL_WALK', 'INCLINE_WALK', 'POWER_WALKING', 'NORDIC_WALKING',
+  'STROLLER_WALK', 'WALK_WITH_WEIGHTS', 'RUCKING', 'BACKPACKING', 'SNOWSHOEING',
+];
+// prettier-ignore
+const WHEELS = [
+  'BIKING', 'MOUNTAIN_BIKE', 'OUTDOOR_BIKE', 'STATIONARY_BIKE', 'SPINNING', 'ELECTRIC_BIKE',
+  'HAND_CYCLING', 'ASSAULT_BIKE', 'UNICYCLING', 'WHEELCHAIR',
+];
+const SWIM = ['SWIMMING', 'SWIMMING_POOL', 'SWIMMING_OPEN_WATER'];
+const PADDLE = ['ROWING', 'ROWING_MACHINE', 'KAYAKING', 'CANOEING', 'PADDLEBOARDING'];
+const SKATE = ['ROLLERBLADING', 'ROLLER_SKATING', 'ICE_SKATING', 'SKATING', 'SPEED_SKATING'];
+
+/** Fastest plausible average over the active time, in km/h; none for most sports. */
+function maxSpeedKmh(type: string): number | undefined {
+  if (RUN.includes(type)) return 25;
+  if (ON_FOOT.includes(type)) return 10;
+  if (WHEELS.includes(type)) return 80;
+  if (SWIM.includes(type)) return 10;
+  if (PADDLE.includes(type)) return 25;
+  if (SKATE.includes(type)) return 60;
+  return undefined;
+}
+
+/** A broad group for the entry's icon. */
+export function workoutGroup(type: string): 'foot' | 'run' | 'wheels' | 'swim' | 'other' {
+  if (RUN.includes(type)) return 'run';
+  if (ON_FOOT.includes(type)) return 'foot';
+  if (WHEELS.includes(type)) return 'wheels';
+  if (SWIM.includes(type)) return 'swim';
+  return 'other';
+}
 
 export const STATUS: Record<HealthAction['status'], string> = {
   draft: 'Draft',
@@ -33,11 +103,6 @@ const MAX_KCAL = 5000;
 const MAX_MACRO_G = 500;
 const MAX_WORKOUT_S = 24 * 3600;
 const MAX_DISTANCE_KM = 300;
-const MAX_SPEED_KMH: Partial<Record<WorkoutLog['exerciseType'], number>> = {
-  RUNNING: 25,
-  WALKING: 10,
-  BIKING: 80,
-};
 const FUTURE_GRACE_MS = 15 * 60_000;
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -79,7 +144,7 @@ function grams(value: number): string {
 export function logTitle(log: HealthLog): string {
   return log.kind === 'food'
     ? `${MEALS[log.mealType]} · ${log.foodName}`
-    : WORKOUTS[log.exerciseType];
+    : exerciseName(log.exerciseType);
 }
 
 /** The parts of the summary line, e.g. ["Sat 24 Oct, 13:00", "550 kcal", "P 40 g · C 30 g"]. */
@@ -104,13 +169,6 @@ export function logDetails(log: HealthLog): string[] {
     duration(log.activeSeconds),
     ...(log.distanceKm != null ? [`${Math.round(log.distanceKm * 100) / 100} km`] : []),
   ];
-}
-
-/** "WEIGHTLIFTING" -> "Weightlifting", with the app's own names for the types it logs. */
-function exerciseName(type: string): string {
-  if (type in WORKOUTS) return WORKOUTS[type as WorkoutLog['exerciseType']];
-  const words = type.toLowerCase().replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export interface TrackerSummary {
@@ -145,6 +203,8 @@ export function trackerSummary(log: HealthLog): TrackerSummary | null {
       : null,
     reading.caloriesKcal != null ? `${Math.round(reading.caloriesKcal)} kcal` : null,
     reading.averageHeartRate ? `avg ${reading.averageHeartRate} bpm` : null,
+    reading.activeZoneMinutes ? `${reading.activeZoneMinutes} Active Zone Minutes` : null,
+    reading.swimLengths ? `${reading.swimLengths} lengths` : null,
   ].filter((value): value is string => value !== null);
   return { values, overlaps, canRefresh: false };
 }
@@ -230,7 +290,7 @@ export function logFromForm(original: HealthLog, form: LogForm): HealthLog {
   const end = new Date(Date.parse(startTime) + activeSeconds * 1000);
   const log: WorkoutLog = {
     kind: 'workout',
-    exerciseType: form.exerciseType as WorkoutLog['exerciseType'],
+    exerciseType: form.exerciseType ?? original.exerciseType,
     startTime,
     endTime: withOffset(end, offset),
     activeSeconds,
@@ -275,7 +335,8 @@ export function validateLog(log: HealthLog, now: number = Date.now()): void {
     }
     return;
   }
-  if (!(log.exerciseType in WORKOUTS)) throw new Error('Choose a workout type.');
+  // The server checks the type against Google's list.
+  if (!/^[A-Z_]{1,64}$/.test(log.exerciseType)) throw new Error('Choose a workout type.');
   const elapsed = (time(log.endTime) - time(log.startTime)) / 1000;
   if (
     !Number.isInteger(log.activeSeconds) ||
@@ -292,7 +353,7 @@ export function validateLog(log: HealthLog, now: number = Date.now()): void {
     if (log.distanceKm > MAX_DISTANCE_KM) {
       throw new Error(`One workout can cover at most ${MAX_DISTANCE_KM} km.`);
     }
-    const limit = MAX_SPEED_KMH[log.exerciseType];
+    const limit = maxSpeedKmh(log.exerciseType);
     if (limit && log.distanceKm / (log.activeSeconds / 3600) > limit) {
       throw new Error('That distance is too far for the time.');
     }
