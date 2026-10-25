@@ -188,7 +188,8 @@ undo), the first real Google connection and write from the app (#53), chat fixes
 local time in the task, logging follow-ups, one natural reply, named evidence chips) and Expo SDK
 58 (#55).
 
-Next, in order:
+Next, in order (the app and UI plan agreed on 2026-10-25 is in [ui-plan.md](ui-plan.md); its
+first two steps run alongside these):
 
 1. **Deployment**, moved up from Sprint 2 because phones need it to connect Google: Railway (API and
    Postgres) with a public HTTPS address, a "Web application" OAuth client listing its

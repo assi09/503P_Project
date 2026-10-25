@@ -183,6 +183,12 @@ next (phone OAuth needs a public backend). Deliver focused PRs; keep recovery, t
 held-out agent evaluation on the schedule. Enable real Google writes only for an approved test
 entry with cleanup, and do not run paid vision calls merely to validate the plan.
 
+## App and UI plan
+
+Agreed on 2026-10-25: five tabs (Today, Journal, Ask, Reminders, Settings), a flatter look, the
+day's numbers and workouts on Today, a journal with habit impact, fitness age and real reminders,
+all free. Steps and decisions in [ui-plan.md](ui-plan.md).
+
 Optional extra, after core logging: [recorded routes/regions](product.md#recorded-routes-and-regions-optional-planned).
 Research supports GPS-recorded exercise routes with separate location permission, not the location
 of every daily step. No map implementation, new location consent or continuous tracking is in the
