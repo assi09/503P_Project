@@ -106,6 +106,7 @@ export interface SendOptions {
   expert: ExpertChoice;
   depth: Depth;
   attachment?: Attachment;
+  conversationId?: string; // without one: the latest conversation
 }
 
 export interface ChatMessage {
@@ -119,7 +120,17 @@ export interface ChatMessage {
   routed?: boolean; // assistant only: true if the router chose the expert, false if the user did
   consulted?: Expert[]; // other experts the answering expert asked
   refused?: boolean; // the request was out of scope, e.g. medical advice
+  conversationId?: string;
   createdAt: ISODateTime;
+}
+
+/** One of the person's chats. Memory is the person's, so every conversation shares it. */
+export interface Conversation {
+  id: string;
+  title: string; // the first question until renamed
+  messages: number;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 }
 
 export type ReminderStatus = 'proposed' | 'active' | 'declined' | 'muted';
@@ -208,7 +219,11 @@ export interface ApiClient {
   getMetricSeries(metric: string, options: { end?: ISODate; days: number }): Promise<MetricSeries>;
   getEvidence(id: string): Promise<Evidence>; // any evidence a finding or chat answer cites
   answerQuestion(questionId: string, answer: string): Promise<ContextQuestion>;
-  getChat(): Promise<ChatMessage[]>;
+  getChat(conversationId?: string): Promise<ChatMessage[]>; // without one: the latest used
+  getConversations(): Promise<Conversation[]>; // most recently used first
+  createConversation(): Promise<Conversation>;
+  renameConversation(id: string, title: string): Promise<Conversation>;
+  deleteConversation(id: string): Promise<void>;
   sendMessage(text: string, options: SendOptions): Promise<ChatMessage[]>; // returns the new messages
   getReminders(): Promise<Reminder[]>;
   setReminderStatus(id: string, status: ReminderStatus): Promise<Reminder>;

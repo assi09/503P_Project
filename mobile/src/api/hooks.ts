@@ -13,6 +13,7 @@ import type {
 export const keys = {
   report: ['report', 'latest'] as const,
   chat: ['chat'] as const,
+  conversations: ['conversations'] as const,
   reminders: ['reminders'] as const,
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
@@ -53,27 +54,67 @@ export function useAnswerQuestion() {
   });
 }
 
-export function useChat() {
+/** Which chat is open: a conversation, the latest one, or a new one not created yet. */
+export type ChatTarget = string | 'latest' | 'new';
+
+export function useChat(target: ChatTarget = 'latest') {
   return useQuery({
-    queryKey: keys.chat,
-    queryFn: api.getChat,
+    queryKey: [...keys.chat, target],
+    queryFn: () => (target === 'new' ? [] : api.getChat(target === 'latest' ? undefined : target)),
     // A question without an answer yet is still being answered on the server: check back.
     refetchInterval: (query) => (query.state.data?.at(-1)?.role === 'user' ? 4000 : false),
   });
 }
 
+export function useConversations() {
+  return useQuery({ queryKey: keys.conversations, queryFn: api.getConversations });
+}
+
+export function useDeleteConversation() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteConversation(id),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.conversations });
+      client.invalidateQueries({ queryKey: keys.chat });
+    },
+  });
+}
+
+/** Sends to the open chat; a new chat is created on its first message, so none are left empty. */
 export function useSendMessage() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ text, options }: { text: string; options: SendOptions }) =>
-      api.sendMessage(text, options),
+    mutationFn: async ({
+      text,
+      options,
+      target,
+    }: {
+      text: string;
+      options: SendOptions;
+      target: ChatTarget;
+    }) => {
+      const conversationId =
+        target === 'new'
+          ? (await api.createConversation()).id
+          : target === 'latest'
+            ? undefined
+            : target;
+      return api.sendMessage(text, { ...options, conversationId });
+    },
     // Append directly so the conversation never flickers while it refetches.
-    onSuccess: (added) =>
-      client.setQueryData<ChatMessage[]>(keys.chat, (old = []) => [...old, ...added]),
+    onSuccess: (added, { target }) => {
+      const id = added[0]?.conversationId;
+      const append = (old: ChatMessage[] = []) => [...old, ...added];
+      if (id) client.setQueryData<ChatMessage[]>([...keys.chat, id], append);
+      if (target === 'latest') client.setQueryData<ChatMessage[]>([...keys.chat, 'latest'], append);
+      client.invalidateQueries({ queryKey: keys.conversations });
+    },
     // A slow answer was still stored with its question: reload to show them as they arrive.
     onError: (error) => {
       if (error instanceof ApiError && error.code === 'still_answering') {
         client.invalidateQueries({ queryKey: keys.chat });
+        client.invalidateQueries({ queryKey: keys.conversations });
       }
     },
   });
