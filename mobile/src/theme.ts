@@ -177,6 +177,14 @@ export const fonts = {
 
 /** Text styles; numbers use tabular figures so values do not jump as they change. */
 export const type = {
+  // The day's key values, read at arm's length.
+  hero: {
+    fontFamily: fonts.bold,
+    fontSize: 44,
+    lineHeight: 48,
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums' as const],
+  },
   display: { fontFamily: fonts.bold, fontSize: 34, lineHeight: 40, letterSpacing: -0.6 },
   title: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 30, letterSpacing: -0.4 },
   headline: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 22, letterSpacing: -0.2 },
