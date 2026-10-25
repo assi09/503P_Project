@@ -183,6 +183,37 @@ next (phone OAuth needs a public backend). Deliver focused PRs; keep recovery, t
 held-out agent evaluation on the schedule. Enable real Google writes only for an approved test
 entry with cleanup, and do not run paid vision calls merely to validate the plan.
 
+## Beyond the commercial coaches (planned)
+
+Agreed with the user on 2026-10-25. Google's coach, Bevel and WHOOP mostly put a language model
+over dashboard numbers: they rarely show the statistics, rarely say a pattern could be chance, and
+do not run experiments with the person. The plan is to beat them on rigour, with the tools we
+already have. Order: deployment, tracing and the evaluation first (required, most of the grade);
+then 1 and 2, the strongest demo story.
+
+1. **N-of-1 experiments.** The agent proposes one ("no screens after 23:00 for 14 days"), the
+   person approves it, the app tracks it and `compare_windows` judges before against during; a
+   crossover (alternating weeks) separates cause from coincidence. Reports "worked for you", "no
+   clear effect", or "too few days", with evidence. (Decision 11.)
+2. **Habit impact done properly.** Each journal habit compared with matched days without it (same
+   weekday mix, enough wear), corrected for the number of habits tested; honest "no clear effect
+   yet, n days". Bevel compares against all days.
+3. **A proactive daily investigator.** After the morning sync: screen, investigate the top change
+   fully, and notify only when it passes a significance bar; quiet days stay quiet.
+4. **Why, with candidates tested.** For a change, the agent lists candidate causes (bedtime,
+   training the day before, a tag, low wear), tests each, and shows which held up.
+5. **Calibrated predictions with a track record.** A range for tomorrow's recovery or sleep, scored
+   against what happened, with the agent's accuracy shown to the person.
+6. **Context-aware memory.** Lasting context ("night shifts since August") changes the baseline a
+   comparison uses; the agent asks only about large, lasting, unexplained changes.
+7. **Transparency as the product.** No claim without a linked computation (already true), made
+   visible in the app's copy and onboarding.
+8. **Agent quality on show.** The evaluation's results (claims that held up, cost per answer) in
+   Settings; ties AgentOps to the product.
+
+Also worth fixing first, from the open issues: follow the router's consults (issue 23) and stop
+tests the question does not need; validate the recovery score against check-ins (issue 24).
+
 ## App and UI plan
 
 Agreed on 2026-10-25: five tabs (Today, Journal, Ask, Reminders, Settings), a flatter look, the

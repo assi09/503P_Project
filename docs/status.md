@@ -207,6 +207,8 @@ Next, in order:
 4. The daily run after sync (the agent's note on Today when the user wants it).
 5. Logging, continued: reconciliation of pending writes, food lookup, nutrition mapping, photo
    estimates ([agent-actions.md](agent-actions.md)).
+6. Going beyond the commercial coaches: N-of-1 experiments, habit impact, a proactive daily
+   investigator, tested causes, calibrated predictions ([roadmap.md](roadmap.md#beyond-the-commercial-coaches-planned)).
 
 ## What has been tested
 
