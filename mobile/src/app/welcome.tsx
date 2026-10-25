@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/PressableScale';
@@ -30,6 +30,13 @@ const FEATURES: { icon: IconName; title: string; body: string }[] = [
     body: 'Trends, shifts and weekday patterns across your sleep, heart rate and activity.',
   },
 ];
+
+// Phones are portrait, so the landscape background lost most of the track there; they get an
+// upright photo of lanes instead. The web keeps the wide one. (Pixabay licence, free to use.)
+const BACKGROUND =
+  Platform.OS === 'web'
+    ? require('../../assets/landing/background.jpg')
+    : require('../../assets/landing/background-portrait.jpg');
 
 export default function Welcome() {
   const colors = useColors();
@@ -65,7 +72,7 @@ export default function Welcome() {
       <StatusBar style="light" />
       <ScrollExpandHero
         image={require('../../assets/landing/hero.jpg')}
-        background={require('../../assets/landing/background.jpg')}
+        background={BACKGROUND}
         eyebrow="Your Fitbit, explained"
         title={['Know your', 'patterns']}
         hint="Scroll to explore"
