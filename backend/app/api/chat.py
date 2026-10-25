@@ -106,6 +106,8 @@ class Question(schemas.ApiModel):
     depth: Literal["quick", "deep"] = "quick"
     attachment: AttachmentIn | None = None
     conversation_id: uuid.UUID | None = None  # the latest conversation, or a new one, if absent
+    # Editing or retrying: this question and everything after it are replaced by the new one.
+    replaces: uuid.UUID | None = None
 
 
 def _message(row: ChatMessage) -> schemas.ChatMessage:
@@ -133,6 +135,7 @@ def _conversation(row: Conversation, messages: int) -> schemas.Conversation:
     return schemas.Conversation(
         id=str(row.id),
         title=row.title,
+        pinned=bool(row.pinned),
         messages=messages,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
@@ -380,14 +383,18 @@ def create_conversation(
 
 
 @router.patch("/conversations/{conversation_id}", response_model=schemas.Conversation)
-def rename_conversation(
+def update_conversation(
     conversation_id: uuid.UUID,
-    body: schemas.ConversationTitle,
+    body: schemas.ConversationUpdate,
     db: Db,
     user: Annotated[User, Depends(approved_user)],
 ) -> schemas.Conversation:
+    """Renames or pins a conversation; pinned ones are listed first."""
     conversation = _owned(db, user, conversation_id)
-    conversation.title = store.title_from(body.title)
+    if body.title is not None:
+        conversation.title = store.title_from(body.title)
+    if body.pinned is not None:
+        conversation.pinned = body.pinned
     db.flush()
     count = next((n for row, n in store.conversations(db, user.id) if row.id == conversation.id), 0)
     return _conversation(conversation, count)
@@ -418,11 +425,20 @@ def post_chat(
     now = datetime.now(UTC)
     check_caps(db, user, now)
     attachment = _attachment(data, body.attachment)
-    conversation = (
-        _owned(db, user, body.conversation_id)
-        if body.conversation_id
-        else store.latest_conversation(db, user.id) or store.create_conversation(db, user.id)
-    )
+    if body.replaces:
+        # An edited or retried question stays in its own conversation.
+        replaced = db.get(ChatMessage, body.replaces)
+        if replaced is None or replaced.user_id != user.id or replaced.role != "user":
+            raise ApiError(404, "not_found", "That message is no longer in this chat.")
+        if body.conversation_id and body.conversation_id != replaced.conversation_id:
+            raise ApiError(422, "invalid_request", "That message is in another conversation.")
+        conversation = _owned(db, user, replaced.conversation_id)
+    else:
+        conversation = (
+            _owned(db, user, body.conversation_id)
+            if body.conversation_id
+            else store.latest_conversation(db, user.id) or store.create_conversation(db, user.id)
+        )
     conversation_id = conversation.id
     db.commit()  # the answering thread opens its own sessions and must see the conversation
     with _busy_lock:
@@ -432,6 +448,9 @@ def post_chat(
     try:
         # Stored before answering, so the question shows even if the answer comes later.
         with sessions() as own:
+            # Only now, with no other answer running for this person, is anything removed.
+            if body.replaces:
+                store.replace_from(own, user.id, body.replaces)
             question = store.add_question(
                 own,
                 user.id,

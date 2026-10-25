@@ -411,6 +411,7 @@ function newConversation(): Conversation {
   const conversation = {
     id: `c${++nextConversation}`,
     title: NEW_CHAT,
+    pinned: false,
     messages: 0,
     createdAt: now,
     updatedAt: now,
@@ -423,8 +424,11 @@ function latestConversation(): Conversation | undefined {
   return [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
 }
 
+let nextMessage = 0;
+
 function message(fields: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage {
-  return { ...fields, id: `m${chat.length + 1}`, createdAt: new Date().toISOString() };
+  // Counted, not from the length: ids must stay unique after messages are replaced.
+  return { ...fields, id: `m${++nextMessage}`, createdAt: new Date().toISOString() };
 }
 
 // Accounts work like the backend's: sign-ups wait for approval, and the made-up demo owner can
@@ -742,18 +746,21 @@ export const mockClient: ApiClient = {
   getConversations: () =>
     delay(
       [...conversations]
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .sort(
+          (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
+        )
         .map((c) => ({ ...c, messages: chat.filter((m) => m.conversationId === c.id).length })),
     ),
 
   createConversation: () => delay(newConversation()),
 
-  renameConversation: (id, title) => {
+  updateConversation: (id, { title, pinned }) => {
     const conversation = conversations.find((c) => c.id === id);
     if (!conversation) {
       return Promise.reject(new ApiError('No such conversation.', 'not_found', 404));
     }
-    conversation.title = conversationTitle(title);
+    if (title !== undefined) conversation.title = conversationTitle(title);
+    if (pinned !== undefined) conversation.pinned = pinned;
     return delay({ ...conversation });
   },
 
@@ -767,9 +774,22 @@ export const mockClient: ApiClient = {
     if (options.expert === 'nutrition') {
       return Promise.reject(new Error('The nutrition expert is not available yet.'));
     }
-    const conversation = options.conversationId
-      ? conversations.find((c) => c.id === options.conversationId)
-      : (latestConversation() ?? newConversation());
+    // Like the backend: an edited or retried question replaces itself and what followed it.
+    const replaced = options.replaces ? chat.find((m) => m.id === options.replaces) : undefined;
+    if (options.replaces && (!replaced || replaced.role !== 'user')) {
+      return Promise.reject(
+        new ApiError('That message is no longer in this chat.', 'not_found', 404),
+      );
+    }
+    if (replaced) {
+      const start = chat.indexOf(replaced);
+      chat = chat.filter((m, i) => i < start || m.conversationId !== replaced.conversationId);
+    }
+    const conversation = replaced
+      ? conversations.find((c) => c.id === replaced.conversationId)
+      : options.conversationId
+        ? conversations.find((c) => c.id === options.conversationId)
+        : (latestConversation() ?? newConversation());
     if (!conversation) {
       return Promise.reject(new ApiError('No such conversation.', 'not_found', 404));
     }

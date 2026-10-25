@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.evidence import Evidence
@@ -65,9 +65,34 @@ def conversations(session: Session, user_id: uuid.UUID) -> list[tuple[Conversati
         select(Conversation, func.coalesce(counts.c.messages, 0))
         .outerjoin(counts, counts.c.conversation_id == Conversation.id)
         .where(Conversation.user_id == user_id)
-        .order_by(Conversation.updated_at.desc())
+        .order_by(Conversation.pinned.desc(), Conversation.updated_at.desc())
     )
     return [(conversation, count) for conversation, count in rows]
+
+
+def replace_from(
+    session: Session, user_id: uuid.UUID, message_id: uuid.UUID
+) -> Conversation | None:
+    """Removes one of the person's questions and everything after it in its conversation, so an
+    edited or retried question is answered afresh; returns the conversation, or None when the
+    message is not their question."""
+    message = session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.user_id == user_id,
+            ChatMessage.role == "user",
+        )
+    )
+    if message is None or message.conversation_id is None:
+        return None
+    session.execute(
+        delete(ChatMessage).where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.conversation_id == message.conversation_id,
+            ChatMessage.created_at >= message.created_at,
+        )
+    )
+    return get_conversation(session, user_id, message.conversation_id)
 
 
 def add_question(

@@ -155,13 +155,15 @@ class ChatMessage(ApiModel):
 class Conversation(ApiModel):
     id: str
     title: str
+    pinned: bool
     messages: int
     created_at: datetime
     updated_at: datetime
 
 
-class ConversationTitle(ApiModel):
-    title: str = Field(min_length=1, max_length=120)
+class ConversationUpdate(ApiModel):
+    title: str | None = Field(None, min_length=1, max_length=120)
+    pinned: bool | None = None
 
 
 class GoogleStatus(ApiModel):

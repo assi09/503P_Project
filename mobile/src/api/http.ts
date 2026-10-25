@@ -132,11 +132,10 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       ),
     getConversations: () => request<Conversation[]>(baseUrl, '/conversations'),
     createConversation: () => post<Conversation>(baseUrl, '/conversations'),
-    renameConversation: (id, title) =>
+    updateConversation: (id, changes) =>
       request<Conversation>(baseUrl, `/conversations/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify(changes),
       }),
     deleteConversation: (id) =>
       request<void>(baseUrl, `/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -145,11 +144,11 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
       post<{ url: string }>(baseUrl, '/google/connect', capability ? { capability } : undefined),
     syncGoogle: () => post<GoogleStatus>(baseUrl, '/google/sync'),
     disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
-    sendMessage: (text, { expert, depth, attachment, conversationId }) =>
+    sendMessage: (text, { expert, depth, attachment, conversationId, replaces }) =>
       post<ChatMessage[]>(
         baseUrl,
         '/chat',
-        { text, expert, depth, attachment, conversationId },
+        { text, expert, depth, attachment, conversationId, replaces },
         CHAT_TIMEOUT_MS,
       ),
   };

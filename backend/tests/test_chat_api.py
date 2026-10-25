@@ -435,3 +435,59 @@ def test_another_conversations_verified_claims_are_shared_as_memory(client, engi
     ask(client, headers, "How is my sleep lately?", conversationId=other)
     sent = json.dumps(agent.llm.requests[-1]["messages"])
     assert "In the chat" in sent and "Your time asleep held steady." in sent
+
+
+def test_pinned_conversations_come_first(client, engine, agent):
+    headers = signed_in(client, engine)
+    agent.llm.turns.extend([submission("One."), submission("Two.")])
+    older = ask(client, headers, "First question").json()[0]["conversationId"]
+    newer = client.post("/conversations", headers=headers).json()["id"]
+    ask(client, headers, "Second question", conversationId=newer)
+    pinned = client.patch(f"/conversations/{older}", json={"pinned": True}, headers=headers).json()
+    assert pinned["pinned"] is True and pinned["title"] == "First question"
+    assert [c["id"] for c in client.get("/conversations", headers=headers).json()] == [older, newer]
+    both = client.patch(
+        f"/conversations/{older}", json={"pinned": False, "title": "Renamed"}, headers=headers
+    ).json()
+    assert both["pinned"] is False and both["title"] == "Renamed"
+
+
+def test_an_edited_question_replaces_it_and_what_followed(client, engine, agent):
+    headers = signed_in(client, engine)
+    # Each answer without claims gets one repair round, so each question takes two turns.
+    agent.llm.turns.extend(
+        submission(text) for text in ("One.", "One.", "Two.", "Two.", "Edited.", "Edited.")
+    )
+    first = ask(client, headers, "How did I sleep?").json()
+    chat_id = first[0]["conversationId"]
+    ask(client, headers, "And on weekends?", conversationId=chat_id)
+    edited = ask(client, headers, "How did I sleep in October?", replaces=first[0]["id"]).json()
+    assert edited[0]["conversationId"] == chat_id
+    texts = [
+        m["text"]
+        for m in client.get("/chat", params={"conversation": chat_id}, headers=headers).json()
+    ]
+    assert texts[0] == "How did I sleep in October?" and len(texts) == 2
+    assert texts[1].startswith("Edited.")
+    # The replaced turns are gone from what the next run is told.
+    assert "And on weekends?" not in json.dumps(agent.llm.requests[-1]["messages"])
+
+
+def test_only_ones_own_question_can_be_replaced(client, engine, agent):
+    first = signed_in(client, engine, "first@example.com")
+    second = signed_in(client, engine, "second@example.com")
+    agent.llm.turns.append(submission("One."))
+    question, answer = ask(client, first).json()
+    assert ask(client, second, replaces=question["id"]).status_code == 404
+    assert ask(client, first, replaces=answer["id"]).status_code == 404  # an answer, not a question
+    other = client.post("/conversations", headers=first).json()["id"]
+    wrong = ask(client, first, replaces=question["id"], conversationId=other)
+    assert wrong.status_code == 422
+    assert (
+        len(
+            client.get(
+                "/chat", params={"conversation": question["conversationId"]}, headers=first
+            ).json()
+        )
+        == 2
+    )

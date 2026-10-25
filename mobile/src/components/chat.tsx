@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { memo, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { memo, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -18,7 +19,8 @@ import { LogDraftCard } from '@/components/LogDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { evidenceLabel, metricLabel } from '@/lib/format';
-import { radius, spacing, useColors } from '@/theme';
+import { isHovered } from '@/lib/platform';
+import { fonts, radius, spacing, useColors } from '@/theme';
 
 const ENTER = FadeInDown.duration(260);
 
@@ -35,28 +37,109 @@ export const MessageBubble = memo(function MessageBubble({
   message,
   knownEvidence,
   findingTitles,
+  onEdit,
+  onRetry,
+  busy = false,
 }: {
   message: ChatMessage;
   knownEvidence: Record<string, Evidence>;
   findingTitles: Record<string, string>;
+  onEdit?: (text: string) => void; // sends the edited question in place of this one
+  onRetry?: () => void; // asks the question this answers again
+  busy?: boolean; // an answer is on its way: no edits or retries meanwhile
 }) {
   const colors = useColors();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.text);
+
+  if (message.role === 'user' && editing) {
+    const send = () => {
+      const text = draft.trim();
+      if (!text || busy) return;
+      setEditing(false);
+      if (text !== message.text) onEdit?.(text);
+    };
+    return (
+      <View style={styles.editing}>
+        <TextInput
+          accessibilityLabel="Edit your message"
+          value={draft}
+          onChangeText={setDraft}
+          multiline
+          autoFocus
+          maxLength={500}
+          style={[
+            styles.editInput,
+            { color: colors.text, borderColor: colors.accent, backgroundColor: colors.surface },
+          ]}
+        />
+        <Text variant="caption" color="muted">
+          Sending replaces this message and the replies after it.
+        </Text>
+        <View style={styles.editActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setDraft(message.text);
+              setEditing(false);
+            }}
+            style={styles.editButton}
+          >
+            <Text variant="caption" color="muted" style={{ fontFamily: fonts.semibold }}>
+              Cancel
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={send}
+            disabled={busy || !draft.trim()}
+            style={[styles.editButton, { backgroundColor: colors.text }]}
+          >
+            <Text
+              variant="caption"
+              style={{ fontFamily: fonts.semibold, color: colors.background }}
+            >
+              Send
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (message.role === 'user') {
     return (
-      <Animated.View
-        entering={ENTER}
-        style={[styles.mine, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
-      >
-        {message.attachment && (
-          <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
-            About:{' '}
-            {message.attachment.kind === 'finding'
-              ? (findingTitles[message.attachment.id] ?? 'a finding')
-              : metricLabel(message.attachment.metric)}
-          </Text>
-        )}
-        <Text>{message.text}</Text>
+      <Animated.View entering={ENTER} style={styles.mineColumn}>
+        <View
+          style={[
+            styles.mine,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+          ]}
+        >
+          {message.attachment && (
+            <Text variant="caption" color="accent" style={{ marginBottom: 2 }}>
+              About:{' '}
+              {message.attachment.kind === 'finding'
+                ? (findingTitles[message.attachment.id] ?? 'a finding')
+                : metricLabel(message.attachment.metric)}
+            </Text>
+          )}
+          <Text selectable>{message.text}</Text>
+        </View>
+        <View style={[styles.actions, styles.actionsMine]}>
+          <CopyButton text={message.text} />
+          {onEdit && (
+            <ActionButton
+              icon="pencil-outline"
+              label="Edit"
+              disabled={busy}
+              onPress={() => {
+                setDraft(message.text);
+                setEditing(true);
+              }}
+            />
+          )}
+        </View>
       </Animated.View>
     );
   }
@@ -94,10 +177,69 @@ export const MessageBubble = memo(function MessageBubble({
             ))}
           </View>
         )}
+        <View style={styles.actions}>
+          <CopyButton text={message.text} />
+          {onRetry && (
+            <ActionButton icon="refresh" label="Retry" disabled={busy} onPress={onRetry} />
+          )}
+        </View>
       </View>
     </Animated.View>
   );
 });
+
+/** Copies a message's text, and says so for a moment. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <ActionButton
+      icon={copied ? 'checkmark' : 'copy-outline'}
+      label={copied ? 'Copied' : 'Copy'}
+      onPress={() => {
+        Clipboard.setStringAsync(text).then(() => setCopied(true));
+      }}
+    />
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={4}
+      style={(state) => [
+        styles.action,
+        (isHovered(state) || state.pressed) && !disabled && { backgroundColor: colors.track },
+        disabled && { opacity: 0.4 },
+      ]}
+    >
+      <Ionicons name={icon} size={14} color={colors.muted} />
+      <Text variant="caption" color="muted">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 /** The answering expert's icon; a shield for refusals. */
 function Avatar({ expert }: { expert?: ExpertChoice | 'general' }) {
@@ -167,9 +309,33 @@ export function Thinking({ expert }: { expert: ExpertChoice }) {
 }
 
 const styles = StyleSheet.create({
+  mineColumn: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '82%', gap: 2 },
+  actions: { flexDirection: 'row', gap: 2, marginLeft: -6 },
+  actionsMine: { marginLeft: 0, marginRight: -6 },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  editing: { alignSelf: 'stretch', gap: spacing.xs },
+  editInput: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    minHeight: 64,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    outlineWidth: 0, // the accent border already shows focus; no second ring on the web
+  },
+  editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
+  editButton: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill },
   mine: {
     alignSelf: 'flex-end',
-    maxWidth: '82%',
+    maxWidth: '100%', // the column around it sets the width
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderRadius: radius.lg,
