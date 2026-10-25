@@ -6,13 +6,16 @@ import type {
   Account,
   ApiClient,
   ChatMessage,
+  CheckIn,
   Conversation,
   Credentials,
   DataStatus,
   DaySummary,
+  DayWorkouts,
   Evidence,
   GoogleStatus,
   HealthAction,
+  HourlySteps,
   MetricSeries,
   Report,
   SignedIn,
@@ -119,6 +122,14 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
     getDay: (date) => request<DaySummary>(baseUrl, `/days/${encodeURIComponent(date)}`),
+    getWorkouts: (date) => request<DayWorkouts>(baseUrl, `/days/${date}/workouts`),
+    getHourlySteps: (date) => request<HourlySteps>(baseUrl, `/days/${date}/hourly`),
+    getCheckIn: (date) => request<CheckIn | null>(baseUrl, `/checkins/${date}`),
+    saveCheckIn: (checkIn) =>
+      request<CheckIn>(baseUrl, `/checkins/${checkIn.day}`, {
+        method: 'PUT',
+        body: JSON.stringify(checkIn),
+      }),
     getMetricSeries: (metric, { end, days }) =>
       request<MetricSeries>(
         baseUrl,

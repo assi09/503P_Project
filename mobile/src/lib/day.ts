@@ -110,6 +110,7 @@ export function bigValue(metric: string, value: number | null): { value: string;
     return { value: `${Math.floor(rounded / 60)}h ${String(rounded % 60).padStart(2, '0')}m` };
   }
   if (minutes) return { value: String(Math.round(value)), unit: 'min' };
+  if (metric === 'recovery_score') return { value: String(Math.round(value)) };
   const units: Record<string, string> = {
     steps: 'steps',
     resting_hr: 'bpm',

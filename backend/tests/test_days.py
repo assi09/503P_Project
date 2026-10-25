@@ -126,6 +126,8 @@ def test_metric_endpoint_gives_the_span_and_the_usual_range(synthetic):
         == "2026-08-14"
     )
     assert client.get("/metrics/resting_hr", params={"days": 2}).status_code == 422
+    recovery = client.get("/metrics/recovery_score").json()
+    assert len(recovery["points"]) == 30 and recovery["points"][-1]["value"] is not None
 
 
 def test_days_need_an_approved_sign_in(synthetic):

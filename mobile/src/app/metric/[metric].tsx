@@ -5,13 +5,13 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useDay, useMetricSeries } from '@/api/hooks';
 import type { ISODate, Point } from '@/api/types';
 import { LineChart } from '@/components/LineChart';
-import { Section, Stat } from '@/components/list';
+import { Row, Section, Stat } from '@/components/list';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
-import { bigValue, dayTitle, metricOf, usualLine, valueText } from '@/lib/day';
+import { ACCUMULATING, bigValue, dayTitle, metricOf, usualLine, valueText } from '@/lib/day';
 import { metricLabel } from '@/lib/format';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
@@ -53,7 +53,7 @@ export default function MetricScreen() {
             <View style={{ gap: spacing.xs }}>
               <Text variant="label" color="muted">
                 {dayTitle(day.data.date, day.data.last)}
-                {day.data.partial ? ' · so far' : ''}
+                {day.data.partial && ACCUMULATING.has(metric) ? ' · so far' : ''}
               </Text>
               <Stat value={big.value} unit={big.unit} label={usualLine(value, day.data.partial)} />
             </View>
@@ -107,6 +107,10 @@ export default function MetricScreen() {
               />
             </View>
 
+            {metric === 'recovery_score' && (
+              <RecoveryParts parts={day.data.recovery?.parts ?? {}} />
+            )}
+
             <View style={styles.ask}>
               <Button
                 label={`Ask about ${label.toLowerCase()}`}
@@ -137,6 +141,31 @@ export default function MetricScreen() {
         </View>
       )}
     </Screen>
+  );
+}
+
+const RECOVERY_WORDS: Record<string, (share: number) => string> = {
+  hrv_ms: (share) => `Higher than on ${share}% of your 28 days before`,
+  resting_hr: (share) => `Lower than on ${share}% of your 28 days before`,
+  sleep_minutes: (share) => `Longer than on ${share}% of your 28 nights before`,
+};
+
+/** What the recovery score is made of, and how, so it can be checked by eye. */
+function RecoveryParts({ parts }: { parts: Record<string, number> }) {
+  return (
+    <Section
+      title="What makes it"
+      footer="Our own estimate, not Fitbit's: where last night's heart rate variability, resting heart rate and time asleep sit among your previous 28 days, averaged with equal weights. A higher resting heart rate counts down. It needs at least two of the three. Not a health assessment."
+    >
+      {Object.entries(parts).map(([metric, share]) => (
+        <Row
+          key={metric}
+          title={metricLabel(metric)}
+          detail={RECOVERY_WORDS[metric]?.(Math.round(share))}
+          value={String(Math.round(share))}
+        />
+      ))}
+    </Section>
   );
 }
 

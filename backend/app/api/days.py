@@ -234,7 +234,7 @@ def get_metric(
     span: Annotated[int, Query(alias="days", ge=7, le=366)] = 30,
 ) -> schemas.MetricSeries:
     frame = data.daily.frame
-    if metric not in frame.columns:
+    if metric not in frame.columns and metric != days.RECOVERY:  # the score is computed, not stored
         raise ApiError(404, "unknown_metric", "There is no such metric.")
     first, last = _range(data)
     end = min(end or last, last)

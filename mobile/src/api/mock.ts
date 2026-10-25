@@ -11,6 +11,7 @@ import type {
   ApiClient,
   Attachment,
   ChatMessage,
+  CheckIn,
   ContextQuestion,
   Conversation,
   DataStatus,
@@ -119,6 +120,8 @@ function mockUsual(metric: number, daysAgo: number): Usual | null {
   };
 }
 
+let checkIns: CheckIn[] = [];
+
 function mockDay(date: ISODate): DaySummary {
   const ago = daysAgoOf(date);
   if (ago < 0 || ago >= HISTORY_DAYS) {
@@ -139,6 +142,7 @@ function mockDay(date: ISODate): DaySummary {
     first: isoDate(HISTORY_DAYS - 1),
     last: isoDate(0),
     metrics,
+    recovery: { score: 64, parts: { hrv_ms: 71, resting_hr: 58, sleep_minutes: 63 } },
   };
 }
 
@@ -725,6 +729,56 @@ export const mockClient: ApiClient = {
   getDay: (date) => later(() => mockDay(date === 'latest' ? isoDate(0) : date)),
 
   getMetricSeries: (metric, { end, days }) => later(() => mockSeries(metric, days, end)),
+
+  getWorkouts: (date) =>
+    later(() => ({
+      available: true,
+      // A made-up walk every other day.
+      workouts:
+        daysAgoOf(date) % 2
+          ? []
+          : [
+              {
+                id: `w-${date}`,
+                exerciseType: 'WALKING',
+                name: 'Walk',
+                start: `${date}T07:30:00Z`,
+                end: `${date}T08:05:00Z`,
+                activeSeconds: 2100,
+                steps: 3900,
+                distanceKm: 2.9,
+                caloriesKcal: 180,
+                averageHeartRate: 104,
+                activeZoneMinutes: 12,
+                zoneSeconds: { light: 900, moderate: 600, vigorous: 0, peak: 0 },
+                source: 'Demo tracker',
+              },
+            ],
+    })),
+
+  getHourlySteps: (date) =>
+    later(() => ({
+      available: true,
+      steps: Array.from({ length: 24 }, (_, hour) =>
+        hour < 7 || (daysAgoOf(date) === 0 && hour > new Date().getHours())
+          ? null
+          : Math.round(random(hour * 31 + daysAgoOf(date))() * 900),
+      ),
+    })),
+
+  getCheckIn: (date) => later(() => checkIns.find((c) => c.day === date) ?? null),
+
+  saveCheckIn: (checkIn) =>
+    later(() => {
+      if (checkIn.day !== isoDate(0)) {
+        throw new ApiError("Only today's check-in can be set or changed.", 'invalid_checkin', 422);
+      }
+      if (!Number.isInteger(checkIn.rating) || checkIn.rating < 1 || checkIn.rating > 5) {
+        throw new ApiError('The rating is a whole number from 1 to 5.', 'invalid_checkin', 422);
+      }
+      checkIns = [...checkIns.filter((c) => c.day !== checkIn.day), checkIn];
+      return checkIn;
+    }),
 
   getEvidence: (id) =>
     evidence[id] ? delay(evidence[id]) : Promise.reject(new Error('This evidence no longer exists.')),

@@ -215,3 +215,21 @@ describe('conversations', () => {
     });
   });
 });
+
+describe('the rest of Today', () => {
+  it('reads workouts, hourly steps and the check-in, and saves it with PUT', async () => {
+    const fetchMock = respond(200, {});
+    globalThis.fetch = fetchMock;
+    const client = httpClient(BASE, mockClient);
+    await client.getWorkouts('2026-10-25');
+    await client.getHourlySteps('2026-10-25');
+    await client.getCheckIn('2026-10-25');
+    await client.saveCheckIn({ day: '2026-10-25', rating: 4, tags: [] });
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET'])).toEqual([
+      ['http://api.test/days/2026-10-25/workouts', 'GET'],
+      ['http://api.test/days/2026-10-25/hourly', 'GET'],
+      ['http://api.test/checkins/2026-10-25', 'GET'],
+      ['http://api.test/checkins/2026-10-25', 'PUT'],
+    ]);
+  });
+});

@@ -4,6 +4,7 @@ import { ApiError } from './http';
 import { api } from './index';
 import type {
   ChatMessage,
+  CheckIn,
   ISODate,
   NotificationSettings,
   ReminderStatus,
@@ -27,6 +28,38 @@ export function useDay(date: ISODate | 'latest') {
     queryKey: ['day', date],
     queryFn: () => api.getDay(date),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useWorkouts(date?: ISODate) {
+  return useQuery({
+    queryKey: ['workouts', date],
+    queryFn: () => api.getWorkouts(date!),
+    enabled: !!date,
+  });
+}
+
+export function useHourlySteps(date?: ISODate) {
+  return useQuery({
+    queryKey: ['hourly', date],
+    queryFn: () => api.getHourlySteps(date!),
+    enabled: !!date,
+  });
+}
+
+export function useCheckIn(date?: ISODate) {
+  return useQuery({
+    queryKey: ['checkin', date],
+    queryFn: () => api.getCheckIn(date!),
+    enabled: !!date,
+  });
+}
+
+export function useSaveCheckIn() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (checkIn: CheckIn) => api.saveCheckIn(checkIn),
+    onSuccess: (saved) => client.setQueryData(['checkin', saved.day], saved),
   });
 }
 
