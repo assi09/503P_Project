@@ -2,7 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ApiError } from './http';
 import { api } from './index';
-import type { ChatMessage, NotificationSettings, ReminderStatus, SendOptions } from './types';
+import type {
+  ChatMessage,
+  ISODate,
+  NotificationSettings,
+  ReminderStatus,
+  SendOptions,
+} from './types';
 
 export const keys = {
   report: ['report', 'latest'] as const,
@@ -13,6 +19,23 @@ export const keys = {
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
 };
+
+/** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
+export function useDay(date: ISODate | 'latest') {
+  return useQuery({
+    queryKey: ['day', date],
+    queryFn: () => api.getDay(date),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useMetricSeries(metric: string, days: number, end?: ISODate) {
+  return useQuery({
+    queryKey: ['metric', metric, days, end ?? 'latest'],
+    queryFn: () => api.getMetricSeries(metric, { end, days }),
+    placeholderData: (previous) => previous,
+  });
+}
 
 export function useReport() {
   return useQuery({ queryKey: keys.report, queryFn: api.getLatestReport });

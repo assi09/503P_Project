@@ -157,3 +157,28 @@ describe('mock API', () => {
     expect(second[0].status).not.toBe('muted');
   });
 });
+
+describe('days', () => {
+  it('serves the latest day with a usual range and two weeks for each metric', async () => {
+    const day = await mockClient.getDay('latest');
+    expect(day.date).toBe(day.last);
+    expect(day.partial).toBe(true);
+    const steps = day.metrics.find((m) => m.metric === 'steps')!;
+    expect(steps.usual!.low).toBeLessThanOrEqual(steps.usual!.high);
+    expect(steps.recent).toHaveLength(14);
+    const earlier = await mockClient.getDay(day.first);
+    expect(earlier.partial).toBe(false);
+    expect(earlier.metrics[0].usual).toBeNull(); // nothing before the first day
+    await expect(mockClient.getDay('2000-01-01')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('serves a metric for the days asked for, ending on the day asked for', async () => {
+    const { last } = await mockClient.getDay('latest');
+    const series = await mockClient.getMetricSeries('resting_hr', { days: 7 });
+    expect(series.points).toHaveLength(7);
+    expect(series.points.at(-1)!.date).toBe(last);
+    await expect(mockClient.getMetricSeries('made_up', { days: 7 })).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+});
