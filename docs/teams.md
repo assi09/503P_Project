@@ -126,6 +126,24 @@ For each person who opted in, the Team tab shows one row for the past week:
 
 ## The weekly report
 
+**Built so far** (`backend/app/teams/reports.py`, table `team_reports`, migration 0010):
+
+- `python -m app.teams weekly [--week <day>] [--team <id>]` makes every team's report for the
+  last full week (Monday to Sunday) from each active member's live data. A team and week are made
+  once, so reruns are safe; a week still in progress is refused.
+- A report stores a headline and one section per metric ("Time asleep fell across the team:
+  median change -32 min (1 of 7 higher, 6 lower)."), a weekday line for sleep, steps and stress,
+  and the aggregate evidence each sentence cites. The text is templated: every number in it is
+  read from that evidence. With fewer than 5 members with data it is **withheld** and says how
+  many people it had.
+- Named levels are **not stored**: they are read each time the report is opened, for the members
+  sharing at that moment, alphabetically, and each opening that shows any is logged as
+  `levels_viewed`.
+- API, supervisor only, for their own teams: `POST /teams/{id}/reports` `{week?}` (makes it if
+  needed), `GET /teams/{id}/reports`, `GET /teams/{id}/reports/{any day of the week}`.
+
+**Next:**
+
 - **Text.** One language-model call per team per week receives only the aggregate evidence and
   writes the narrative, citing evidence ids. The claim verifier checks every number against the
   evidence it cites. On a model error, an exceeded budget or rejected claims, a templated text
@@ -152,9 +170,9 @@ Small PRs, each green and verified:
    on its own, before any team exists.
 4. Team statistics with calibration tests, and the named weekly levels behind the opt-in.
    **Done.**
-5. The weekly report: templated, then the language-model text with the verifier and fallback,
-   then the CLI. One real run on a synthetic team, logged in [costs.md](costs.md) and
-   [experiments.md](experiments.md).
+5. The weekly report: templated, stored, the CLI and the API (**done**); then the language-model
+   text with the verifier and the templated text as fallback, with one real run on a synthetic
+   team, logged in [costs.md](costs.md) and [experiments.md](experiments.md).
 6. Email: a console mailer for development and an HTTP provider.
 7. App, employee side: join, consent, leave, the named-levels switch.
 8. App, supervisor side: Team tab, report, named levels, team settings.

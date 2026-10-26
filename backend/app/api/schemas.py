@@ -279,3 +279,45 @@ class Membership(ApiModel):
 class ShareLevels(ApiModel):
     share: bool
     consent_version: str | None = None  # needed to turn sharing on
+
+
+class ReportSection(ApiModel):
+    metric: str
+    label: str | None = None
+    status: Literal["changed", "steady", "not_enough_data"] | None = None
+    text: str
+    evidence_id: str
+
+
+class TeamWeekLevel(ApiModel):
+    mean: float | None
+    level: Literal["below", "usual", "above"] | None
+
+
+class SharedLevels(ApiModel):
+    """One member who chose to share, with their week against their own usual."""
+
+    member: str  # their email
+    levels: dict[str, TeamWeekLevel]  # recovery_score, sleep_minutes, strain, stress_score
+
+
+class TeamReportSummary(ApiModel):
+    week: Window
+    status: Literal["ready", "withheld"]
+    headline: str
+    members_included: int
+    created_at: datetime
+
+
+class TeamReport(TeamReportSummary):
+    members_total: int
+    minimum_members: int
+    sections: list[ReportSection]
+    weekdays: list[ReportSection]
+    evidence: dict[str, Evidence]
+    generated_by: str
+    levels: list[SharedLevels]
+
+
+class GenerateReport(ApiModel):
+    week: date | None = None  # any day of the week; the last full week when left out

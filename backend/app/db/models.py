@@ -46,7 +46,9 @@ TEAM_EVENTS = (
     "left",
     "levels_shared",
     "levels_unshared",
+    "levels_viewed",  # the supervisor opened a report's named levels
 )
+TEAM_REPORT_STATUSES = ("ready", "withheld")  # withheld: fewer active members than the minimum
 
 
 def _now() -> datetime:
@@ -468,3 +470,33 @@ class TeamEvent(Base):
     )
     event: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class TeamReport(Base):
+    """One team's week: aggregates and text only. Named levels are read fresh when the report is
+    opened, never stored, so a member who stops sharing disappears from past weeks too."""
+
+    __tablename__ = "team_reports"
+    __table_args__ = (
+        UniqueConstraint("team_id", "week_start", name="uq_team_reports_week"),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in TEAM_REPORT_STATUSES)})",
+            name="ck_team_reports_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    week_start: Mapped[date] = mapped_column(Date)  # a Monday
+    status: Mapped[str] = mapped_column(String(16))
+    members_total: Mapped[int] = mapped_column()  # active members when it was made
+    members_included: Mapped[int] = mapped_column()  # those with data that week
+    headline: Mapped[str] = mapped_column(Text)
+    body: Mapped[dict] = mapped_column(JSON)  # sections, each citing an evidence id
+    evidence: Mapped[dict] = mapped_column(JSON)  # id -> the aggregate evidence it cites
+    generated_by: Mapped[str] = mapped_column(String(16), default="template")
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
