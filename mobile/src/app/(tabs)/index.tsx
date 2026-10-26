@@ -21,20 +21,21 @@ import { Section } from '@/components/list';
 import { Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
-import { metricOf, shiftDate, stages, wakeHour } from '@/lib/day';
+import { metricOf, shiftDate, stages, STRAIN_BANDS, wakeHour } from '@/lib/day';
 import { formatValue, metricLabel } from '@/lib/format';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
 import { isHovered } from '@/lib/platform';
 
-// Recovery leads; wide screens fit resting heart rate too, phones keep it under Heart and body.
+// Our own four scores of the day (docs/scores.md): one row on wide screens, two by two on phones.
 const KEY_NUMBERS = [
   { metric: 'recovery_score', label: 'Recovery' },
+  { metric: 'strain', label: 'Strain' },
   { metric: 'sleep_minutes', label: 'Sleep' },
-  { metric: 'steps', label: 'Steps' },
-  { metric: 'resting_hr', label: 'Resting heart rate', wideOnly: true },
+  { metric: 'stress_score', label: 'Stress' },
 ];
 const ACTIVITY = [
+  'steps',
   'active_zone_minutes',
   'distance_km',
   'calories',
@@ -167,18 +168,28 @@ function DayBody({
   const workouts = useWorkouts(day.date);
   const hourly = useHourlySteps(day.date);
 
+  const keyNumber = ({ metric, label }: (typeof KEY_NUMBERS)[number]) => (
+    <KeyNumber
+      key={metric}
+      label={label}
+      metric={metricOf(day, metric)}
+      partial={day.partial}
+      large={wide}
+      note={metric === 'strain' && day.strain ? STRAIN_BANDS[day.strain.band] : undefined}
+      onPress={() => open(metric)}
+    />
+  );
   const keys = (
     <View style={[styles.keys, { borderColor: colors.border }]}>
-      {KEY_NUMBERS.filter((k) => wide || !k.wideOnly).map(({ metric, label }) => (
-        <KeyNumber
-          key={metric}
-          label={label}
-          metric={metricOf(day, metric)}
-          partial={day.partial}
-          large={wide}
-          onPress={() => open(metric)}
-        />
-      ))}
+      {wide ? (
+        <View style={styles.keyRow}>{KEY_NUMBERS.map(keyNumber)}</View>
+      ) : (
+        [KEY_NUMBERS.slice(0, 2), KEY_NUMBERS.slice(2)].map((row) => (
+          <View key={row[0].metric} style={styles.keyRow}>
+            {row.map(keyNumber)}
+          </View>
+        ))
+      )}
     </View>
   );
 
@@ -374,15 +385,17 @@ function FindingRow({ finding }: { finding: Finding }) {
 function DaySkeleton({ wide }: { wide: boolean }) {
   return (
     <View style={{ gap: spacing.lg }}>
-      <View style={styles.keysSkeleton}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ flex: 1, gap: spacing.sm }}>
-            <Skeleton height={12} width={70} radius={radius.sm} />
-            <Skeleton height={wide ? 44 : 30} radius={radius.sm} />
-            <Skeleton height={12} width={90} radius={radius.sm} />
-          </View>
-        ))}
-      </View>
+      {(wide ? [4] : [2, 2]).map((count, row) => (
+        <View key={row} style={styles.keysSkeleton}>
+          {Array.from({ length: count }, (_, i) => (
+            <View key={i} style={{ flex: 1, gap: spacing.sm }}>
+              <Skeleton height={12} width={70} radius={radius.sm} />
+              <Skeleton height={wide ? 44 : 30} radius={radius.sm} />
+              <Skeleton height={12} width={90} radius={radius.sm} />
+            </View>
+          ))}
+        </View>
+      ))}
       {[0, 1, 2, 3].map((i) => (
         <Skeleton key={i} height={18} radius={radius.sm} />
       ))}
@@ -393,11 +406,11 @@ function DaySkeleton({ wide }: { wide: boolean }) {
 const styles = StyleSheet.create({
   headerSkeleton: { gap: spacing.sm, marginBottom: spacing.md },
   keys: {
-    flexDirection: 'row',
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  keyRow: { flexDirection: 'row', gap: spacing.lg },
   keysSkeleton: { flexDirection: 'row', gap: spacing.lg },
   columns: { flexDirection: 'row', gap: spacing.xxl, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0 },

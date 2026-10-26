@@ -4,8 +4,8 @@ Two new daily scores, our own and deterministic like the [recovery score](produc
 **strain** (how much load the heart carried today) and **stress** (how many physical signs of
 stress the body showed). Every person sees them on Today. A supervisor sees their weekly levels
 only for people who opted in ([teams.md](teams.md)). Status: the scores and their inputs are built
-(`backend/app/analysis/day.py`, `backend/app/sync/daily.py`) and served by `/days`; Today shows
-them next. The constants were calibrated on 60 days of the owner's data (below). They are
+(`backend/app/analysis/day.py`, `backend/app/sync/daily.py`), served by `/days` and shown on
+Today with a page each. The constants were calibrated on 60 days of the owner's data (below). They are
 versioned and may move once more people use the app.
 
 Like every score in the app, they describe the person's own data against their own baseline.
@@ -98,6 +98,14 @@ With all of this, stress ranks days almost independently of recovery (rank corre
 the two scores say different things. A test over 20 made-up people checks that a heart rate raised
 only by exercise does not raise stress.
 
+## On Today
+
+The key numbers are Recovery, Strain, Sleep and Stress: two by two on phones, one row on wide
+screens, each opening its page. Strain shows its band, the others where they sit against the
+usual range. Steps leads the Activity section. Today's strain and stress say "so far", as both add
+up through the day. Strain's page lists the zone minutes and what each counts; stress's lists each
+input's share of the 28 days before. Stress has its own color.
+
 ## Storage and computation
 
 The same as recovery: the sync stores the **inputs** as ordinary daily metrics from the same
@@ -120,11 +128,6 @@ Minute heart rate is never stored, only the daily values.
 
 ## Next
 
-- **Today:** the key numbers become Recovery, Strain, Sleep and Stress (a 2×2 grid on phones,
-  one row on wide screens), each against the usual range and opening its metric page. Steps moves
-  to the top of the Activity section. Strain shows its band, stress "below usual", "usual" or
-  "above usual". The metric pages explain the inputs. Light and dark mode, flat rows as in the
-  [UI plan](ui-plan.md).
 - **The agent:** strain to the activity expert and stress to the recovery expert, so they can be
   asked about and cited.
 - **The evening stress check-in**, as ground truth.

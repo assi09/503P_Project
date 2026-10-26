@@ -133,12 +133,14 @@ export function KeyNumber({
   metric,
   partial,
   large,
+  note,
   onPress,
 }: {
   label: string;
   metric: DayMetric;
   partial: boolean;
-  large: boolean; // on wide screens; phones show three numbers across in smaller figures
+  large: boolean; // on wide screens; phones show two numbers across in smaller figures
+  note?: string; // said instead of the comparison with the usual range, e.g. strain's band
   onPress: () => void;
 }) {
   const colors = useColors();
@@ -149,7 +151,7 @@ export function KeyNumber({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${label}: ${big.value} ${big.unit ?? ''}. ${usualLine(metric, partial)}`}
+      accessibilityLabel={`${label}: ${big.value} ${big.unit ?? ''}. ${note ?? usualLine(metric, partial)}`}
       onPress={onPress}
       style={(state) => [styles.key, isHovered(state) && { backgroundColor: colors.track }]}
     >
@@ -170,7 +172,13 @@ export function KeyNumber({
           </Text>
         )}
       </View>
-      <ComparisonText metric={metric} partial={partial} />
+      {note ? (
+        <Text variant="caption" color="muted" numberOfLines={1}>
+          {note}
+        </Text>
+      ) : (
+        <ComparisonText metric={metric} partial={partial} />
+      )}
       {points.some((p) => p.value !== null) && (
         <View style={styles.spark}>
           <LineChart points={points} metric={metric.metric} height={28} strokeWidth={1.5} />

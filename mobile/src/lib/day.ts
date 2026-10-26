@@ -97,7 +97,17 @@ export const ACCUMULATING = new Set([
   'lightly_active_minutes',
   'moderately_active_minutes',
   'very_active_minutes',
+  'strain',
+  'stress_score', // the daytime part adds up through the day
 ]);
+
+/** WHOOP's bands for strain on its 0–21 scale. */
+export const STRAIN_BANDS: Record<'light' | 'moderate' | 'high' | 'all_out', string> = {
+  light: 'Light',
+  moderate: 'Moderate',
+  high: 'High',
+  all_out: 'All out',
+};
 
 /** A value split for large figures: 452 sleep minutes -> { value: "7h 32m" }, steps -> "9,214". */
 export function bigValue(metric: string, value: number | null): { value: string; unit?: string } {
@@ -110,7 +120,10 @@ export function bigValue(metric: string, value: number | null): { value: string;
     return { value: `${Math.floor(rounded / 60)}h ${String(rounded % 60).padStart(2, '0')}m` };
   }
   if (minutes) return { value: String(Math.round(value)), unit: 'min' };
-  if (metric === 'recovery_score') return { value: String(Math.round(value)) };
+  if (metric === 'recovery_score' || metric === 'stress_score') {
+    return { value: String(Math.round(value)) };
+  }
+  if (metric === 'strain') return { value: value.toFixed(1) };
   const units: Record<string, string> = {
     steps: 'steps',
     resting_hr: 'bpm',

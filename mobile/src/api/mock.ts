@@ -33,6 +33,7 @@ import type {
   Report,
   SendOptions,
   SignedIn,
+  Strain,
 } from './types';
 
 const DAYS = 28;
@@ -85,6 +86,11 @@ const DAILY: [string, number, number, number][] = [
   ['respiratory_rate', 14.6, 0.6, 1],
   ['skin_temp_variation_c', 0, 0.3, 1],
   ['wear_minutes', 1320, 60, 0],
+  ['hr_zone_light_minutes', 820, 90, 0],
+  ['hr_zone_moderate_minutes', 26, 12, 0],
+  ['hr_zone_vigorous_minutes', 9, 7, 0],
+  ['hr_zone_peak_minutes', 1, 1, 0],
+  ['recovery_score', 62, 15, 0],
   ['strain', 9, 5, 1],
   ['stress_score', 50, 20, 0],
 ];
@@ -137,6 +143,7 @@ function mockDay(date: ISODate): DaySummary {
       a < HISTORY_DAYS ? dailyValue(index, a) : null,
     ),
   }));
+  const valueOf = (name: string) => metrics.find((m) => m.metric === name)!.value!;
   return {
     date,
     partial: ago === 0,
@@ -145,12 +152,19 @@ function mockDay(date: ISODate): DaySummary {
     last: isoDate(0),
     metrics,
     recovery: { score: 64, parts: { hrv_ms: 71, resting_hr: 58, sleep_minutes: 63 } },
-    strain: { score: 11.4, band: 'moderate', load: 152.3, method: 'zones' },
+    strain: mockStrain(valueOf('strain')),
     stress: {
-      score: 57,
+      score: valueOf('stress_score'),
       parts: { daytime_heart_rate: 62, hrv_ms: 48, resting_hr: 55, sleep_minutes: 51 },
     },
   };
+}
+
+/** The strain the backend would report for a score, with its band and the load behind it. */
+function mockStrain(score: number): Strain {
+  const band = score >= 18 ? 'all_out' : score >= 14 ? 'high' : score >= 10 ? 'moderate' : 'light';
+  const load = Math.round(-200 * Math.log(1 - score / 21) * 10) / 10;
+  return { score, band, load, method: 'zones' };
 }
 
 function mockSeries(metric: string, days: number, end?: ISODate): MetricSeries {

@@ -68,6 +68,19 @@ describe('comparing with the usual range', () => {
     expect(valueText('skin_temp_variation_c', 0.4)).toBe('+0.4 °C');
     expect(bigValue('steps', null)).toEqual({ value: '–' });
   });
+
+  it('shows strain to a tenth on its 0–21 scale and stress as a whole score', () => {
+    expect(bigValue('strain', 11.43)).toEqual({ value: '11.4' });
+    expect(bigValue('strain', 0)).toEqual({ value: '0.0' });
+    expect(bigValue('stress_score', 56.6)).toEqual({ value: '57' });
+    expect(valueText('hr_zone_vigorous_minutes', 10.5)).toBe('11 min');
+  });
+
+  it("says today's strain and stress are so far, as they add up through the day", () => {
+    const strain: DayMetric = { metric: 'strain', value: 4, usual, recent: [] };
+    expect(usualLine(strain, true)).toMatch(/^So far/);
+    expect(usualLine(strain, false)).toMatch(/^Below usual/);
+  });
 });
 
 describe('the night', () => {

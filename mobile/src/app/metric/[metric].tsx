@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useDay, useMetricSeries } from '@/api/hooks';
-import type { ISODate, Point } from '@/api/types';
+import type { DaySummary, ISODate, Point } from '@/api/types';
 import { LineChart } from '@/components/LineChart';
 import { Row, Section, Stat } from '@/components/list';
 import { Screen } from '@/components/Screen';
@@ -11,7 +11,15 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
-import { ACCUMULATING, bigValue, dayTitle, metricOf, usualLine, valueText } from '@/lib/day';
+import {
+  ACCUMULATING,
+  bigValue,
+  dayTitle,
+  metricOf,
+  STRAIN_BANDS,
+  usualLine,
+  valueText,
+} from '@/lib/day';
 import { metricLabel } from '@/lib/format';
 import { useWide } from '@/lib/layout';
 import { radius, spacing, useColors, useMetricColor } from '@/theme';
@@ -110,6 +118,8 @@ export default function MetricScreen() {
             {metric === 'recovery_score' && (
               <RecoveryParts parts={day.data.recovery?.parts ?? {}} />
             )}
+            {metric === 'strain' && <StrainParts day={day.data} />}
+            {metric === 'stress_score' && <StressParts parts={day.data.stress?.parts ?? {}} />}
 
             <View style={styles.ask}>
               <Button
@@ -162,6 +172,74 @@ function RecoveryParts({ parts }: { parts: Record<string, number> }) {
           key={metric}
           title={metricLabel(metric)}
           detail={RECOVERY_WORDS[metric]?.(Math.round(share))}
+          value={String(Math.round(share))}
+        />
+      ))}
+    </Section>
+  );
+}
+
+const ZONES = [
+  ['hr_zone_moderate_minutes', 2],
+  ['hr_zone_vigorous_minutes', 3],
+  ['hr_zone_peak_minutes', 4],
+  ['hr_zone_light_minutes', 0.04],
+] as const;
+
+/** The day's minutes in each heart-rate zone and what they add to strain. */
+function StrainParts({ day }: { day: DaySummary }) {
+  const strain = day.strain;
+  if (!strain) return null;
+  const estimated = strain.method === 'active_zone_minutes';
+  return (
+    <Section
+      title="What makes it"
+      footer={`Our own estimate, not WHOOP's or Fitbit's: minutes in Fitbit's heart-rate zones, which Fitbit sets from your own resting heart rate and age, weighted by zone and put on a 0 to 21 scale where each extra minute adds a little less. The light zone is most of a waking day, so it counts very little.${estimated ? ' This day has no zone minutes, so its load is estimated from Active Zone Minutes.' : ''} Not a health assessment.`}
+    >
+      <Row
+        title="Band"
+        detail="Light under 10, moderate 10 to 14, high 14 to 18, all out above"
+        value={STRAIN_BANDS[strain.band]}
+      />
+      {estimated ? (
+        <Row
+          title="Active Zone Minutes"
+          value={valueText('active_zone_minutes', metricOf(day, 'active_zone_minutes').value)}
+        />
+      ) : (
+        ZONES.map(([zone, weight]) => (
+          <Row
+            key={zone}
+            title={metricLabel(zone)}
+            detail={`Each minute counts ${weight}`}
+            value={valueText(zone, metricOf(day, zone).value)}
+          />
+        ))
+      )}
+    </Section>
+  );
+}
+
+const STRESS_WORDS: Record<string, (share: number) => string> = {
+  daytime_heart_rate: (share) =>
+    `Higher than on ${share}% of your 28 days before, allowing for the day's exercise`,
+  hrv_ms: (share) => `Lower than on ${share}% of your 28 days before`,
+  resting_hr: (share) => `Higher than on ${share}% of your 28 days before`,
+  sleep_minutes: (share) => `Shorter than on ${share}% of your 28 nights before`,
+};
+
+/** What the stress score is made of: each input's share of the 28 days it showed more signs than. */
+function StressParts({ parts }: { parts: Record<string, number> }) {
+  return (
+    <Section
+      title="What makes it"
+      footer="Our own estimate of physical signs of stress, not a measure of how you feel: mostly your heart rate while sitting still and awake, compared with what the day's exercise would explain, then last night's heart rate variability, resting heart rate and sleep, each against your previous 28 days. 50 is a typical day for you. Caffeine, heat or illness raise it too. Not a health assessment."
+    >
+      {Object.entries(parts).map(([input, share]) => (
+        <Row
+          key={input}
+          title={metricLabel(input)}
+          detail={STRESS_WORDS[input]?.(Math.round(share))}
           value={String(Math.round(share))}
         />
       ))}
