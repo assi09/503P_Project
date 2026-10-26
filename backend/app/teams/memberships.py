@@ -12,10 +12,11 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.analysis.team import MIN_MEMBERS as TEAM_MINIMUM
 from app.api.errors import ApiError
 from app.db.models import Team, TeamEvent, TeamMembership, User
 
-MIN_MEMBERS = 5  # no team figure is built from fewer people
+MIN_MEMBERS = TEAM_MINIMUM  # no team figure is built from fewer people
 # Codes avoid letters and digits that read alike (0/O, 1/I/L), so they can be read out loud.
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 8
