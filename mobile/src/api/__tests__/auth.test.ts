@@ -61,7 +61,24 @@ describe('mock accounts', () => {
       status: 'approved',
     });
     await saveToken(person.token);
-    await expect(mockClient.getAccount()).resolves.toMatchObject({ status: 'approved' });
+    await expect(mockClient.getAccount()).resolves.toMatchObject({
+      status: 'approved',
+      role: 'member',
+    });
+  });
+
+  it('approves someone as a supervisor', async () => {
+    const person = await mockClient.signUp({
+      email: 'new-lead@example.com',
+      password: 'long enough password',
+    });
+    await signInAs(DEMO_OWNER);
+    const request = (await mockClient.getAccessRequests()).find(
+      (r) => r.email === 'new-lead@example.com',
+    )!;
+    await mockClient.decideAccessRequest(request.id, true, 'supervisor');
+    await saveToken(person.token);
+    await expect(mockClient.getAccount()).resolves.toMatchObject({ role: 'supervisor' });
   });
 
   it('signs out a rejected person', async () => {
@@ -116,11 +133,16 @@ describe('http sessions', () => {
     const client = httpClient(BASE, mockClient);
     await client.logIn({ email: 'a@b.co', password: 'pw' });
     await client.decideAccessRequest('id/1', false);
+    await client.decideAccessRequest('id/2', true, 'supervisor');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({ email: 'a@b.co', password: 'pw' }),
     });
     expect(fetchMock.mock.calls[1][0]).toBe('http://api.test/admin/access-requests/id%2F1/reject');
+    expect(fetchMock.mock.calls[2]).toEqual([
+      'http://api.test/admin/access-requests/id%2F2/approve',
+      expect.objectContaining({ body: JSON.stringify({ role: 'supervisor' }) }),
+    ]);
   });
 });
 

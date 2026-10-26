@@ -184,6 +184,10 @@ class SignedIn(ApiModel):
     account: Account
 
 
+class Approval(ApiModel):
+    role: Literal["member", "supervisor"] = "member"
+
+
 class AccessRequest(ApiModel):
     id: str
     email: str

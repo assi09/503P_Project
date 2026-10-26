@@ -118,19 +118,25 @@ def access_requests(db: Db, _: Annotated[User, Depends(admin_user)]) -> list:
     ]
 
 
-def _decide(db: Session, user_id: str, approve: bool, clock: datetime) -> schemas.Account:
+def _decide(
+    db: Session, user_id: str, approve: bool, clock: datetime, role: str = "member"
+) -> schemas.Account:
     try:
         key = uuid.UUID(user_id)
     except ValueError:
         raise AuthError(404, "not_found", "No such account.") from None
-    return _account(accounts.decide(db, key, approve, clock))
+    return _account(accounts.decide(db, key, approve, clock, role))
 
 
 @router.post("/admin/access-requests/{user_id}/approve", response_model=schemas.Account)
 def approve(
-    user_id: str, db: Db, clock: Now, _: Annotated[User, Depends(admin_user)]
+    user_id: str,
+    db: Db,
+    clock: Now,
+    _: Annotated[User, Depends(admin_user)],
+    body: schemas.Approval | None = None,
 ) -> schemas.Account:
-    return _decide(db, user_id, True, clock)
+    return _decide(db, user_id, True, clock, (body or schemas.Approval()).role)
 
 
 @router.post("/admin/access-requests/{user_id}/reject", response_model=schemas.Account)

@@ -127,7 +127,11 @@ function ReportSection({
     return (
       <Section
         title="Weekly report"
-        footer={`Reports are made each Monday for the week before. ${team.members} of the ${team.minimumMembers} people needed have joined.`}
+        footer={`Reports are made each Monday for the week before. ${
+          team.members >= team.minimumMembers
+            ? `${team.members} people have joined.`
+            : `${team.members} of the ${team.minimumMembers} people needed have joined.`
+        }`}
       >
         <View style={styles.empty}>
           <Text color="muted">No report yet.</Text>

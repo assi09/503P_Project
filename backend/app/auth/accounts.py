@@ -130,11 +130,16 @@ def set_password(session: Session, user: User, password: str) -> None:
     session.flush()
 
 
-def decide(session: Session, user_id: uuid.UUID, approve: bool, now: datetime) -> User:
+def decide(
+    session: Session, user_id: uuid.UUID, approve: bool, now: datetime, role: str = "member"
+) -> User:
+    """Approve or reject a sign-up; an approval also sets the role (supervisors see team pages)."""
     user = session.get(User, user_id)
     if user is None:
         raise AuthError(404, "not_found", "No such account.")
     user.status = "approved" if approve else "rejected"
+    if approve:
+        user.role = role
     user.decided_at = now
     if not approve:  # a rejected person is signed out everywhere
         session.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
