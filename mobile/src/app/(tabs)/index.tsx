@@ -5,7 +5,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
-import { useDay, useHourlySteps, useReport, useWorkouts } from '@/api/hooks';
+import { useDay, useHourlySteps, useNoData, useReport, useWorkouts } from '@/api/hooks';
 import type { DaySummary, Finding, ISODate } from '@/api/types';
 import { CheckInSection } from '@/components/checkin';
 import {
@@ -18,6 +18,7 @@ import {
 } from '@/components/day';
 import { QuestionCard } from '@/components/insights';
 import { Section } from '@/components/list';
+import { NoData } from '@/components/NoData';
 import { Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
@@ -48,6 +49,7 @@ export default function TodayScreen() {
   const [date, setDate] = useState<ISODate | 'latest'>('latest');
   const day = useDay(date);
   const report = useReport();
+  const noData = useNoData();
   const wide = useWide();
   const data = day.data;
 
@@ -84,6 +86,14 @@ export default function TodayScreen() {
 
   const open = (metric: string) =>
     router.push({ pathname: '/metric/[metric]', params: { metric, date: data?.date ?? '' } });
+
+  if (noData && !data) {
+    return (
+      <Screen title="Today" wide>
+        <NoData shows="Today shows your sleep, recovery, strain and stress" />
+      </Screen>
+    );
+  }
 
   return (
     <GestureDetector gesture={swipe}>

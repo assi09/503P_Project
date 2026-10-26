@@ -198,6 +198,16 @@ export function useDataStatus() {
   return useQuery({ queryKey: keys.dataStatus, queryFn: api.getDataStatus });
 }
 
+/**
+ * True when the person has no Fitbit data to show yet: no Fitbit, not connected, or the first sync
+ * still running. Undefined while loading, or after another error, which screens show themselves.
+ */
+export function useNoData(): boolean | undefined {
+  const status = useDataStatus();
+  if (status.error instanceof ApiError && status.error.code === 'no_data') return true;
+  return status.data ? status.data.source === 'none' : undefined;
+}
+
 export function useAccessRequests() {
   return useQuery({ queryKey: keys.accessRequests, queryFn: api.getAccessRequests });
 }

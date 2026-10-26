@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { usingMock } from '@/api';
 import {
+  useNoData,
   useNotificationSettings,
   useReminders,
   useReport,
@@ -29,6 +30,7 @@ const MAX_PER_DAY = [1, 2, 3];
 export default function RemindersScreen() {
   const colors = useColors();
   const reminders = useReminders();
+  const noData = useNoData();
   const [showDeclined, setShowDeclined] = useState(false);
 
   return (
@@ -51,7 +53,12 @@ export default function RemindersScreen() {
               )}
 
               <SectionTitle>Suggested</SectionTitle>
-              {proposed.length === 0 ? (
+              {noData ? (
+                <Text color="muted">
+                  Suggestions come from patterns in your Fitbit data, once it is connected in
+                  Settings.
+                </Text>
+              ) : proposed.length === 0 ? (
                 <Text color="muted">No new suggestions.</Text>
               ) : (
                 <>

@@ -469,6 +469,7 @@ interface MockAccount extends Account {
   id: string;
   password: string;
   requestedAt: string;
+  hasData: boolean; // false until they connect Google Health, as for someone without a Fitbit
 }
 
 let accounts: MockAccount[] = [
@@ -479,6 +480,7 @@ let accounts: MockAccount[] = [
     isAdmin: true,
     role: 'member',
     requestedAt: new Date().toISOString(),
+    hasData: true,
   },
   {
     id: 'u0',
@@ -487,6 +489,7 @@ let accounts: MockAccount[] = [
     isAdmin: false,
     role: 'supervisor',
     requestedAt: new Date().toISOString(),
+    hasData: false, // a supervisor without a Fitbit (docs/teams.md)
   },
 ];
 const sessions = new Map<string, string>(); // token -> account id
@@ -506,6 +509,14 @@ function currentAccount(): MockAccount {
   const account = accounts.find((a) => a.id === id);
   if (!account) throw new ApiError('Sign in to continue.', 'signed_out', 401);
   return account;
+}
+
+/** Like the backend: someone signed in without synced data has none to show. */
+function ownData(): void {
+  const account = accounts.find((a) => a.id === sessions.get(getToken() ?? ''));
+  if (account && !account.hasData) {
+    throw new ApiError('Your Fitbit data is not connected yet.', 'no_data', 404);
+  }
 }
 
 function adminAccount(): MockAccount {
@@ -925,6 +936,7 @@ export const mockClient: ApiClient = {
         isAdmin: false,
         role: 'member',
         requestedAt: new Date().toISOString(),
+        hasData: false,
       };
       accounts = [...accounts, account];
       return signedIn(account);
@@ -951,6 +963,8 @@ export const mockClient: ApiClient = {
   connectGoogle: () =>
     later(() => {
       google = { ...google, status: 'active', missingScopes: [] };
+      const account = accounts.find((a) => a.id === sessions.get(getToken() ?? ''));
+      if (account) account.hasData = true; // the made-up history stands in for theirs
       startMockSync();
       return { url: '' }; // nothing to open
     }),
@@ -991,17 +1005,24 @@ export const mockClient: ApiClient = {
     }),
 
   getLatestReport: () =>
-    delay<Report>({
-      id: 'report_latest',
-      period: { start: isoDate(27), end: isoDate(0) },
-      createdAt: new Date().toISOString(),
-      headline: 'Your sleep got less efficient as your bedtime moved later.',
-      findings,
-      questions,
-      evidence,
+    later<Report>(() => {
+      ownData();
+      return {
+        id: 'report_latest',
+        period: { start: isoDate(27), end: isoDate(0) },
+        createdAt: new Date().toISOString(),
+        headline: 'Your sleep got less efficient as your bedtime moved later.',
+        findings,
+        questions,
+        evidence,
+      };
     }),
 
-  getDay: (date) => later(() => mockDay(date === 'latest' ? isoDate(0) : date)),
+  getDay: (date) =>
+    later(() => {
+      ownData();
+      return mockDay(date === 'latest' ? isoDate(0) : date);
+    }),
 
   getMetricSeries: (metric, { end, days }) => later(() => mockSeries(metric, days, end)),
 
@@ -1160,17 +1181,20 @@ export const mockClient: ApiClient = {
   },
 
   getDataStatus: () =>
-    delay<DataStatus>({
-      source: 'takeout',
-      lastSync: new Date(Date.now() - 2 * 3600_000).toISOString(),
-      range: { start: isoDate(110), end: isoDate(0) },
-      coverage: [
-        { metric: 'steps', label: 'Steps', fractionPresent: 1 },
-        { metric: 'sleep_minutes', label: 'Sleep', fractionPresent: 0.96 },
-        { metric: 'hrv_ms', label: 'HRV', fractionPresent: 0.93 },
-        { metric: 'readiness', label: 'Readiness', fractionPresent: 0.89 },
-        { metric: 'skin_temp_variation_c', label: 'Skin temperature', fractionPresent: 0.86 },
-      ],
-      lowWearDays: [isoDate(40), isoDate(39)],
+    later<DataStatus>(() => {
+      ownData();
+        return {
+        source: 'takeout',
+        lastSync: new Date(Date.now() - 2 * 3600_000).toISOString(),
+        range: { start: isoDate(110), end: isoDate(0) },
+        coverage: [
+          { metric: 'steps', label: 'Steps', fractionPresent: 1 },
+          { metric: 'sleep_minutes', label: 'Sleep', fractionPresent: 0.96 },
+          { metric: 'hrv_ms', label: 'HRV', fractionPresent: 0.93 },
+          { metric: 'readiness', label: 'Readiness', fractionPresent: 0.89 },
+          { metric: 'skin_temp_variation_c', label: 'Skin temperature', fractionPresent: 0.86 },
+        ],
+        lowWearDays: [isoDate(40), isoDate(39)],
+      };
     }),
 };

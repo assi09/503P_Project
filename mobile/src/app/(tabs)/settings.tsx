@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useDataStatus } from '@/api/hooks';
+import { useDataStatus, useNoData } from '@/api/hooks';
 import type { DataStatus, MetricCoverage } from '@/api/types';
 import { GoogleHealthCard } from '@/components/GoogleHealthCard';
 import { Row, Section } from '@/components/list';
@@ -89,6 +89,18 @@ export default function SettingsScreen() {
 /** Where the data comes from, how complete each metric is, and the days left out. */
 function YourData() {
   const status = useDataStatus();
+  const noData = useNoData();
+  if (noData) {
+    return (
+      <Section title="Your data">
+        <Row
+          icon="time-outline"
+          title="No data yet"
+          detail="Connect Google Health above; your history appears here once it is synced"
+        />
+      </Section>
+    );
+  }
   if (status.isPending) {
     return (
       <Section title="Your data">
