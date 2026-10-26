@@ -24,8 +24,10 @@ Google sign-in ──> https://<api>/google/callback
   `.env` and the app never reach the image.
 - **`railway.json`**: build from the Dockerfile, health check on `/health`, one replica, restart on
   failure.
-- **`railway.cron.json`**: the same image running `python -m app.teams weekly` every Monday at 06:00
-  UTC, then exiting. Each report is made and emailed once, so a rerun is harmless.
+- **`railway.cron.json`**: the cron service's settings as a record (`python -m app.teams weekly`,
+  Mondays 06:00 UTC, no restarts). Railway no longer accepts a second config file per service, so
+  these are set on the service itself (done on 2026-10-26). Each report is made and emailed once,
+  so a rerun is harmless.
 - **`FA_DATABASE_URL`** may be Railway's `postgresql://…`; the app adds the psycopg driver itself.
 - **`mobile/vercel.json`**: Vercel builds the web app with `npx expo export --platform web` and sends
   every path to `index.html` (the app does its own routing).
@@ -59,10 +61,33 @@ Google sign-in ──> https://<api>/google/callback
    Spending caps (`FA_CHAT_DAILY_CAP_*`, `FA_LLM_SPEND_CAP_USD`) keep their defaults unless set.
 5. Redeploy; the log shows the migrations, then `Uvicorn running`. `https://<api>/health` answers
    `{"status":"ok"}`.
-6. **The weekly email:** **+ New → GitHub Repo** → the same repository → service **Settings →
-   Config-as-code → Railway config file** = `railway.cron.json`. Give it the same variables
-   (Railway's shared variables, or references such as `${{api.FA_EMAIL_API_KEY}}`). It runs on
-   Mondays and stops; its log prints counts only.
+6. **The weekly email:** **+ New → GitHub Repo** → the same repository, then on the service:
+   start command `python -m app.teams weekly`, cron schedule `0 6 * * 1`, restart policy never.
+   Variables: `FA_DATABASE_URL`, `FA_TIMEZONE`, `FA_EMAIL_BACKEND`, `FA_APP_URL` and its own sealed
+   `FA_EMAIL_API_KEY`, nothing else. It runs on Mondays and stops; its log prints counts only.
+
+## Secrets on Railway
+
+Railway disclosed on 2026-10-21 that customers' environment variables may have been read by an
+attacker, and asked everyone to rotate them. Patterns' secrets went in only after that, under
+these rules:
+
+- **Production keys only**: an OpenAI project key, TypeSafe key, Resend key and Google Web client
+  made for this deployment, never the local ones, so any of them can be revoked alone.
+- **A hard spending limit at each provider**, the real protection if a key leaks: the OpenAI
+  production project has a monthly budget of a few dollars; Resend's key can only send (100 a day
+  on the free plan). The app's own caps (`docs/costs.md`) sit under those.
+- **Sealed** in Railway (the variable's menu → Seal): no one can read the value back from the
+  dashboard or API. This does not protect against a breach of Railway itself.
+- **Each secret only on the service that uses it**: the email job holds the Resend key and nothing
+  else.
+- **`FA_TOKEN_KEY` exists only on Railway** and encrypts people's Google sign-ins in the database;
+  the access is read-only, and in Testing mode it lapses after 7 days.
+- **The database has no public port**: the API and the email job reach it over Railway's private
+  network.
+- Two-factor sign-in on Railway and GitHub, and Railway's GitHub app limited to the repositories it
+  deploys.
+- After any provider incident: rotate the affected keys and check each provider's usage page.
 
 ## 2. Google Cloud: a Web application sign-in
 
