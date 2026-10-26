@@ -276,3 +276,32 @@ describe('the rest of Today', () => {
     expect(workouts[0]).toMatchObject({ exerciseType: 'WALKING', activeSeconds: 2100 });
   });
 });
+
+describe('teams', () => {
+  it('previews, joins with the consent read, shares levels after a second consent, and leaves', async () => {
+    await expect(mockClient.previewTeam('NOPE')).rejects.toMatchObject({ code: 'unknown_code' });
+    const preview = await mockClient.previewTeam('demo-2345'); // typed loosely
+    expect(preview.team).toBe('Design');
+    expect(preview.consent).toContain('at least 5 people');
+    await expect(mockClient.joinTeam('DEMO2345', 'old')).rejects.toMatchObject({
+      code: 'consent_changed',
+    });
+    const joined = await mockClient.joinTeam('DEMO2345', preview.consentVersion);
+    expect(joined.shareLevels).toBe(false);
+    await expect(mockClient.joinTeam('DEMO2345', preview.consentVersion)).rejects.toMatchObject({
+      code: 'already_member',
+    });
+    await expect(mockClient.shareTeamLevels(joined.teamId, true)).rejects.toMatchObject({
+      code: 'consent_changed',
+    });
+    const shared = await mockClient.shareTeamLevels(
+      joined.teamId,
+      true,
+      joined.levelsConsentVersion,
+    );
+    expect(shared.shareLevels).toBe(true);
+    expect((await mockClient.getMyTeams())[0].shareLevels).toBe(true);
+    await mockClient.leaveTeam(joined.teamId);
+    expect(await mockClient.getMyTeams()).toEqual([]);
+  });
+});

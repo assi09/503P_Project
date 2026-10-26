@@ -20,6 +20,7 @@ export const keys = {
   notificationSettings: ['settings', 'notifications'] as const,
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
+  myTeams: ['me', 'teams'] as const,
 };
 
 /** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
@@ -223,5 +224,48 @@ export function useGoogleAction() {
     mutationFn: (action: 'sync' | 'disconnect') =>
       action === 'sync' ? api.syncGoogle() : api.disconnectGoogle(),
     onSuccess: (status) => client.setQueryData(keys.google, status),
+  });
+}
+
+// Teams, as a member (docs/teams.md)
+
+export function useMyTeams() {
+  return useQuery({ queryKey: keys.myTeams, queryFn: api.getMyTeams });
+}
+
+export function usePreviewTeam() {
+  return useMutation({ mutationFn: (code: string) => api.previewTeam(code) });
+}
+
+export function useJoinTeam() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ code, consentVersion }: { code: string; consentVersion: string }) =>
+      api.joinTeam(code, consentVersion),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
+  });
+}
+
+export function useShareTeamLevels() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      teamId,
+      share,
+      consentVersion,
+    }: {
+      teamId: string;
+      share: boolean;
+      consentVersion?: string;
+    }) => api.shareTeamLevels(teamId, share, consentVersion),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
+  });
+}
+
+export function useLeaveTeam() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (teamId: string) => api.leaveTeam(teamId),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
   });
 }

@@ -58,6 +58,15 @@ export default function SettingsScreen() {
 
       <YourData />
 
+      <Section title="Teams">
+        <Row
+          icon="people-circle-outline"
+          title="Your teams"
+          detail="Join a team with a code, share or stop sharing, leave"
+          onPress={() => router.push('/teams')}
+        />
+      </Section>
+
       <Section title="Logging">
         <Row
           icon="list-outline"
