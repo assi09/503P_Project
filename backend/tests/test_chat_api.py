@@ -263,6 +263,33 @@ def test_a_reply_to_a_logging_question_is_given_with_its_request(client, engine,
     assert client.get("/chat", headers=headers).json()[-2]["text"] == "at 10:30"
 
 
+def test_a_reply_to_the_log_or_ask_question_continues_with_the_meal(client, engine, agent):
+    from app.agent.intent import Intent
+
+    headers = signed_in(client, engine)
+    unclear = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"nutrition": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.CLARIFY) for i in Intent},
+    )
+    # Only saying what was eaten: the agent asks whether to log it, without a model call.
+    agent.router.result = unclear
+    meal = "I ate chicken and rice: 50 g carbs, 40 g protein, 10 g fat"
+    _, asked = ask(client, headers, meal).json()
+    assert asked["text"].startswith("Would you like to prepare a logging draft")
+    assert agent.llm.requests == []
+    # "yes log" alone is unclear too, but it answers that question: the meal comes with it, and
+    # the logging tool is offered.
+    agent.llm.turns.append(submission("Which meal was it?"))
+    ask(client, headers, "yes log")
+    request = agent.llm.requests[-1]
+    task = request["messages"][1]["content"]
+    assert f"Earlier request: {meal}" in task
+    assert "Their reply: yes log" in task
+    assert "propose_food_log" in json.dumps(request.get("tools", []))
+
+
 # Attachments
 
 
