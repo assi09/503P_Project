@@ -21,6 +21,7 @@ export const keys = {
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
   myTeams: ['me', 'teams'] as const,
+  teams: ['teams'] as const,
 };
 
 /** A day's numbers; 'latest' is the newest day with data. Kept while moving between days. */
@@ -267,5 +268,51 @@ export function useLeaveTeam() {
   return useMutation({
     mutationFn: (teamId: string) => api.leaveTeam(teamId),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.myTeams }),
+  });
+}
+
+// Teams, as a supervisor
+
+export function useTeams(enabled = true) {
+  return useQuery({ queryKey: keys.teams, queryFn: api.getTeams, enabled });
+}
+
+export function useCreateTeam() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.createTeam(name),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.teams }),
+  });
+}
+
+export function useRotateTeamCode() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (teamId: string) => api.rotateTeamCode(teamId),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.teams }),
+  });
+}
+
+export function useTeamReports(teamId?: string) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'reports'],
+    queryFn: () => api.getTeamReports(teamId!),
+    enabled: !!teamId,
+  });
+}
+
+export function useTeamReport(teamId?: string, week?: ISODate) {
+  return useQuery({
+    queryKey: [...keys.teams, teamId, 'report', week],
+    queryFn: () => api.getTeamReport(teamId!, week!),
+    enabled: !!teamId && !!week,
+  });
+}
+
+export function useMakeTeamReport() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (teamId: string) => api.makeTeamReport(teamId),
+    onSuccess: (_, teamId) => client.invalidateQueries({ queryKey: [...keys.teams, teamId] }),
   });
 }

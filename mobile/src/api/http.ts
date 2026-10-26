@@ -20,7 +20,10 @@ import type {
   MetricSeries,
   Report,
   SignedIn,
+  SupervisedTeam,
   TeamPreview,
+  TeamReport,
+  TeamReportSummary,
 } from './types';
 
 const TIMEOUT_MS = 15_000;
@@ -132,6 +135,16 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         consentVersion,
       }),
     leaveTeam: (teamId) => post<void>(baseUrl, `/me/teams/${encodeURIComponent(teamId)}/leave`),
+    getTeams: () => request<SupervisedTeam[]>(baseUrl, '/teams'),
+    createTeam: (name) => post<SupervisedTeam>(baseUrl, '/teams', { name }),
+    rotateTeamCode: (teamId) =>
+      post<SupervisedTeam>(baseUrl, `/teams/${encodeURIComponent(teamId)}/invite-code`),
+    getTeamReports: (teamId) =>
+      request<TeamReportSummary[]>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`),
+    getTeamReport: (teamId, week) =>
+      request<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports/${week}`),
+    makeTeamReport: (teamId, week) =>
+      post<TeamReport>(baseUrl, `/teams/${encodeURIComponent(teamId)}/reports`, { week }, 60_000),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
     getDay: (date) => request<DaySummary>(baseUrl, `/days/${encodeURIComponent(date)}`),
     getWorkouts: (date) => request<DayWorkouts>(baseUrl, `/days/${date}/workouts`),
