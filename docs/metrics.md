@@ -94,6 +94,8 @@ the source. Days are the device's local calendar days.
 | `time_in_bed` | `sleep` | length of the sleep session |
 | `sleep_efficiency` | `sleep` | **our definition**: minutes asleep / time in bed; the API has no efficiency |
 | `bedtime_hour` | `sleep` | session start in local time |
+| `hr_zone_light_`, `_moderate_`, `_vigorous_`, `_peak_minutes` | `time-in-heart-rate-zone` | daily roll-up, seconds per zone / 60; an absent zone is 0. Fitbit's own zones from heart-rate reserve: `MODERATE + 2 × VIGOROUS + 2 × PEAK` equals Active Zone Minutes within 1 minute on 44 of 52 days, so they are fat burn, cardio and peak; `LIGHT` is below fat burn |
+| `still_minutes`, `still_hr_above_resting` | `activity-level`, `heart-rate` | **ours**: awake minutes labeled `SEDENTARY`, not within 10 minutes after a moderately or very active minute, that have a heart rate (60 s roll-ups, about one request per day); and their mean heart rate minus that day's resting rate. Inputs of the stress score ([scores.md](scores.md)) |
 
 **Not available from the API:** `cardio_load`, `readiness` and `sleep_score` (no such data types),
 and `sedentary_minutes`: the API's `sedentary-period` counts bouts of sitting, which no formula
