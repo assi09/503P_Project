@@ -60,6 +60,7 @@ Put the owner's email in `.env` as `FA_ADMIN_EMAILS=["you@example.com"]`, then:
 python -m app.auth pending                    # sign-ups waiting
 python -m app.auth approve you@example.com    # also how the owner approves their own account
 python -m app.auth set-password you@example.com   # sets a password (asked without echo)
+python -m app.auth set-role you@example.com supervisor   # may create teams (or: member)
 ```
 
 `set-password` is how the owner claims the account `python -m app.sync pull` created, and how a

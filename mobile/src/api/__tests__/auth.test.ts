@@ -21,7 +21,12 @@ describe('mock accounts', () => {
       email: '  New@Example.com ',
       password: 'long enough password',
     });
-    expect(account).toEqual({ email: 'new@example.com', status: 'pending', isAdmin: false });
+    expect(account).toEqual({
+      email: 'new@example.com',
+      status: 'pending',
+      isAdmin: false,
+      role: 'member',
+    });
     await saveToken(token);
     await expect(mockClient.getAccount()).resolves.toEqual(account);
   });

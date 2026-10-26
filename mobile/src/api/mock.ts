@@ -472,13 +472,14 @@ let accounts: MockAccount[] = [
     ...DEMO_OWNER,
     status: 'approved',
     isAdmin: true,
+    role: 'member',
     requestedAt: new Date().toISOString(),
   },
 ];
 const sessions = new Map<string, string>(); // token -> account id
 
-function publicAccount({ email, status, isAdmin }: MockAccount): Account {
-  return { email, status, isAdmin };
+function publicAccount({ email, status, isAdmin, role }: MockAccount): Account {
+  return { email, status, isAdmin, role };
 }
 
 function signedIn(account: MockAccount): SignedIn {
@@ -671,6 +672,7 @@ export const mockClient: ApiClient = {
         password,
         status: 'pending',
         isAdmin: false,
+        role: 'member',
         requestedAt: new Date().toISOString(),
       };
       accounts = [...accounts, account];

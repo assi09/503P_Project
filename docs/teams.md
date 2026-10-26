@@ -7,8 +7,9 @@ Fitbit, and if they have one they connect it like anyone else.
 
 This sends health data toward an employer, so the design starts from what the supervisor may
 **not** see. There are two layers. Joining a team shares only team aggregates. Showing your own
-named levels is a separate switch that each person turns on and off themselves. Status: planned,
-nothing built yet.
+named levels is a separate switch that each person turns on and off themselves. Status: roles,
+teams, joining, leaving and the levels switch are built (backend, step 2 below); the scores
+behind the levels exist ([scores.md](scores.md)); team statistics, reports and screens are next.
 
 ## What the supervisor sees, and what they never see
 
@@ -31,7 +32,8 @@ nothing built yet.
 
 ## Joining and leaving
 
-1. The owner of the app marks an account as a supervisor (`python -m app.auth make-supervisor`).
+1. The owner of the app marks an account as a supervisor
+   (`python -m app.auth set-role <email> supervisor`; `member` takes it back).
 2. The supervisor creates a team and gets an invite code, which they can rotate at any time.
 3. An employee enters the code in Settings and reads a consent screen: what is shared (weekly
    team aggregates with at least 5 people, no names, no daily values), with whom, and how to
@@ -44,9 +46,27 @@ nothing built yet.
    no one, but named levels of someone who left or switched off are no longer shown, even for
    past weeks.
 
-Joining, leaving, switching named levels on or off, code rotation and every time a supervisor
-opens named levels are written to the audit log. The consent text is versioned,
-and each membership records the version the person agreed to.
+Creating a team, joining, leaving, switching named levels on or off and code rotation are written
+to `team_events`, an append-only log of who did what and when (no health data). Every time a
+supervisor opens named levels will be logged there too, with the report screens. Both consent
+texts are versioned in `backend/app/teams/memberships.py`; each membership records the versions
+the person agreed to.
+
+## The API (built)
+
+| Who | Endpoint | What |
+|---|---|---|
+| Supervisor | `POST /teams`, `GET /teams`, `GET /teams/{id}` | create a team; list and read one's own teams (name, code, a count of members) |
+| Supervisor | `POST /teams/{id}/invite-code` | a new code; the old one stops working, members stay |
+| Anyone approved | `POST /teams/preview` `{code}` | the team, its supervisor and the consent text, before agreeing |
+| Anyone approved | `POST /teams/join` `{code, consentVersion}` | joins; refused if the version is not the current one, so the text was read |
+| Member | `GET /me/teams` | the person's teams, with whether their levels are shared |
+| Member | `POST /me/teams/{id}/levels` `{share, consentVersion}` | the second consent; turning it on needs the current levels text's version |
+| Member | `POST /me/teams/{id}/leave` | leaves, which also turns sharing off |
+
+Another supervisor's team answers like one that does not exist. Wrong codes count like wrong
+passwords: 10 in 15 minutes and the person must wait, so codes cannot be guessed. A supervisor
+cannot join their own team. Codes are 8 characters without look-alikes (0/O, 1/I/L).
 
 ## How the numbers are made
 
@@ -105,9 +125,10 @@ Small PRs, each green and verified:
 
 1. This document.
 2. Roles, teams and memberships (migration 0009), join and leave, the team API, access-control
-   tests.
+   tests. **Done.**
 3. Strain and stress for everyone ([scores.md](scores.md)): the daily inputs at sync, the
-   scores and their tests, then Strain and Stress among Today's key numbers. This step is useful
+   scores and their tests, then Strain and Stress among Today's key numbers. **Done**, and in
+   Ask. This step is useful
    on its own, before any team exists.
 4. Team statistics with calibration tests, and the named weekly levels behind the opt-in.
 5. The weekly report: templated, then the language-model text with the verifier and fallback,

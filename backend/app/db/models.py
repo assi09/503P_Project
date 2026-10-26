@@ -36,6 +36,17 @@ CHAT_ROLES = ("user", "assistant")
 # A sign-up waits for the owner's approval: the Google Health app is in Testing mode, so each
 # person must also be added as a test user by hand before they can connect their data.
 USER_STATUSES = ("pending", "approved", "rejected")
+# A supervisor can create teams and read their weekly team reports (docs/teams.md); the owner
+# grants the role. Everyone else is a member, who may join teams.
+USER_ROLES = ("member", "supervisor")
+TEAM_EVENTS = (
+    "created",
+    "code_rotated",
+    "joined",
+    "left",
+    "levels_shared",
+    "levels_unshared",
+)
 
 
 def _now() -> datetime:
@@ -52,6 +63,9 @@ class User(Base):
         CheckConstraint(
             f"status IN ({', '.join(repr(s) for s in USER_STATUSES)})", name="ck_users_status"
         ),
+        CheckConstraint(
+            f"role IN ({', '.join(repr(r) for r in USER_ROLES)})", name="ck_users_role"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -61,6 +75,7 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(256), default=None)
     status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    role: Mapped[str] = mapped_column(String(16), default="member", server_default="member")
 
 
 class AuthSession(Base):
@@ -380,4 +395,76 @@ class HealthActionEvent(Base):
     version: Mapped[int] = mapped_column()
     event: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Team(Base):
+    """A supervisor's group of people. The supervisor sees aggregates, never a member's data."""
+
+    __tablename__ = "teams"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    supervisor_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(80))
+    invite_code: Mapped[str] = mapped_column(String(16), unique=True)
+    report_email: Mapped[str | None] = mapped_column(String(320), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class TeamMembership(Base):
+    """One person in one team, kept after they leave as a record of what they agreed to.
+
+    Joining shares only team aggregates. Showing one's own named weekly levels is a second,
+    separate consent, off until the person turns it on.
+    """
+
+    __tablename__ = "team_memberships"
+    __table_args__ = (
+        Index(
+            "uq_team_memberships_active",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("left_at IS NULL"),
+            postgresql_where=text("left_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    consent_version: Mapped[str] = mapped_column(String(32))
+    share_levels: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    levels_consent_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    levels_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+
+class TeamEvent(Base):
+    """Append-only record of who joined, left, shared or changed a team's code, and when."""
+
+    __tablename__ = "team_events"
+    __table_args__ = (
+        CheckConstraint(
+            f"event IN ({', '.join(repr(e) for e in TEAM_EVENTS)})", name="ck_team_events_event"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+    event: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
