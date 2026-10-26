@@ -194,15 +194,17 @@ function ComparisonText({ metric, partial }: { metric: DayMetric; partial: boole
   const comparison =
     partial && isAccumulating(metric.metric) ? null : compare(metric.value, metric.usual);
   const text =
-    partial && isAccumulating(metric.metric)
-      ? 'So far today'
-      : comparison === 'above'
-        ? 'Above usual'
-        : comparison === 'below'
-          ? 'Below usual'
-          : comparison === 'usual'
-            ? 'Within usual'
-            : 'No usual yet';
+    metric.value === null
+      ? 'Not enough data yet'
+      : partial && isAccumulating(metric.metric)
+        ? 'So far today'
+        : comparison === 'above'
+          ? 'Above usual'
+          : comparison === 'below'
+            ? 'Below usual'
+            : comparison === 'usual'
+              ? 'Within usual'
+              : 'No usual yet';
   return (
     <View style={styles.comparison}>
       {(comparison === 'above' || comparison === 'below') && (
