@@ -340,6 +340,8 @@ def _answer(
                 and (reply.route.expert in draft_tools or reply.route.action == "general")
                 and (
                     reply.route.classification.intent == Intent.LOG
+                    # Asking "log it, or ask about your data?" waits for the answer too.
+                    or result.stop_reason == "clarification"
                     or (any(step.get("continuing_log_expert") for step in result.trace))
                 )
                 else None,
