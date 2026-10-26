@@ -34,6 +34,8 @@ import type {
   SendOptions,
   SignedIn,
   Strain,
+  TeamPreview,
+  Membership,
 } from './types';
 
 const DAYS = 28;
@@ -572,7 +574,78 @@ function transition(id: string, version: number, from: string[], to: HealthActio
   return { ...record.action, log: { ...record.action.log } };
 }
 
+// One made-up team to join with the code DEMO2345, worded like the backend's consent texts.
+const MOCK_TEAM = { id: 't1', name: 'Design', code: 'DEMO2345', supervisor: 'lead@patterns.app' };
+const MOCK_CONSENT = {
+  consent:
+    'Your supervisor will see weekly figures about the whole team: how its sleep, activity, recovery, strain and stress changed, each built from at least 5 people. They will not see your name, your own values, your days, your chats or anything else from your account, and they will not see whether you joined. You can leave at any time in Settings; from then on your data is left out of the team\'s figures.',
+  consentVersion: 'teams-v1',
+  levelsConsent:
+    'Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week\'s average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.',
+  levelsConsentVersion: 'team-levels-v1',
+};
+let myTeams: Membership[] = [];
+
+function mockTeam(code: string) {
+  if (code.toUpperCase().replace(/[^A-Z0-9]/g, '') !== MOCK_TEAM.code) {
+    throw new ApiError('No team has this code. Check it with your supervisor.', 'unknown_code', 404);
+  }
+  return MOCK_TEAM;
+}
+
+function ownMembership(teamId: string): Membership {
+  const membership = myTeams.find((m) => m.teamId === teamId);
+  if (!membership) throw new ApiError('You are not in this team.', 'not_found', 404);
+  return membership;
+}
+
 export const mockClient: ApiClient = {
+  previewTeam: (code) =>
+    later<TeamPreview>(() => {
+      const team = mockTeam(code);
+      return {
+        team: team.name,
+        supervisor: team.supervisor,
+        consent: MOCK_CONSENT.consent,
+        consentVersion: MOCK_CONSENT.consentVersion,
+      };
+    }),
+  joinTeam: (code, consentVersion) =>
+    later<Membership>(() => {
+      const team = mockTeam(code);
+      if (consentVersion !== MOCK_CONSENT.consentVersion) {
+        throw new ApiError('What joining means has changed. Read it again.', 'consent_changed', 409);
+      }
+      if (myTeams.some((m) => m.teamId === team.id)) {
+        throw new ApiError('You are already in this team.', 'already_member', 409);
+      }
+      const membership: Membership = {
+        teamId: team.id,
+        team: team.name,
+        supervisor: team.supervisor,
+        joinedAt: new Date().toISOString(),
+        shareLevels: false,
+        levelsConsent: MOCK_CONSENT.levelsConsent,
+        levelsConsentVersion: MOCK_CONSENT.levelsConsentVersion,
+      };
+      myTeams = [...myTeams, membership];
+      return membership;
+    }),
+  getMyTeams: () => later(() => myTeams),
+  shareTeamLevels: (teamId, share, consentVersion) =>
+    later<Membership>(() => {
+      const membership = ownMembership(teamId);
+      if (share && consentVersion !== membership.levelsConsentVersion) {
+        throw new ApiError('Read what sharing your levels means first.', 'consent_changed', 409);
+      }
+      membership.shareLevels = share;
+      return membership;
+    }),
+  leaveTeam: (teamId) =>
+    later(() => {
+      ownMembership(teamId);
+      myTeams = myTeams.filter((m) => m.teamId !== teamId);
+    }),
   getActions: () =>
     later(() => {
       const owner = actionAccount().id;

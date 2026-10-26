@@ -265,6 +265,25 @@ export interface GoogleStatus {
   missingScopes: string[]; // permissions the person unticked on Google's page
 }
 
+/** What joining a team means, shown before the person agrees (docs/teams.md). */
+export interface TeamPreview {
+  team: string;
+  supervisor: string; // their email: who will see the team's figures
+  consent: string;
+  consentVersion: string;
+}
+
+/** A team the person is in. Sharing their own weekly levels is a second, separate consent. */
+export interface Membership {
+  teamId: string;
+  team: string;
+  supervisor: string;
+  joinedAt: ISODateTime;
+  shareLevels: boolean;
+  levelsConsent: string;
+  levelsConsentVersion: string;
+}
+
 export interface ApiClient {
   getActions(): Promise<HealthAction[]>;
   getAction(id: string): Promise<HealthAction>;
@@ -303,6 +322,11 @@ export interface ApiClient {
   getNotificationSettings(): Promise<NotificationSettings>;
   updateNotificationSettings(settings: NotificationSettings): Promise<NotificationSettings>;
   getDataStatus(): Promise<DataStatus>;
+  previewTeam(code: string): Promise<TeamPreview>;
+  joinTeam(code: string, consentVersion: string): Promise<Membership>;
+  getMyTeams(): Promise<Membership[]>;
+  shareTeamLevels(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
+  leaveTeam(teamId: string): Promise<void>;
 }
 
 export type HealthLog =

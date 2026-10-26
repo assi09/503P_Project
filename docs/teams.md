@@ -184,7 +184,11 @@ Small PRs, each green and verified:
 5. The weekly report: templated, stored, the CLI and the API; then the language-model text with
    its checks and the templated text as fallback, with real runs on a synthetic team, logged in
    [costs.md](costs.md) and [experiments.md](experiments.md). **Done.**
-6. Email: a console mailer for development and an HTTP provider.
+6. Email: a console mailer for development and an HTTP provider. **Deferred** (2026-10-26):
+   reports are read in the app for now. Later: Resend (one HTTP call with `httpx`, 100 emails a
+   day free, `FA_EMAIL_API_KEY` in `.env`), a console mailer writing to `data/outbox/` for
+   development, the headline, aggregate figures and a link in each email (never named levels),
+   `emailed_at` already exists on `team_reports`. Real emails only after deployment.
 7. App, employee side: join, consent, leave, the named-levels switch.
 8. App, supervisor side: Team tab, report, named levels, team settings.
 9. Scheduling, with the deployment.

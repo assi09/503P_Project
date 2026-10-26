@@ -16,9 +16,11 @@ import type {
   GoogleStatus,
   HealthAction,
   HourlySteps,
+  Membership,
   MetricSeries,
   Report,
   SignedIn,
+  TeamPreview,
 } from './types';
 
 const TIMEOUT_MS = 15_000;
@@ -120,6 +122,16 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         `/admin/access-requests/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`,
       ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
+    previewTeam: (code) => post<TeamPreview>(baseUrl, '/teams/preview', { code }),
+    joinTeam: (code, consentVersion) =>
+      post<Membership>(baseUrl, '/teams/join', { code, consentVersion }),
+    getMyTeams: () => request<Membership[]>(baseUrl, '/me/teams'),
+    shareTeamLevels: (teamId, share, consentVersion) =>
+      post<Membership>(baseUrl, `/me/teams/${encodeURIComponent(teamId)}/levels`, {
+        share,
+        consentVersion,
+      }),
+    leaveTeam: (teamId) => post<void>(baseUrl, `/me/teams/${encodeURIComponent(teamId)}/leave`),
     getLatestReport: () => request<Report>(baseUrl, '/reports/latest'),
     getDay: (date) => request<DaySummary>(baseUrl, `/days/${encodeURIComponent(date)}`),
     getWorkouts: (date) => request<DayWorkouts>(baseUrl, `/days/${date}/workouts`),
