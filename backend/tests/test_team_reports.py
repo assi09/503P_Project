@@ -107,13 +107,21 @@ def test_changes_read_in_the_metrics_units(metric, value, text):
     assert change_text(metric, value) == text
 
 
-def test_the_weekly_command_makes_each_teams_report_once(engine, monkeypatch, capsys):
+def test_the_weekly_command_makes_and_emails_each_teams_report_once(
+    engine, monkeypatch, capsys, tmp_path
+):
     import app.teams.__main__ as cli
 
     team_with(engine, 5)
     monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    monkeypatch.setattr(cli.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(cli.settings, "email_backend", "outbox")
     assert teams_cli(["weekly", "--week", WEEK.start.isoformat()]) == 0
-    assert "1 reports ready, 0 withheld" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "1 reports ready, 0 withheld" in out and "1 emails written" in out
+    assert len(list((tmp_path / "outbox").glob("*.html"))) == 1
+    assert teams_cli(["weekly", "--week", WEEK.start.isoformat()]) == 0
+    assert "0 emails written" in capsys.readouterr().out  # already sent
     assert teams_cli(["weekly", "--week", "2099-01-05"]) == 1  # not over yet
     with session_scope(engine) as db:
         assert len(db.scalars(select(TeamReport)).all()) == 1

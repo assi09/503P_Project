@@ -9,7 +9,8 @@ This sends health data toward an employer, so the design starts from what the su
 **not** see. There are two layers. Joining a team shares only team aggregates. Showing your own
 named levels is a separate switch that each person turns on and off themselves. Status: roles,
 teams, joining, leaving, the levels switch, team statistics, weekly reports (templated or
-model-written, checked) and the app screens are built; email waits until after deployment.
+model-written, checked), the app screens and the weekly email are built; the Monday schedule
+comes with deployment.
 
 ## What the supervisor sees, and what they never see
 
@@ -170,8 +171,14 @@ For each person who opted in, the Team tab shows one row for the past week:
   platform's scheduler runs it on Mondays. A team and week are made once, so reruns are safe. The
   supervisor can also ask for one on demand, rate-limited.
 - **Delivery.** In the app, a Team tab for supervisors with this week's report and past weeks.
-  By email, the headline, the aggregate figures and a link to the app; the email provider's key
-  lives only in `.env`. Real emails are sent only after deployment.
+  By email, the headline, the counts and each metric's people-lower/people-higher bar, and a link
+  to the app; never named levels, even for people who share them (an email is easily forwarded).
+  `python -m app.teams weekly` emails each report once (`emailed_at`) to the team's report address
+  or the supervisor; `--no-email` skips it. Emails go to `data/outbox/` (an .html to open and a
+  .txt) unless `FA_EMAIL_BACKEND=resend`, which sends through Resend with `FA_EMAIL_API_KEY` (a
+  sending-only key, in `.env` only) from `FA_EMAIL_FROM`. Without a verified domain Resend only
+  delivers from `onboarding@resend.dev` to the Resend account's own address. A failed send keeps
+  the report and is retried on the next run.
 
 ## Build order
 
@@ -189,11 +196,9 @@ Small PRs, each green and verified:
 5. The weekly report: templated, stored, the CLI and the API; then the language-model text with
    its checks and the templated text as fallback, with real runs on a synthetic team, logged in
    [costs.md](costs.md) and [experiments.md](experiments.md). **Done.**
-6. Email: a console mailer for development and an HTTP provider. **Deferred** (2026-10-26):
-   reports are read in the app for now. Later: Resend (one HTTP call with `httpx`, 100 emails a
-   day free, `FA_EMAIL_API_KEY` in `.env`), a console mailer writing to `data/outbox/` for
-   development, the headline, aggregate figures and a link in each email (never named levels),
-   `emailed_at` already exists on `team_reports`. Real emails only after deployment.
+6. Email: an outbox mailer for development and Resend for real sending (`app/teams/email.py`).
+   **Done.** The link points at `FA_APP_URL`, so it only opens the report from elsewhere once the
+   app is deployed.
 7. App, employee side: join, consent, leave, the named-levels switch. **Done** (Settings ->
    Teams).
 8. App, supervisor side: Team tab, report, named levels, team settings. **Done**: a Team tab
@@ -204,6 +209,6 @@ Small PRs, each green and verified:
 
 ## Open
 
-- Which email provider, once the backend is deployed.
+- A verified sending domain for Resend, so reports can reach any supervisor's address.
 - Whether 5 is the right floor for a demo team; it can only go up, never down.
 - Whether a supervisor can run more than one team (the model allows it; the first UI shows one).
