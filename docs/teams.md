@@ -70,21 +70,40 @@ cannot join their own team. Codes are 8 characters without look-alikes (0/O, 1/I
 
 ## How the numbers are made
 
-All deterministic, in `backend/app/analysis/team.py`; the language model computes nothing.
+All deterministic, in `backend/app/analysis/team.py` (built); the language model computes nothing.
 
-1. **Each member on their own history.** A member's days come from one source, as everywhere
-   else, with low-wear days removed. For each metric: the mean of the last 7 days minus the mean
-   of the 28 days before.
-2. **Only changes are pooled.** People differ in device, baseline and habits, so raw values from
+1. **The week** runs Monday to Sunday, against the 28 days before it.
+2. **Each member on their own history.** A member's days come from one source, as everywhere
+   else, with the app's scores added and activity left out on barely worn days. For each metric
+   (time asleep, bedtime, steps, Active Zone Minutes, resting heart rate, HRV, recovery, strain,
+   stress): the week's mean minus the mean of the 28 days before, and the same in units of the
+   person's own spread over those 28 days. A member counts for a metric with at least 4 days of
+   the week and 14 of the 28; otherwise they are left out of that metric, not guessed.
+3. **Only changes are pooled.** People differ in device, baseline and habits, so raw values from
    different people are never averaged; each person's *change* against their own baseline is.
-3. **Team change per metric.** A Wilcoxon signed-rank test of whether the members' changes are
-   centred on zero, with the median change and the counts up and down. Benjamini-Hochberg across
-   metrics, as in the personal screen.
-4. **Weekday pattern.** Each member's deviation from their own weekly mean, by weekday, pooled.
-5. **Privacy floor** applied last: anything with fewer than 5 contributors is dropped.
+4. **Team change per metric.** A one-sample t-test of whether the members' changes, in their own
+   units, are centred on zero; so one person with a wide spread cannot decide the team. (A rank
+   test was planned, but with 5 people its smallest possible p-value is 0.0625: a small team
+   could never show a change.) The report shows the median change in the metric's units, its
+   quartiles and the counts up and down. Benjamini-Hochberg across metrics, as in the personal
+   screen; a change is reported at an adjusted p below 0.05.
+5. **Weekday pattern** (sleep, steps, stress), descriptive only: each member's deviation from
+   their own mean over the five weeks, by weekday, and the median across members.
+6. **Privacy floor:** with fewer than 5 active members there are no figures at all; a metric with
+   fewer than 5 contributors carries only its count, no median and no counts up or down; a
+   weekday with fewer than 5 is left out.
 
-Tests check these properties over many seeds: false-positive rate near alpha when nothing
-changed, power on planted team-wide effects in synthetic members, and suppression below 5.
+Tests, over hundreds of made-up teams whose members each have their own level, spread and
+day-to-day carry-over:
+
+| Check | Result (1000 or 500 teams) |
+|---|---|
+| False alarms when nothing changed, at the 5% level | 5.9% with 5 members, 3.4% with 8, 3.9% with 20 |
+| A whole-team shift of 1 SD found | 79% with 5 members, 97% with 8 |
+| A shift of 0.5 SD found | 64% with 10 members, 93% with 20 |
+
+Plus: one person's raw scale does not decide the team, a planted drop in sleep across 8
+synthetic members is reported, and nothing below 5 people carries figures.
 
 ## Named weekly levels (opt-in)
 
@@ -99,7 +118,8 @@ For each person who opted in, the Team tab shows one row for the past week:
 
 - **Each level is measured against the person's own previous four weeks.** "Usual" is the middle
   half of their weekly means (the same idea as Today's usual range), so a level says "unusual for
-  them" and never compares people. Rows are listed alphabetically, never ranked.
+  them" and never compares people; at least three earlier weeks with 4 days are needed. Rows are
+  listed alphabetically, never ranked. Computed by `member_levels` (built).
 - A score with fewer than 4 days of data that week shows "not enough data" instead of a level.
 - Weekly values only, no days, and only these four scores.
 - The person sees their own row in Settings, exactly as the supervisor sees it.
@@ -131,6 +151,7 @@ Small PRs, each green and verified:
    Ask. This step is useful
    on its own, before any team exists.
 4. Team statistics with calibration tests, and the named weekly levels behind the opt-in.
+   **Done.**
 5. The weekly report: templated, then the language-model text with the verifier and fallback,
    then the CLI. One real run on a synthetic team, logged in [costs.md](costs.md) and
    [experiments.md](experiments.md).
