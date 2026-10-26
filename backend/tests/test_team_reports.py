@@ -1,0 +1,198 @@
+"""Weekly team reports: what is stored, what the supervisor sees, and what stays out."""
+
+import json
+from datetime import UTC, date, datetime, timedelta
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+
+from app.analysis.team import MIN_MEMBERS, week_of
+from app.api import auth, teams
+from app.api.main import create_app
+from app.auth import accounts
+from app.auth.accounts import LoginThrottle
+from app.db.daily import save_daily
+from app.db.models import Team, TeamEvent, TeamReport, User
+from app.db.session import session_scope
+from app.synthetic import Step, generate
+from app.teams import memberships, reports
+from app.teams.__main__ import main as teams_cli
+
+NOW = datetime(2026, 10, 26, 9, tzinfo=UTC)  # a Monday
+WEEK = week_of(date(2026, 10, 19))  # the last full week: 19 to 25 October
+PASSWORD = "correct horse battery"
+
+
+@pytest.fixture
+def engine(tmp_path):
+    url = f"sqlite:///{tmp_path / 'test.db'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "head")
+    return create_engine(url)
+
+
+def team_with(engine, size: int, effects=(), sharing: tuple[int, ...] = ()) -> tuple:
+    """A supervisor and `size` members with made-up live data; members in `sharing` share levels."""
+    start = WEEK.start - timedelta(days=80)
+    with session_scope(engine) as db:
+        boss = User(email="boss@example.com", status="approved", role="supervisor")
+        db.add(boss)
+        db.flush()
+        team = memberships.create_team(db, boss, "Design", None, NOW)
+        for i in range(size):
+            person = User(email=f"member{i:02d}@example.com", status="approved")
+            db.add(person)
+            db.flush()
+            save_daily(db, person.id, "google_health", generate(start, 87, effects, seed=i).frame)
+            memberships.join(db, team, person, NOW)
+            if i in sharing:
+                memberships.share_levels(db, person, str(team.id), True, NOW)
+        return team.id, boss.id
+
+
+def report_for(engine, team_id) -> TeamReport:
+    with session_scope(engine) as db:
+        report = reports.build_report(db, db.get(Team, team_id), WEEK, NOW)
+        db.expunge(report)
+        return report
+
+
+def test_a_report_holds_aggregates_with_every_figure_from_its_evidence(engine):
+    team_id, _ = team_with(engine, 7, (Step("sleep_minutes", WEEK.start, -70),))
+    report = report_for(engine, team_id)
+    assert report.status == "ready" and report.members_included == 7
+    assert "time asleep" in report.headline.lower()
+    sleep = next(s for s in report.body["sections"] if s["metric"] == "sleep_minutes")
+    assert sleep["status"] == "changed" and "fell" in sleep["text"]
+    stats = report.evidence[sleep["evidence_id"]]["stats"]
+    assert reports.change_text("sleep_minutes", stats["median_change"]) in sleep["text"]
+    assert f"{stats['members_down']} lower" in sleep["text"]
+    # Nothing about anyone in particular is stored.
+    stored = json.dumps([report.headline, report.body, report.evidence])
+    assert "@example.com" not in stored and "member0" not in stored
+
+
+def test_a_week_is_made_once(engine):
+    team_id, _ = team_with(engine, 5)
+    first, second = report_for(engine, team_id), report_for(engine, team_id)
+    assert first.id == second.id
+
+
+def test_too_few_people_with_data_withhold_the_report(engine):
+    team_id, _ = team_with(engine, MIN_MEMBERS - 1)
+    report = report_for(engine, team_id)
+    assert report.status == "withheld" and report.evidence == {}
+    assert report.body == {"sections": [], "weekdays": []}
+    assert f"{MIN_MEMBERS - 1} of the {MIN_MEMBERS}" in report.headline
+
+
+@pytest.mark.parametrize(
+    ("metric", "value", "text"),
+    [
+        ("sleep_minutes", -32.4, "-32 min"),
+        ("steps", 1250.0, "+1,250 steps"),
+        ("bedtime_hour", 0.2, "+12 min"),
+        ("strain", 1.25, "+1.2"),
+        ("resting_hr", -2.0, "-2.0 bpm"),
+    ],
+)
+def test_changes_read_in_the_metrics_units(metric, value, text):
+    assert reports.change_text(metric, value) == text
+
+
+def test_the_weekly_command_makes_each_teams_report_once(engine, monkeypatch, capsys):
+    import app.teams.__main__ as cli
+
+    team_with(engine, 5)
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    assert teams_cli(["weekly", "--week", WEEK.start.isoformat()]) == 0
+    assert "1 reports ready, 0 withheld" in capsys.readouterr().out
+    assert teams_cli(["weekly", "--week", "2099-01-05"]) == 1  # not over yet
+    with session_scope(engine) as db:
+        assert len(db.scalars(select(TeamReport)).all()) == 1
+
+
+# Through the API
+
+
+@pytest.fixture
+def client(engine, monkeypatch) -> TestClient:
+    monkeypatch.setattr(auth, "throttle", LoginThrottle())
+    monkeypatch.setattr(teams, "code_throttle", LoginThrottle(max_failures=10))
+    app = create_app()
+
+    def db():
+        with session_scope(engine) as session:
+            yield session
+
+    app.dependency_overrides[auth.get_db] = db
+    app.dependency_overrides[auth.now] = lambda: NOW
+    return TestClient(app)
+
+
+def signed_in(client, engine, email: str, role: str = "member") -> dict:
+    with session_scope(engine) as db:
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None:
+            client.post("/auth/signup", json={"email": email, "password": PASSWORD})
+            user = db.scalar(select(User).where(User.email == email))
+        user.status, user.role = "approved", role
+        accounts.set_password(db, user, PASSWORD)
+    token = client.post("/auth/login", json={"email": email, "password": PASSWORD}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_the_supervisor_reads_the_report_with_only_shared_levels(client, engine):
+    team_id, _ = team_with(engine, 6, sharing=(3, 1))
+    boss = signed_in(client, engine, "boss@example.com", "supervisor")
+    made = client.post(f"/teams/{team_id}/reports", json={}, headers=boss)
+    assert made.status_code == 200, made.text
+    body = made.json()
+    assert body["week"] == {"start": "2026-10-19", "end": "2026-10-25"}
+    assert body["minimumMembers"] == MIN_MEMBERS and body["generatedBy"] == "template"
+    assert all(s["evidenceId"] in body["evidence"] for s in body["sections"])
+    # Only the two who share, alphabetically, each with the four levels.
+    assert [row["member"] for row in body["levels"]] == [
+        "member01@example.com",
+        "member03@example.com",
+    ]
+    assert set(body["levels"][0]["levels"]) == {
+        "recovery_score",
+        "sleep_minutes",
+        "strain",
+        "stress_score",
+    }
+    listed = client.get(f"/teams/{team_id}/reports", headers=boss).json()
+    assert [r["week"]["start"] for r in listed] == ["2026-10-19"]
+    again = client.get(f"/teams/{team_id}/reports/2026-10-22", headers=boss)  # any day of it
+    assert again.status_code == 200
+    with session_scope(engine) as db:
+        viewed = db.scalars(select(TeamEvent).where(TeamEvent.event == "levels_viewed")).all()
+        assert len(viewed) == 2
+
+
+def test_a_member_who_stops_sharing_disappears_from_past_weeks(client, engine):
+    team_id, _ = team_with(engine, 5, sharing=(0,))
+    boss = signed_in(client, engine, "boss@example.com", "supervisor")
+    client.post(f"/teams/{team_id}/reports", json={}, headers=boss)
+    member = signed_in(client, engine, "member00@example.com")
+    client.post(f"/me/teams/{team_id}/levels", json={"share": False}, headers=member)
+    past = client.get(f"/teams/{team_id}/reports/2026-10-19", headers=boss).json()
+    assert past["levels"] == []
+
+
+def test_reports_are_for_the_teams_supervisor_and_full_weeks_only(client, engine):
+    team_id, _ = team_with(engine, 5)
+    boss = signed_in(client, engine, "boss@example.com", "supervisor")
+    this_week = client.post(f"/teams/{team_id}/reports", json={"week": "2026-10-27"}, headers=boss)
+    assert this_week.json()["error"]["code"] == "week_not_over"
+    missing = client.get(f"/teams/{team_id}/reports/2026-09-07", headers=boss)
+    assert missing.status_code == 404
+    other = signed_in(client, engine, "other@example.com", "supervisor")
+    assert client.get(f"/teams/{team_id}/reports", headers=other).status_code == 404
+    member = signed_in(client, engine, "member00@example.com")
+    assert client.post(f"/teams/{team_id}/reports", json={}, headers=member).status_code == 403

@@ -4,16 +4,21 @@ Only a supervisor's own teams are visible to them, and only as a count of member
 their own memberships. Reports come later (docs/teams.md, build order).
 """
 
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy import select
 
+from app.analysis.evidence import Evidence, Window
+from app.analysis.team import MIN_MEMBERS, week_of
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.auth.accounts import LoginThrottle
-from app.db.models import Team, TeamMembership, User
+from app.db.models import Team, TeamEvent, TeamMembership, TeamReport, User
 from app.teams import memberships as teams
+from app.teams import reports
 
 router = APIRouter(tags=["teams"])
 # Wrong codes count like wrong passwords, so codes cannot be guessed one after another.
@@ -78,6 +83,100 @@ def rotate_code(team_id: str, db: Db, clock: Now, user: Supervisor) -> schemas.T
     """A new code; the old one stops working, people already in the team stay."""
     team = teams.supervised_team(db, user, team_id)
     return _team(db, teams.rotate_code(db, team, user, clock))
+
+
+# Weekly reports
+
+
+def _week(report: TeamReport) -> schemas.Window:
+    return schemas.Window(start=report.week_start, end=report.week_start + timedelta(days=6))
+
+
+def _summary(report: TeamReport) -> schemas.TeamReportSummary:
+    return schemas.TeamReportSummary(
+        week=_week(report),
+        status=report.status,
+        headline=report.headline,
+        members_included=report.members_included,
+        created_at=report.created_at,
+    )
+
+
+def _evidence(stored: dict) -> schemas.Evidence:
+    evidence = Evidence.model_validate(stored)
+    return schemas.Evidence(
+        id=evidence.id,
+        tool=evidence.tool,
+        metrics=list(evidence.metrics),
+        windows=[schemas.Window(start=w.start, end=w.end) for w in evidence.windows],
+        n=evidence.n,
+        sufficient=evidence.sufficient,
+        stats=evidence.stats,
+    )
+
+
+def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.TeamReport:
+    week = Window(start=report.week_start, end=report.week_start + timedelta(days=6))
+    shared = reports.shared_levels(db, team, week)
+    if shared:
+        db.add(TeamEvent(team_id=team.id, user_id=user.id, event="levels_viewed", created_at=clock))
+    return schemas.TeamReport(
+        **_summary(report).model_dump(),
+        members_total=report.members_total,
+        minimum_members=MIN_MEMBERS,
+        sections=[schemas.ReportSection(**s) for s in report.body.get("sections", [])],
+        weekdays=[schemas.ReportSection(**w) for w in report.body.get("weekdays", [])],
+        evidence={key: _evidence(value) for key, value in report.evidence.items()},
+        generated_by=report.generated_by,
+        levels=[
+            schemas.SharedLevels(
+                member=email,
+                levels={
+                    m: schemas.TeamWeekLevel(mean=v.mean, level=v.level) for m, v in found.items()
+                },
+            )
+            for email, found in shared
+        ],
+    )
+
+
+@router.get("/teams/{team_id}/reports", response_model=list[schemas.TeamReportSummary])
+def list_reports(team_id: str, db: Db, user: Supervisor) -> list[schemas.TeamReportSummary]:
+    team = teams.supervised_team(db, user, team_id)
+    found = db.scalars(
+        select(TeamReport)
+        .where(TeamReport.team_id == team.id)
+        .order_by(TeamReport.week_start.desc())
+    )
+    return [_summary(report) for report in found]
+
+
+@router.get("/teams/{team_id}/reports/{week}", response_model=schemas.TeamReport)
+def get_report(
+    team_id: str, week: date, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamReport:
+    team = teams.supervised_team(db, user, team_id)
+    report = db.scalar(
+        select(TeamReport).where(
+            TeamReport.team_id == team.id, TeamReport.week_start == week_of(week).start
+        )
+    )
+    if report is None:
+        raise ApiError(404, "not_found", "There is no report for that week.")
+    return _report(db, team, report, user, clock)
+
+
+@router.post("/teams/{team_id}/reports", response_model=schemas.TeamReport)
+def make_report(
+    team_id: str, body: schemas.GenerateReport, db: Db, clock: Now, user: Supervisor
+) -> schemas.TeamReport:
+    """The report for a full week, made now if it was not made yet; never for a week in progress."""
+    team = teams.supervised_team(db, user, team_id)
+    latest = reports.last_full_week(clock.date())
+    week = week_of(body.week) if body.week else latest
+    if week.start > latest.start:
+        raise ApiError(409, "week_not_over", "A week's report is made once the week is over.")
+    return _report(db, team, reports.build_report(db, team, week, clock), user, clock)
 
 
 # Members

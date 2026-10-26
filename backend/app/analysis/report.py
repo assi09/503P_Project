@@ -48,6 +48,9 @@ METRICS: dict[str, MetricInfo] = {
     "rem_sleep_minutes": MetricInfo("REM sleep", "min"),
     "awake_in_bed_minutes": MetricInfo("Awake in bed", "min"),
     "skin_temp_variation_c": MetricInfo("Skin temperature", "°C", percent_change=False),
+    "recovery_score": MetricInfo("Recovery", "", percent_change=False),
+    "strain": MetricInfo("Strain", "", percent_change=False),
+    "stress_score": MetricInfo("Stress", "", percent_change=False),
 }
 
 
