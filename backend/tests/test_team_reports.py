@@ -264,3 +264,52 @@ def test_the_api_serves_the_prose_when_it_is_switched_on(client, engine, monkeyp
     assert body["narrative"] and all(
         set(p["evidenceIds"]) <= set(body["evidence"]) for p in body["narrative"]
     )
+
+
+def test_made_up_members_fill_a_team_for_a_ready_report(engine, monkeypatch, capsys):
+    from app.teams import __main__ as cli
+
+    with session_scope(engine) as db:
+        boss = User(email="boss@example.com", status="approved", role="supervisor")
+        db.add(boss)
+        db.flush()
+        code = memberships.create_team(db, boss, "Design", None, NOW).invite_code
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    monkeypatch.setattr(cli, "datetime", type("Clock", (), {"now": staticmethod(lambda _: NOW)}))
+
+    assert cli.main(["demo-members", code, "--count", "6", "--sharing", "2"]) == 0
+    assert "6 made-up members created, 6 joined, 2 sharing" in capsys.readouterr().out
+    # Again: the same people, their data replaced, nobody joined twice.
+    assert cli.main(["demo-members", code, "--count", "6", "--sharing", "2"]) == 0
+    assert "0 made-up members created, 0 joined" in capsys.readouterr().out
+
+    with session_scope(engine) as db:
+        team = db.scalar(select(Team))
+        assert memberships.active_members(db, team) == 6
+    report = report_for(engine, team.id)
+    assert report.status == "ready" and report.members_included == 6
+    sleep = next(s for s in report.body["sections"] if s["metric"] == "sleep_minutes")
+    assert sleep["status"] == "changed"
+    stress = next(s for s in report.body["sections"] if s["metric"] == "stress_score")
+    assert "not enough" not in stress["text"].lower()
+    with session_scope(engine) as db:
+        shared = reports.shared_levels(db, db.get(Team, team.id), WEEK)
+    assert len(shared) == 2
+
+
+@pytest.mark.parametrize(
+    ("argv", "url"),
+    [
+        (["demo-members", "NOPE2345"], "sqlite:///local.db"),
+        (["demo-members", "ANY", "--count", "0"], "sqlite:///local.db"),
+        (["demo-members", "ANY"], "postgresql://u:p@db.example.net:5432/app"),
+    ],
+)
+def test_made_up_members_are_refused_where_they_do_not_belong(engine, monkeypatch, argv, url):
+    from app.teams import __main__ as cli
+
+    monkeypatch.setattr(cli, "session_scope", lambda: session_scope(engine))
+    monkeypatch.setattr(cli.settings, "database_url", url)
+    assert cli.main(argv) == 1
+    with session_scope(engine) as db:
+        assert db.scalar(select(User)) is None
