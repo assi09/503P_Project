@@ -350,7 +350,7 @@ export interface ApiClient {
   logOut(): Promise<void>;
   getAccount(): Promise<Account>;
   getAccessRequests(): Promise<AccessRequest[]>; // admins only
-  decideAccessRequest(id: string, approve: boolean): Promise<Account>; // admins only
+  decideAccessRequest(id: string, approve: boolean, role?: Account['role']): Promise<Account>; // admins only; role on approval, member by default
   getGoogleStatus(): Promise<GoogleStatus>;
   connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /settings
   syncGoogle(): Promise<GoogleStatus>;

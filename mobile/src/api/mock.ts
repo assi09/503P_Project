@@ -976,12 +976,13 @@ export const mockClient: ApiClient = {
         .map<AccessRequest>(({ id, email, requestedAt }) => ({ id, email, requestedAt }));
     }),
 
-  decideAccessRequest: (id, approve) =>
+  decideAccessRequest: (id, approve, role = 'member') =>
     later(() => {
       adminAccount();
       const account = accounts.find((a) => a.id === id);
       if (!account) throw new ApiError('No such account.', 'not_found', 404);
       account.status = approve ? 'approved' : 'rejected';
+      if (approve) account.role = role;
       if (!approve) {
         // Like the backend: a rejected person is signed out everywhere.
         for (const [token, owner] of sessions) if (owner === id) sessions.delete(token);

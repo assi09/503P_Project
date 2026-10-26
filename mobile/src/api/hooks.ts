@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from './http';
 import { api } from './index';
 import type {
+  Account,
   ChatMessage,
   CheckIn,
   ISODate,
@@ -204,8 +205,8 @@ export function useAccessRequests() {
 export function useDecideAccessRequest() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
-      api.decideAccessRequest(id, approve),
+    mutationFn: ({ id, approve, role }: { id: string; approve: boolean; role?: Account['role'] }) =>
+      api.decideAccessRequest(id, approve, role),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.accessRequests }),
   });
 }

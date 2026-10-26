@@ -210,6 +210,7 @@ def test_the_owner_sees_and_approves_requests(client, engine):
         f"/admin/access-requests/{requests[0]['id']}/approve", headers=headers(token)
     )
     assert approved.json()["status"] == "approved"
+    assert approved.json()["role"] == "member"  # approving without a role keeps a member
     assert client.get("/auth/me", headers=headers(person["token"])).json()["status"] == "approved"
     assert client.get("/admin/access-requests", headers=headers(token)).json() == []
 
@@ -221,6 +222,34 @@ def test_rejecting_signs_the_person_out(client, engine):
     rejected = client.post(f"/admin/access-requests/{request_id}/reject", headers=headers(token))
     assert rejected.json()["status"] == "rejected"
     assert client.get("/auth/me", headers=headers(person["token"])).status_code == 401
+
+
+def test_the_owner_approves_a_supervisor(client, engine):
+    token = owner_token(client, engine)
+    person = sign_up(client, "lead@example.com")
+    request = client.get("/admin/access-requests", headers=headers(token)).json()[0]
+
+    approved = client.post(
+        f"/admin/access-requests/{request['id']}/approve",
+        json={"role": "supervisor"},
+        headers=headers(token),
+    )
+    assert approved.json()["role"] == "supervisor"
+    assert client.get("/auth/me", headers=headers(person["token"])).json()["role"] == "supervisor"
+    assert client.get("/teams", headers=headers(person["token"])).status_code == 200
+
+
+def test_an_unknown_role_is_refused(client, engine):
+    token = owner_token(client, engine)
+    sign_up(client, "person@example.com")
+    request = client.get("/admin/access-requests", headers=headers(token)).json()[0]
+    response = client.post(
+        f"/admin/access-requests/{request['id']}/approve",
+        json={"role": "admin"},
+        headers=headers(token),
+    )
+    assert response.status_code == 422
+    assert client.get("/admin/access-requests", headers=headers(token)).json() != []
 
 
 def test_only_an_approved_owner_is_an_admin(client, engine):

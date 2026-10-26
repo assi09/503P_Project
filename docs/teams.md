@@ -32,8 +32,9 @@ model-written, checked) and the app screens are built; email waits until after d
 
 ## Joining and leaving
 
-1. The owner of the app marks an account as a supervisor
-   (`python -m app.auth set-role <email> supervisor`; `member` takes it back).
+1. The owner of the app marks an account as a supervisor: **Approve as supervisor** in Settings
+   → Access requests, or `python -m app.auth set-role <email> supervisor` for an account already
+   approved (`member` takes it back).
 2. The supervisor creates a team and gets an invite code, which they can rotate at any time.
 3. An employee enters the code in Settings and reads a consent screen: what is shared (weekly
    team aggregates with at least 5 people, no names, no daily values), with whom, and how to
@@ -131,6 +132,10 @@ For each person who opted in, the Team tab shows one row for the past week:
 - `python -m app.teams weekly [--week <day>] [--team <id>]` makes every team's report for the
   last full week (Monday to Sunday) from each active member's live data. A team and week are made
   once, so reruns are safe; a week still in progress is refused.
+- `python -m app.teams demo-members <code> [--count 6] [--sharing 3]` fills a team with made-up
+  members (`demo-member-N@example.com`, data from `app.synthetic`, time asleep down an hour in the
+  last full week), to try a whole report before real people join. Local databases only; the
+  accounts cannot sign in; running it again replaces their data.
 - A report stores a headline and one section per metric ("Time asleep fell across the team:
   median change -32 min (1 of 7 higher, 6 lower)."), a weekday line for sleep, steps and stress,
   and the aggregate evidence each sentence cites. The text is templated: every number in it is

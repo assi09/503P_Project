@@ -119,10 +119,11 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     logOut: () => post<void>(baseUrl, '/auth/logout'),
     getAccount: () => request<Account>(baseUrl, '/auth/me'),
     getAccessRequests: () => request<AccessRequest[]>(baseUrl, '/admin/access-requests'),
-    decideAccessRequest: (id, approve) =>
+    decideAccessRequest: (id, approve, role) =>
       post<Account>(
         baseUrl,
         `/admin/access-requests/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`,
+        approve && role ? { role } : undefined,
       ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
     previewTeam: (code) => post<TeamPreview>(baseUrl, '/teams/preview', { code }),
