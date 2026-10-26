@@ -1,0 +1,13 @@
+{
+  "name": "Patterns",
+  "short_name": "Patterns",
+  "description": "Patterns in your own Fitbit data, each backed by a statistic you can inspect.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F2EA",
+  "theme_color": "#F7F2EA",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

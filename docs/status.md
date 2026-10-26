@@ -200,7 +200,9 @@ test entries left in the owner's Google were undone.
 Next, in order:
 
 1. **Deployment**: Railway (API and Postgres) with a public HTTPS address, a "Web application"
-   OAuth client listing its `/google/callback`, the web build on Vercel, the app in Expo Go.
+   OAuth client listing its `/google/callback`, the web build on Vercel, phones through "Add to
+   Home Screen" (free) or Expo Go. The repository side is ready; the account steps are in
+   [deployment.md](deployment.md).
 2. **Tracing (Langfuse) and the first evaluation** (40% of the grade), then the attack suite.
 3. UI plan steps 3-6: weekly workout summary, journal with habit impact, real reminders as phone
    notifications, fitness age ([ui-plan.md](ui-plan.md)).
