@@ -68,7 +68,7 @@ def test_a_report_holds_aggregates_with_every_figure_from_its_evidence(engine):
     team_id, _ = team_with(engine, 7, (Step("sleep_minutes", WEEK.start, -70),))
     report = report_for(engine, team_id)
     assert report.status == "ready" and report.members_included == 7
-    assert "time asleep" in report.headline.lower()
+    assert "time asleep fell" in report.headline.lower()  # which way, not just "changed"
     sleep = next(s for s in report.body["sections"] if s["metric"] == "sleep_minutes")
     assert sleep["status"] == "changed" and "fell" in sleep["text"]
     stats = report.evidence[sleep["evidence_id"]]["stats"]

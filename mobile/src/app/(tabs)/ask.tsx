@@ -20,6 +20,7 @@ import {
   useChat,
   useConversations,
   useDay,
+  useNoData,
   useReport,
   useSendMessage,
 } from '@/api/hooks';
@@ -28,6 +29,7 @@ import { type Anchor, AttachSheet } from '@/components/attach';
 import { MessageBubble, Thinking } from '@/components/chat';
 import { Composer } from '@/components/composer';
 import { ConversationList, IconButton } from '@/components/conversations';
+import { NoData } from '@/components/NoData';
 import { QueryState } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Chip } from '@/components/ui';
@@ -173,6 +175,8 @@ export default function AskScreen() {
   const pendingText = send.isPending ? send.variables?.text : undefined;
   const pendingExpert = send.variables?.options.expert ?? expert;
   const started = messages.length > 0 || pendingText !== undefined;
+  // Without data there is nothing to ask about yet: the page says how to connect instead.
+  const noData = useNoData() === true && !started;
   const sendError = send.error && (
     <Text variant="caption" color="danger" style={{ textAlign: 'center' }}>
       {send.error.message || 'Could not send your message.'}
@@ -302,6 +306,10 @@ export default function AskScreen() {
               )}
               {sendError}
             </ScrollView>
+          ) : noData ? (
+            <ScrollView contentContainerStyle={[styles.noData, width]}>
+              <NoData shows="Ask answers questions about your sleep, recovery and activity" />
+            </ScrollView>
           ) : (
             <Animated.View exiting={FadeOut.duration(150)} style={[styles.greeting, width]}>
               <Greeting expert={expert} />
@@ -326,37 +334,39 @@ export default function AskScreen() {
         </ScrollView>
       )}
 
-      <Animated.View
-        layout={MOVE}
-        style={[
-          styles.composer,
-          width,
-          // Above the floating tab bar, except while the keyboard covers it.
-          { paddingBottom: started ? (keyboardOpen ? 0 : tabBarHeight) + spacing.sm : spacing.md },
-        ]}
-      >
-        <Composer
-          value={draft}
-          onChangeText={setDraft}
-          onSubmit={() => submit(draft)}
-          expert={expert}
-          onExpertChange={setExpert}
-          depth={depth}
-          onDepthChange={setDepth}
-          attachmentLabel={attachmentLabel(attachment, findings)}
-          onAttach={(at) => {
-            setAnchor(at);
-            setAttaching(true);
-          }}
-          onClearAttachment={() => setAttachment(undefined)}
-          busy={send.isPending}
-          collapsible={!started}
-          placeholder={started ? 'Ask a follow-up' : 'Ask about your sleep, recovery, activity…'}
-          maxLength={MAX_LENGTH}
-        />
-      </Animated.View>
+      {!noData && (
+        <Animated.View
+          layout={MOVE}
+          style={[
+            styles.composer,
+            width,
+            // Above the floating tab bar, except while the keyboard covers it.
+            { paddingBottom: started ? (keyboardOpen ? 0 : tabBarHeight) + spacing.sm : spacing.md },
+          ]}
+        >
+          <Composer
+            value={draft}
+            onChangeText={setDraft}
+            onSubmit={() => submit(draft)}
+            expert={expert}
+            onExpertChange={setExpert}
+            depth={depth}
+            onDepthChange={setDepth}
+            attachmentLabel={attachmentLabel(attachment, findings)}
+            onAttach={(at) => {
+              setAnchor(at);
+              setAttaching(true);
+            }}
+            onClearAttachment={() => setAttachment(undefined)}
+            busy={send.isPending}
+            collapsible={!started}
+            placeholder={started ? 'Ask a follow-up' : 'Ask about your sleep, recovery, activity…'}
+            maxLength={MAX_LENGTH}
+          />
+        </Animated.View>
+      )}
 
-      {!started && (
+      {!started && !noData && (
         <Animated.View exiting={FadeOut.duration(150)} style={[styles.below, width]}>
           <View style={styles.suggestions}>
             {suggestions.map((text, i) => (
@@ -525,6 +535,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   disclaimer: { textAlign: 'center', maxWidth: 340 },
+  noData: { ...column, paddingHorizontal: spacing.lg, paddingBottom: 120 },
   below: { ...column, flex: 1, paddingHorizontal: spacing.lg },
   suggestions: {
     flexDirection: 'row',

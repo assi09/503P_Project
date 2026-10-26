@@ -147,6 +147,19 @@ describe('http sessions', () => {
 });
 
 describe('Google Health', () => {
+  it('has no data for someone without a Fitbit until they connect', async () => {
+    await signInAs(DEMO_SUPERVISOR); // the mock's supervisor has no Fitbit
+    for (const call of [mockClient.getDataStatus, () => mockClient.getDay('latest')]) {
+      await expect(call()).rejects.toMatchObject({ code: 'no_data', status: 404 });
+    }
+    await mockClient.connectGoogle();
+    await expect(mockClient.getDataStatus()).resolves.toMatchObject({ source: 'takeout' });
+
+    await signInAs(DEMO_OWNER);
+    await expect(mockClient.getDay('latest')).resolves.toHaveProperty('metrics');
+    await mockClient.disconnectGoogle();
+  });
+
   it('connects in the mock, syncs for a while, then records the sync', async () => {
     jest.useFakeTimers();
     try {

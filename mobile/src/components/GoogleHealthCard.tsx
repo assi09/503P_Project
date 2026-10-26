@@ -31,8 +31,11 @@ function scopeName(scope: string): string {
   return SCOPE_NAMES[key] ?? key;
 }
 
-/** Connecting the person's own Google Health account, and keeping it synced. */
-export function GoogleHealthCard({ returned }: { returned?: string }) {
+/**
+ * Connecting the person's own Google Health account, and keeping it synced. `compact` shows only
+ * the button to connect, under a page that already says what connecting does.
+ */
+export function GoogleHealthCard({ returned, compact }: { returned?: string; compact?: boolean }) {
   const colors = useColors();
   const client = useQueryClient();
   const status = useGoogleStatus();
@@ -41,12 +44,10 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
   const [openError, setOpenError] = useState<string | null>(null);
   const google = status.data;
 
-  // When a sync finishes, the screens showing data reload it.
+  // When a sync finishes, every screen showing data reloads it, including those that had none.
   const wasSyncing = useRef(false);
   useEffect(() => {
-    if (wasSyncing.current && google && !google.syncing) {
-      for (const key of [keys.dataStatus, keys.report]) client.invalidateQueries({ queryKey: key });
-    }
+    if (wasSyncing.current && google && !google.syncing) client.invalidateQueries();
     wasSyncing.current = google?.syncing ?? false;
   }, [google, client]);
 
@@ -104,23 +105,25 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
           <Text variant="caption">{notice.text}</Text>
         </View>
       )}
-      <View style={styles.row}>
-        {connected && google.syncing ? (
-          <ActivityIndicator size="small" color={colors.accent} />
-        ) : (
-          <Ionicons
-            name={connected ? 'checkmark-circle' : 'logo-google'}
-            size={20}
-            color={connected ? colors.accent : colors.text}
-          />
-        )}
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text variant="headline">{title}</Text>
-          <Text variant="caption" color="muted">
-            {detail}
-          </Text>
+      {!compact && (
+        <View style={styles.row}>
+          {connected && google.syncing ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons
+              name={connected ? 'checkmark-circle' : 'logo-google'}
+              size={20}
+              color={connected ? colors.accent : colors.text}
+            />
+          )}
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="headline">{title}</Text>
+            <Text variant="caption" color="muted">
+              {detail}
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {connected && google.missingScopes.length > 0 && (
         <Text variant="caption" color="warning">
@@ -135,7 +138,7 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
       )}
 
       <View style={styles.actions}>
-        {connected ? (
+        {connected && compact ? null : connected ? (
           <>
             <Button
               label="Sync now"
@@ -152,7 +155,15 @@ export function GoogleHealthCard({ returned }: { returned?: string }) {
           </>
         ) : (
           <Button
-            label={opening ? 'Opening Google…' : expired ? 'Connect again' : 'Connect'}
+            label={
+              opening
+                ? 'Opening Google…'
+                : expired
+                  ? 'Connect again'
+                  : compact
+                    ? 'Connect Google Health'
+                    : 'Connect'
+            }
             icon="arrow-forward"
             iconAfter
             disabled={opening || status.isPending}
