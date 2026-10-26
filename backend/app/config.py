@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     chat_wait_s: float = 55.0
     # Hard cap on model spending by this process, in US dollars.
     llm_spend_cap_usd: float = 20.0
+    # Team reports: whether a model writes the weekly narrative (templated text otherwise), and
+    # the most one report's text may cost.
+    team_report_narrative: bool = False
+    team_report_cap_usd: float = 0.02
 
 
 settings = Settings()

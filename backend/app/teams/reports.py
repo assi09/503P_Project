@@ -11,8 +11,9 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.llm import LLM
 from app.analysis.evidence import Evidence, Window
-from app.analysis.report import info
+from app.analysis.report import change_text, info
 from app.analysis.team import (
     LEVEL_METRICS,
     MIN_MEMBERS,
@@ -33,18 +34,6 @@ HISTORY_DAYS = 70  # enough before the week for the scores' baselines and four e
 def last_full_week(today: date) -> Window:
     """The Monday-to-Sunday week before the one containing `today`."""
     return week_of(today - timedelta(days=7))
-
-
-def change_text(metric: str, value: float) -> str:
-    """A signed change in the metric's units: "-32 min", "+1,250 steps", "+12 min" for bedtime."""
-    if metric == "bedtime_hour":
-        return f"{round(value * 60):+d} min"
-    unit = info(metric).unit
-    digits = 0 if abs(value) >= 10 else 1
-    number = f"{value:+,.{digits}f}"
-    if unit == "%":
-        return f"{number}%"
-    return f"{number} {unit}".rstrip()
 
 
 def _section(evidence: Evidence, changed: bool) -> dict:
@@ -115,8 +104,18 @@ def _member_frames(db: Session, team: Team, week: Window) -> list:
     return [frame for frame in frames if not frame.empty]
 
 
-def build_report(db: Session, team: Team, week: Window, now: datetime) -> TeamReport:
-    """Makes and stores the team's report for `week`, or returns the one already made."""
+def build_report(
+    db: Session,
+    team: Team,
+    week: Window,
+    now: datetime,
+    writer: LLM | None = None,
+    cap_usd: float = 0.02,
+) -> TeamReport:
+    """Makes and stores the team's report for `week`, or returns the one already made.
+
+    With a `writer`, a model writes the prose over the same evidence (`narrative.py`); when it
+    fails or its text does not check out, the templated text stands alone."""
     found = db.scalar(
         select(TeamReport).where(TeamReport.team_id == team.id, TeamReport.week_start == week.start)
     )
@@ -141,6 +140,17 @@ def build_report(db: Session, team: Team, week: Window, now: datetime) -> TeamRe
         )
     else:
         headline, body = template(statistics)
+        generated_by, cost = "template", 0.0
+        if writer is not None:
+            from app.teams.narrative import narrate  # it imports the report's text helpers
+
+            attempt = narrate(writer, statistics, cap_usd)
+            cost = attempt.cost_usd
+            if attempt.narrated:
+                headline, generated_by = attempt.narrated.headline, "model"
+                body["narrative"] = attempt.narrated.paragraphs
+            else:
+                body["narrative_problems"] = attempt.problems[:10]
         evidence = {
             e.id: e.model_dump(mode="json") for e in [*statistics.changes, *statistics.weekdays]
         }
@@ -153,6 +163,8 @@ def build_report(db: Session, team: Team, week: Window, now: datetime) -> TeamRe
             headline=headline,
             body=body,
             evidence=evidence,
+            generated_by=generated_by,
+            cost_usd=cost,
             created_at=now,
         )
     db.add(report)

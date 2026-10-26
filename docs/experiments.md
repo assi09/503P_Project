@@ -357,3 +357,24 @@ rose from about 47 to 69).
   list of cited metrics is long.
 **Changed:** nothing more. Open: the strain answer used more calls than a quick answer usually
 does; watch it in the evaluation.
+
+## The weekly team report written by a model (2026-10-26)
+
+**Tested:** whether one model call can write a team report's prose over aggregate evidence only,
+passing checks like an agent's claims (`app/teams/narrative.py`). `eval/team_report_smoke.py`: 8
+synthetic members, a planted 70-minute drop in time asleep in the reported week; the statistics
+found sleep and recovery changed.
+**Showed ($0.0155 for three runs):**
+- Run 1 ($0.0058): rejected twice. The model wrote metric labels ("Time asleep") where the form
+  wanted keys, and the repair message did not say how to fix it. Fixed: the form lists the week's
+  keys, a label is read as its key, and the message names the keys.
+- Run 2 ($0.0060): rejected twice as not matching the form, with a message too vague to repair
+  ("1 problems"): it wrote one paragraph per metric, more than the 8 allowed. Fixed: the message
+  now names the field and the error, up to 12 paragraphs are allowed, and the prompt asks for
+  changes first, then the notable steady metrics.
+- Run 3 ($0.0037, approved as a third run): passed on the first call. Both changes covered with
+  their median and counts (sleep -75 min, 8 of 8 lower; recovery -14, 7 of 8 lower), six steady
+  metrics as "no clear change", two weekday patterns, no individual named. It wrote 10 paragraphs
+  where the prompt asked for at most 8.
+**Changed:** the form and the repair messages, as above. Every failure fell back to the templated
+text, so nothing unchecked would have been shown.

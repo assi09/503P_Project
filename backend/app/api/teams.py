@@ -10,12 +10,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 
+from app.agent.llm import LLM, OpenAILLM
 from app.analysis.evidence import Evidence, Window
 from app.analysis.team import MIN_MEMBERS, week_of
 from app.api import schemas
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.auth.accounts import LoginThrottle
+from app.config import settings
 from app.db.models import Team, TeamEvent, TeamMembership, TeamReport, User
 from app.teams import memberships as teams
 from app.teams import reports
@@ -126,6 +128,12 @@ def _report(db, team: Team, report: TeamReport, user: User, clock) -> schemas.Te
         minimum_members=MIN_MEMBERS,
         sections=[schemas.ReportSection(**s) for s in report.body.get("sections", [])],
         weekdays=[schemas.ReportSection(**w) for w in report.body.get("weekdays", [])],
+        narrative=[
+            schemas.NarrativeParagraph(
+                text=p["text"], kind=p["kind"], metric=p["metric"], evidence_ids=p["evidence_ids"]
+            )
+            for p in report.body.get("narrative", [])
+        ],
         evidence={key: _evidence(value) for key, value in report.evidence.items()},
         generated_by=report.generated_by,
         levels=[
@@ -176,7 +184,15 @@ def make_report(
     week = week_of(body.week) if body.week else latest
     if week.start > latest.start:
         raise ApiError(409, "week_not_over", "A week's report is made once the week is over.")
-    return _report(db, team, reports.build_report(db, team, week, clock), user, clock)
+    report = reports.build_report(
+        db, team, week, clock, report_writer(), settings.team_report_cap_usd
+    )
+    return _report(db, team, report, user, clock)
+
+
+def report_writer() -> LLM | None:
+    """The model that writes reports' prose, when switched on; tests replace it."""
+    return OpenAILLM.from_settings(settings) if settings.team_report_narrative else None
 
 
 # Members

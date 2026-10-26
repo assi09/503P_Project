@@ -110,6 +110,18 @@ def change_label(metric: str, stats: dict) -> str:
     return f"{difference:+.{digits}f}{'%' if unit == '%' else ''}{suffix}"
 
 
+def change_text(metric: str, value: float) -> str:
+    """A signed change in the metric's units: "-32 min", "+1,250 steps", "+12 min" for bedtime."""
+    if metric == "bedtime_hour":
+        return f"{round(value * 60):+d} min"
+    unit = info(metric).unit
+    digits = 0 if abs(value) >= 10 else 1
+    number = f"{value:+,.{digits}f}"
+    if unit == "%":
+        return f"{number}%"
+    return f"{number} {unit}".rstrip()
+
+
 def _title(metric: str, up: bool) -> str:
     label = info(metric).label
     if metric == "bedtime_hour":
