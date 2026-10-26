@@ -5,13 +5,21 @@ import type { ComponentProps } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
 import { select } from '@/lib/haptics';
+import { useSession } from '@/lib/session';
 import { floatingTabBar as glass } from '@/lib/platform';
 import { CONTENT_WIDTH, fonts, useColors, useScheme } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-const TABS: { name: string; title: string; icon: IconName; iconActive: IconName }[] = [
+const TABS: {
+  name: string;
+  title: string;
+  icon: IconName;
+  iconActive: IconName;
+  supervisors?: boolean; // shown only to supervisors
+}[] = [
   { name: 'index', title: 'Today', icon: 'pulse-outline', iconActive: 'pulse' },
+  { name: 'team', title: 'Team', icon: 'people-outline', iconActive: 'people', supervisors: true },
   { name: 'ask', title: 'Ask', icon: 'chatbubble-outline', iconActive: 'chatbubble' },
   {
     name: 'reminders',
@@ -23,6 +31,8 @@ const TABS: { name: string; title: string; icon: IconName; iconActive: IconName 
 ];
 
 export default function TabLayout() {
+  const { account } = useSession();
+  const supervisor = account?.role === 'supervisor';
   const colors = useColors();
   const scheme = useScheme();
   // On wide screens keep the tabs within the content column instead of spread edge to edge.
@@ -56,12 +66,13 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      {TABS.map(({ name, title, icon, iconActive }) => (
+      {TABS.map(({ name, title, icon, iconActive, supervisors }) => (
         <Tabs.Screen
           key={name}
           name={name}
           options={{
             title,
+            href: supervisors && !supervisor ? null : undefined, // hidden, not just disabled
             tabBarIcon: ({ focused, size }) => (
               <Ionicons
                 name={focused ? iconActive : icon}

@@ -8,8 +8,8 @@ Fitbit, and if they have one they connect it like anyone else.
 This sends health data toward an employer, so the design starts from what the supervisor may
 **not** see. There are two layers. Joining a team shares only team aggregates. Showing your own
 named levels is a separate switch that each person turns on and off themselves. Status: roles,
-teams, joining, leaving and the levels switch are built (backend, step 2 below); the scores
-behind the levels exist ([scores.md](scores.md)); team statistics, reports and screens are next.
+teams, joining, leaving, the levels switch, team statistics, weekly reports (templated or
+model-written, checked) and the app screens are built; email waits until after deployment.
 
 ## What the supervisor sees, and what they never see
 
@@ -189,8 +189,12 @@ Small PRs, each green and verified:
    day free, `FA_EMAIL_API_KEY` in `.env`), a console mailer writing to `data/outbox/` for
    development, the headline, aggregate figures and a link in each email (never named levels),
    `emailed_at` already exists on `team_reports`. Real emails only after deployment.
-7. App, employee side: join, consent, leave, the named-levels switch.
-8. App, supervisor side: Team tab, report, named levels, team settings.
+7. App, employee side: join, consent, leave, the named-levels switch. **Done** (Settings ->
+   Teams).
+8. App, supervisor side: Team tab, report, named levels, team settings. **Done**: a Team tab
+   after Today, shown to supervisors only; create a team, copy or renew the code, make last
+   week's report, the headline with the checked prose and the figures, shared levels, past
+   weeks. One team per supervisor in the app for now.
 9. Scheduling, with the deployment.
 
 ## Open

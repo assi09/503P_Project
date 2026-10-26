@@ -1,5 +1,5 @@
 import { ApiError, httpClient } from '../http';
-import { DEMO_OWNER, mockClient } from '../mock';
+import { DEMO_OWNER, DEMO_SUPERVISOR, mockClient } from '../mock';
 import { getToken, saveToken } from '../token';
 
 const BASE = 'http://api.test';
@@ -175,5 +175,34 @@ describe('Google Health', () => {
       ['http://api.test/google/sync', 'POST'],
       ['http://api.test/google/disconnect', 'POST'],
     ]);
+  });
+});
+
+describe('teams as a supervisor', () => {
+  it('only lets supervisors create teams, and serves a report for the last full week', async () => {
+    const owner = await mockClient.logIn(DEMO_OWNER);
+    await saveToken(owner.token);
+    await expect(mockClient.getTeams()).rejects.toMatchObject({ code: 'not_supervisor' });
+
+    const lead = await mockClient.logIn(DEMO_SUPERVISOR);
+    expect(lead.account.role).toBe('supervisor');
+    await saveToken(lead.token);
+    const team = await mockClient.createTeam('  Design ');
+    expect(team.name).toBe('Design');
+    expect(team.inviteCode).toMatch(/^[A-Z2-9]{8}$/);
+    const rotated = await mockClient.rotateTeamCode(team.id);
+    expect(rotated.inviteCode).not.toBe(team.inviteCode);
+
+    expect(await mockClient.getTeamReports(team.id)).toEqual([]);
+    const report = await mockClient.makeTeamReport(team.id);
+    expect(new Date(`${report.week.start}T00:00:00Z`).getUTCDay()).toBe(1); // a Monday
+    expect(report.week.end < new Date().toISOString().slice(0, 10)).toBe(true); // a full week
+    expect(report.levels.every((row) => Object.keys(row.levels).length === 4)).toBe(true);
+    const again = await mockClient.makeTeamReport(team.id);
+    expect(again.createdAt).toBe(report.createdAt); // made once per week
+    const listed = await mockClient.getTeamReports(team.id);
+    expect(listed.map((r) => r.week.start)).toEqual([report.week.start]);
+    const read = await mockClient.getTeamReport(team.id, report.week.end); // any day of it
+    expect(read.headline).toBe(report.headline);
   });
 });

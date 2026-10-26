@@ -284,6 +284,59 @@ export interface Membership {
   levelsConsentVersion: string;
 }
 
+/** A supervisor's team: a count of members, never who they are. */
+export interface SupervisedTeam {
+  id: string;
+  name: string;
+  inviteCode: string;
+  members: number;
+  minimumMembers: number; // no team figure is built from fewer
+  reportEmail: string | null;
+  createdAt: ISODateTime;
+}
+
+export interface TeamReportSummary {
+  week: Window; // Monday to Sunday
+  status: 'ready' | 'withheld'; // withheld: fewer people with data than the minimum
+  headline: string;
+  membersIncluded: number;
+  createdAt: ISODateTime;
+}
+
+export interface ReportSection {
+  metric: string;
+  label?: string | null;
+  status?: 'changed' | 'steady' | 'not_enough_data' | null;
+  text: string;
+  evidenceId: string;
+}
+
+export interface NarrativeParagraph {
+  text: string;
+  kind: 'change' | 'no_change' | 'pattern';
+  metric: string;
+  evidenceIds: string[];
+}
+
+export type TeamLevel = 'below' | 'usual' | 'above';
+
+/** One member who chose to share: their week against their own usual, never against others. */
+export interface SharedLevels {
+  member: string;
+  levels: Record<string, { mean: number | null; level: TeamLevel | null }>;
+}
+
+export interface TeamReport extends TeamReportSummary {
+  membersTotal: number;
+  minimumMembers: number;
+  sections: ReportSection[];
+  weekdays: ReportSection[];
+  narrative: NarrativeParagraph[]; // the model's checked prose; empty when templated
+  evidence: Record<string, Evidence>;
+  generatedBy: 'template' | 'model';
+  levels: SharedLevels[];
+}
+
 export interface ApiClient {
   getActions(): Promise<HealthAction[]>;
   getAction(id: string): Promise<HealthAction>;
@@ -327,6 +380,12 @@ export interface ApiClient {
   getMyTeams(): Promise<Membership[]>;
   shareTeamLevels(teamId: string, share: boolean, consentVersion?: string): Promise<Membership>;
   leaveTeam(teamId: string): Promise<void>;
+  getTeams(): Promise<SupervisedTeam[]>; // supervisors only
+  createTeam(name: string): Promise<SupervisedTeam>;
+  rotateTeamCode(teamId: string): Promise<SupervisedTeam>;
+  getTeamReports(teamId: string): Promise<TeamReportSummary[]>; // newest first
+  getTeamReport(teamId: string, week: ISODate): Promise<TeamReport>;
+  makeTeamReport(teamId: string, week?: ISODate): Promise<TeamReport>; // the last full week
 }
 
 export type HealthLog =

@@ -36,6 +36,8 @@ import type {
   Strain,
   TeamPreview,
   Membership,
+  SupervisedTeam,
+  TeamReport,
 } from './types';
 
 const DAYS = 28;
@@ -461,6 +463,7 @@ function message(fields: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage {
 // Accounts work like the backend's: sign-ups wait for approval, and the made-up demo owner can
 // sign in and approve them.
 export const DEMO_OWNER = { email: 'demo@patterns.app', password: 'demo-password' };
+export const DEMO_SUPERVISOR = { email: 'lead@patterns.app', password: 'demo-password' };
 
 interface MockAccount extends Account {
   id: string;
@@ -475,6 +478,14 @@ let accounts: MockAccount[] = [
     status: 'approved',
     isAdmin: true,
     role: 'member',
+    requestedAt: new Date().toISOString(),
+  },
+  {
+    id: 'u0',
+    ...DEMO_SUPERVISOR,
+    status: 'approved',
+    isAdmin: false,
+    role: 'supervisor',
     requestedAt: new Date().toISOString(),
   },
 ];
@@ -599,7 +610,174 @@ function ownMembership(teamId: string): Membership {
   return membership;
 }
 
+// A supervisor's view: teams created in this session, and a made-up report for the last full
+// week, aggregates only, as the backend would make it.
+let supervisedTeams: SupervisedTeam[] = [];
+const teamReports = new Map<string, TeamReport[]>();
+
+function supervisorAccount(): MockAccount {
+  const account = currentAccount();
+  if (account.role !== 'supervisor') {
+    throw new ApiError('Only supervisors can do this.', 'not_supervisor', 403);
+  }
+  return account;
+}
+
+function ownTeam(teamId: string): SupervisedTeam {
+  supervisorAccount();
+  const team = supervisedTeams.find((t) => t.id === teamId);
+  if (!team) throw new ApiError('No such team.', 'not_found', 404);
+  return team;
+}
+
+function newCode(): string {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * 31)]).join('');
+}
+
+/** Monday of the week before the current one. */
+function lastFullWeek(): ISODate {
+  const today = new Date(`${isoDate(0)}T00:00:00Z`);
+  const monday = new Date(today);
+  monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7) - 7);
+  return monday.toISOString().slice(0, 10);
+}
+
+function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
+  const end = new Date(Date.parse(`${start}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
+  const section = (
+    metric: string,
+    label: string,
+    status: 'changed' | 'steady',
+    text: string,
+  ) => ({ metric, label, status, text, evidenceId: `e_${metric}` });
+  return {
+    week: { start, end },
+    status: 'ready',
+    headline: 'Team sleep fell this week, and recovery dropped with it; the rest held steady.',
+    membersIncluded: 8,
+    membersTotal: 8,
+    minimumMembers: 5,
+    createdAt: new Date().toISOString(),
+    generatedBy: 'model',
+    narrative: [
+      {
+        text: 'Time asleep went down, with a median change of -38 min; 7 of 8 people were lower.',
+        kind: 'change',
+        metric: 'sleep_minutes',
+        evidenceIds: ['e_sleep_minutes'],
+      },
+      {
+        text: 'Recovery went down, with a median change of -9; 6 of 8 people were lower.',
+        kind: 'change',
+        metric: 'recovery_score',
+        evidenceIds: ['e_recovery_score'],
+      },
+      {
+        text: 'Steps, strain and stress showed no clear change for the team.',
+        kind: 'no_change',
+        metric: 'steps',
+        evidenceIds: ['e_steps'],
+      },
+    ],
+    sections: [
+      section('sleep_minutes', 'Time asleep', 'changed', 'Time asleep fell across the team: median change -38 min (1 of 8 higher, 7 lower).'),
+      section('recovery_score', 'Recovery', 'changed', 'Recovery fell across the team: median change -9.0 (2 of 8 higher, 6 lower).'),
+      section('steps', 'Steps', 'steady', 'Steps: no clear change for the team (median -310 steps; 3 of 8 higher, 5 lower).'),
+      section('strain', 'Strain', 'steady', 'Strain: no clear change for the team (median +0.4; 5 of 8 higher, 3 lower).'),
+      section('stress_score', 'Stress', 'steady', 'Stress: no clear change for the team (median +3.0; 5 of 8 higher, 3 lower).'),
+    ],
+    weekdays: [
+      {
+        metric: 'sleep_minutes',
+        text: 'Time asleep by weekday: highest on Saturdays (+31 min against each person\'s usual), lowest on Wednesdays (-19 min).',
+        evidenceId: 'e_weekday_sleep',
+      },
+    ],
+    evidence: {},
+    levels: [
+      {
+        member: 'maya@example.com',
+        levels: {
+          recovery_score: { mean: 58, level: 'below' },
+          sleep_minutes: { mean: 402, level: 'below' },
+          strain: { mean: 8.1, level: 'usual' },
+          stress_score: { mean: 61, level: 'above' },
+        },
+      },
+      {
+        member: 'omar@example.com',
+        levels: {
+          recovery_score: { mean: 71, level: 'usual' },
+          sleep_minutes: { mean: 447, level: 'usual' },
+          strain: { mean: 12.4, level: 'above' },
+          stress_score: { mean: 47, level: 'usual' },
+        },
+      },
+    ],
+  };
+}
+
 export const mockClient: ApiClient = {
+  getTeams: () =>
+    later(() => {
+      supervisorAccount();
+      return supervisedTeams;
+    }),
+  createTeam: (name) =>
+    later<SupervisedTeam>(() => {
+      supervisorAccount();
+      const team: SupervisedTeam = {
+        id: `team${supervisedTeams.length + 1}`,
+        name: name.trim(),
+        inviteCode: newCode(),
+        members: 8,
+        minimumMembers: 5,
+        reportEmail: null,
+        createdAt: new Date().toISOString(),
+      };
+      supervisedTeams = [...supervisedTeams, team];
+      return team;
+    }),
+  rotateTeamCode: (teamId) =>
+    later(() => {
+      const team = ownTeam(teamId);
+      team.inviteCode = newCode();
+      return team;
+    }),
+  getTeamReports: (teamId) =>
+    later(() => {
+      ownTeam(teamId);
+      return (teamReports.get(teamId) ?? []).map(
+        ({ week, status, headline, membersIncluded, createdAt }) => ({
+          week,
+          status,
+          headline,
+          membersIncluded,
+          createdAt,
+        }),
+      );
+    }),
+  getTeamReport: (teamId, week) =>
+    later(() => {
+      ownTeam(teamId);
+      const found = (teamReports.get(teamId) ?? []).find(
+        (r) => r.week.start <= week && week <= r.week.end,
+      );
+      if (!found) throw new ApiError('There is no report for that week.', 'not_found', 404);
+      return found;
+    }),
+  makeTeamReport: (teamId) =>
+    later(() => {
+      const team = ownTeam(teamId);
+      const start = lastFullWeek();
+      const existing = teamReports.get(teamId) ?? [];
+      const found = existing.find((r) => r.week.start === start);
+      if (found) return found;
+      const report = mockReport(team, start);
+      teamReports.set(teamId, [report, ...existing]);
+      return report;
+    }),
   previewTeam: (code) =>
     later<TeamPreview>(() => {
       const team = mockTeam(code);
