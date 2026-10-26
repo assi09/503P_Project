@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://fitbit_agent:local-dev-only@localhost:5433/fitbit_agent"
     )
+
     # The agent's language model: a small model for tool loops, a large one for write-ups.
     openai_api_key: SecretStr | None = None
     openai_small_model: str = "gpt-5.4-mini"
@@ -58,6 +59,15 @@ class Settings(BaseSettings):
     email_backend: Literal["outbox", "resend"] = "outbox"
     email_api_key: SecretStr | None = None
     email_from: str = "Patterns <onboarding@resend.dev>"
+
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg(cls, url: str) -> str:
+        # Hosts such as Railway give postgres:// or postgresql://; SQLAlchemy needs the driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url.removeprefix(prefix)
+        return url
 
 
 settings = Settings()

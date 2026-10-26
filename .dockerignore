@@ -1,0 +1,8 @@
+# Only the backend goes into the image; personal data and secrets never do.
+*
+!backend/pyproject.toml
+!backend/app
+!backend/alembic.ini
+!backend/migrations
+**/__pycache__
+**/*.pyc
