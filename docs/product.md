@@ -206,6 +206,13 @@ All four experts (sleep, recovery, activity, nutrition) are part of the demo.
 - **Experts:** the same evaluation suite run on the expert system and on a single general agent,
   to show whether the split is worth it.
 
+## Teams (planned)
+
+A supervisor can invite employees into a team and receives a weekly report on the team's
+patterns: aggregates of each member's change against their own baseline, never anyone's own
+values, and nothing built from fewer than 5 people. Employees join with a code after a consent
+screen and can leave at any time. See [teams.md](teams.md).
+
 ## Open
 
 - **Nutrition:** which daily nutrient columns to keep, and how to avoid counting Cronometer's daily

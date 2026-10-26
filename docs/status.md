@@ -29,7 +29,7 @@ priority**; the UI and data plumbing exist to serve them.
 and metrics, the failure matrix and threat model; the daily run (and the agent's note on Today,
 skipped for now at the user's request); real reminders (the tab runs on the mock); the journal
 with habit impact; fitness age; the weekly workout summary; nutrition columns; a screen to approve
-facts the agent proposes.
+facts the agent proposes; teams and weekly supervisor reports.
 
 ## Core logging: first local implementation
 
@@ -209,6 +209,9 @@ Next, in order:
    estimates ([agent-actions.md](agent-actions.md)).
 6. Going beyond the commercial coaches: N-of-1 experiments, habit impact, a proactive daily
    investigator, tested causes, calibrated predictions ([roadmap.md](roadmap.md#beyond-the-commercial-coaches-planned)).
+7. **Teams** (planned 2026-10-26): a supervisor's weekly report on a group of employees, team
+   aggregates only, nothing from fewer than 5 people, joined by invite code with consent
+   ([teams.md](teams.md)).
 
 ## What has been tested
 
