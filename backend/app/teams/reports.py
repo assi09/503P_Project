@@ -51,13 +51,17 @@ def _section(evidence: Evidence, changed: bool) -> dict:
     median = change_text(metric, stats["median_change"])
     who = f"{stats['members_up']} of {stats['members']} higher, {stats['members_down']} lower"
     if changed:
-        direction = "rose" if stats["median_change"] > 0 else "fell"
-        if metric == "bedtime_hour":
-            direction = "moved later" if stats["median_change"] > 0 else "moved earlier"
+        direction = _direction(metric, stats["median_change"])
         text = f"{label} {direction} across the team: median change {median} ({who})."
-    else:
-        text = f"{label}: no clear change for the team (median {median}; {who})."
-    return {**base, "status": "changed" if changed else "steady", "text": text}
+        return {**base, "status": "changed", "text": text}
+    text = f"{label}: no clear change for the team (median {median}; {who})."
+    return {**base, "status": "steady", "text": text}
+
+
+def _direction(metric: str, median_change: float) -> str:
+    if metric == "bedtime_hour":
+        return "moved later" if median_change > 0 else "moved earlier"
+    return "rose" if median_change > 0 else "fell"
 
 
 def _weekday(evidence: Evidence) -> dict | None:
@@ -83,10 +87,15 @@ def template(statistics: TeamStatistics) -> tuple[str, dict]:
     changed_ids = {e.id for e in statistics.changed}
     sections = [_section(e, e.id in changed_ids) for e in statistics.changes]
     weekdays = [w for e in statistics.weekdays if (w := _weekday(e))]
-    changed = [s["label"].lower() for s in sections if s["status"] == "changed"]
+    changed = [
+        f"{info(e.metrics[0]).label.lower()} {_direction(e.metrics[0], e.stats['median_change'])}"
+        for e in statistics.changed
+    ]
     if changed:
         listed = ", ".join(changed[:-1]) + (" and " if len(changed) > 1 else "") + changed[-1]
-        headline = f"This week the team's {listed} changed against the four weeks before."
+        headline = f"This week the team's {listed} against the four weeks before"
+        steady = any(s["status"] == "steady" for s in sections)
+        headline += "; the rest held steady." if steady else "."
     else:
         headline = "No clear team-wide change this week against the four weeks before."
     return headline, {"sections": sections, "weekdays": weekdays}
