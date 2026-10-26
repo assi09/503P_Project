@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.auth import accounts
 from app.auth.accounts import AuthError
-from app.db.models import User
+from app.db.models import USER_ROLES, User
 from app.db.session import session_scope
 
 
@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("email")
     command = commands.add_parser("set-password", help="set or replace an account's password")
     command.add_argument("email")
+    command = commands.add_parser("set-role", help="make an account a supervisor or a member")
+    command.add_argument("email")
+    command.add_argument("role", choices=USER_ROLES)
     args = parser.parse_args(argv)
 
     with session_scope() as session:
@@ -53,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(error.message, file=sys.stderr)
                 return 1
             print(f"Password set for {user.email}; every device was signed out.")
+            return 0
+        if args.command == "set-role":
+            if user.status != "approved":
+                print(f"{user.email} is not approved yet.", file=sys.stderr)
+                return 1
+            user.role = args.role
+            print(f"{user.email}: {user.role}")
             return 0
         accounts.decide(session, user.id, args.command == "approve", datetime.now(UTC))
         print(f"{user.email}: {user.status}")

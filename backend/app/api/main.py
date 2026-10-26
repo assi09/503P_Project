@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
-from app.api import actions, auth, chat, data, days, google, reports
+from app.api import actions, auth, chat, data, days, google, reports, teams
 from app.api.errors import ApiError
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(data.router)
     app.include_router(days.router)
     app.include_router(reports.router)
+    app.include_router(teams.router)
     return app
 
 

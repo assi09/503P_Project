@@ -176,6 +176,7 @@ class Account(ApiModel):
     email: str
     status: Literal["pending", "approved", "rejected"]
     is_admin: bool
+    role: Literal["member", "supervisor"] = "member"
 
 
 class SignedIn(ApiModel):
@@ -228,3 +229,53 @@ class GoogleStatus(ApiModel):
 
 class ConnectStart(ApiModel):
     url: str  # Google's sign-in page, to open in the browser
+
+
+# Teams (docs/teams.md)
+
+
+class NewTeam(ApiModel):
+    name: str = Field(min_length=1, max_length=80)
+    report_email: str | None = Field(default=None, max_length=320)
+
+
+class Team(ApiModel):
+    id: str
+    name: str
+    invite_code: str
+    members: int  # active members: a count, never who
+    minimum_members: int  # no team figure is built from fewer
+    report_email: str | None
+    created_at: datetime
+
+
+class TeamCode(ApiModel):
+    code: str = Field(min_length=1, max_length=32)
+
+
+class TeamPreview(ApiModel):
+    """What joining means, shown before the person agrees."""
+
+    team: str
+    supervisor: str  # the supervisor's email: who will see the team's figures
+    consent: str
+    consent_version: str
+
+
+class JoinTeam(TeamCode):
+    consent_version: str  # the version of the text the person agreed to; must be current
+
+
+class Membership(ApiModel):
+    team_id: str
+    team: str
+    supervisor: str
+    joined_at: datetime
+    share_levels: bool
+    levels_consent: str  # the text for the second, separate consent
+    levels_consent_version: str
+
+
+class ShareLevels(ApiModel):
+    share: bool
+    consent_version: str | None = None  # needed to turn sharing on

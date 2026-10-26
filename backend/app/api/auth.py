@@ -74,7 +74,9 @@ def approved_user(user: Annotated[User, Depends(current_user)]) -> User:
 
 
 def _account(user: User) -> schemas.Account:
-    return schemas.Account(email=user.email, status=user.status, is_admin=is_admin(user))
+    return schemas.Account(
+        email=user.email, status=user.status, is_admin=is_admin(user), role=user.role
+    )
 
 
 @router.post("/auth/signup", response_model=schemas.SignedIn, status_code=201)

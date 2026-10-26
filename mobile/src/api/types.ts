@@ -238,6 +238,7 @@ export interface Account {
   email: string;
   status: AccountStatus; // a sign-up waits for the owner's approval
   isAdmin: boolean; // may approve sign-ups
+  role: 'member' | 'supervisor'; // a supervisor may create teams (docs/teams.md)
 }
 
 export interface Credentials {
