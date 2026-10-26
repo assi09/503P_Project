@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
 import {
   Image,
+  Platform,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -89,7 +90,7 @@ export function ScrollExpandHero({
       style={{ backgroundColor: colors.background }}
     >
       <View style={{ height: height + distance }}>
-        <Animated.View style={[{ height, overflow: 'hidden' }, pinned]}>
+        <Animated.View style={[{ height, overflow: 'hidden' }, styles.layer, pinned]}>
           <Animated.View style={[StyleSheet.absoluteFill, backdrop]}>
             <Image
               source={background ?? image}
@@ -100,25 +101,25 @@ export function ScrollExpandHero({
             <View style={[StyleSheet.absoluteFill, styles.backdropShade]} />
           </Animated.View>
 
-          <Animated.View style={[styles.card, card]}>
+          <Animated.View style={[styles.card, styles.cardShadow, card]}>
             <Image source={image} resizeMode="cover" style={styles.fill} />
             <Animated.View style={[StyleSheet.absoluteFill, styles.cardShade, shade]} />
           </Animated.View>
 
           <View style={styles.titles} pointerEvents="none">
             {eyebrow && (
-              <Animated.View style={left}>
+              <Animated.View style={[styles.layer, left]}>
                 <Text variant="label" color="#FFFFFF" style={styles.shadow}>
                   {eyebrow}
                 </Text>
               </Animated.View>
             )}
-            <Animated.View style={left}>
+            <Animated.View style={[styles.layer, left]}>
               <Text variant="display" color="#FFFFFF" style={[titleStyle, styles.shadow]}>
                 {title[0]}
               </Text>
             </Animated.View>
-            <Animated.View style={right}>
+            <Animated.View style={[styles.layer, right]}>
               <Text variant="display" color="#FFFFFF" style={[titleStyle, styles.shadow]}>
                 {title[1]}
               </Text>
@@ -147,14 +148,19 @@ export function ScrollExpandHero({
 const styles = StyleSheet.create({
   fill: { width: '100%', height: '100%' },
   backdropShade: { backgroundColor: 'rgba(0,0,0,0.35)' },
-  card: {
-    position: 'absolute',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 10 },
-  },
+  card: { position: 'absolute', overflow: 'hidden' },
+  // A large soft shadow is repainted on every frame the card grows, which is slow in Safari's
+  // engine; the browsers go without it. Moving layers get their own compositor layer there too.
+  cardShadow: Platform.select({
+    web: {},
+    default: {
+      shadowColor: '#000',
+      shadowOpacity: 0.35,
+      shadowRadius: 30,
+      shadowOffset: { width: 0, height: 10 },
+    },
+  }),
+  layer: Platform.select({ web: { willChange: 'transform' } as object, default: {} }),
   cardShade: { backgroundColor: '#000' },
   titles: {
     ...StyleSheet.absoluteFill,

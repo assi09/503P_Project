@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '@/components/PressableScale';
@@ -32,15 +32,16 @@ const FEATURES: { icon: IconName; title: string; body: string }[] = [
 ];
 
 // Phones are portrait, so the landscape background lost most of the track there; they get an
-// upright photo of lanes instead. The web keeps the wide one. (Pixabay licence, free to use.)
-const BACKGROUND =
-  Platform.OS === 'web'
-    ? require('../../assets/landing/background.jpg')
-    : require('../../assets/landing/background-portrait.jpg');
+// upright photo of lanes instead, in the app and in a phone's browser or home-screen web app.
+// Wider screens keep the wide one. (Pixabay licence, free to use.)
+const PORTRAIT = require('../../assets/landing/background-portrait.jpg');
+const LANDSCAPE = require('../../assets/landing/background.jpg');
 
 export default function Welcome() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const background = Platform.OS !== 'web' || height > width ? PORTRAIT : LANDSCAPE;
   const signUp = () => router.push('/sign-up');
   const signIn = () => router.push('/sign-in');
 
@@ -72,7 +73,7 @@ export default function Welcome() {
       <StatusBar style="light" />
       <ScrollExpandHero
         image={require('../../assets/landing/hero.jpg')}
-        background={BACKGROUND}
+        background={background}
         eyebrow="Your Fitbit, explained"
         title={['Know your', 'patterns']}
         hint="Scroll to explore"
