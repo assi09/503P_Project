@@ -142,7 +142,18 @@ For each person who opted in, the Team tab shows one row for the past week:
 - API, supervisor only, for their own teams: `POST /teams/{id}/reports` `{week?}` (makes it if
   needed), `GET /teams/{id}/reports`, `GET /teams/{id}/reports/{any day of the week}`.
 
-**Next:**
+- **The model's prose** (`backend/app/teams/narrative.py`, built): with `FA_TEAM_REPORT_NARRATIVE=true`
+  (or `python -m app.teams weekly --narrate`), one call, plus one repair round, writes a headline
+  and paragraphs over the aggregate evidence only. Each paragraph says whether it reports a change,
+  no change or a weekday pattern, about which metric, citing evidence ids. It is checked like an
+  agent's claim: a change must rest on a team change that held after correction, in its
+  direction; numbers, dates and metric names must come from the cited evidence; no individual
+  ("one member", "she"), diagnosis or cause; every change found must be covered. On any failure
+  the templated text stands, and the report records why. The prose is stored beside the figures,
+  never instead of them. Cap `FA_TEAM_REPORT_CAP_USD` (default $0.02); a passing synthetic run
+  cost $0.0037 ([experiments.md](experiments.md#the-weekly-team-report-written-by-a-model-2026-10-26)).
+
+**Planned (as designed):**
 
 - **Text.** One language-model call per team per week receives only the aggregate evidence and
   writes the narrative, citing evidence ids. The claim verifier checks every number against the
@@ -170,9 +181,9 @@ Small PRs, each green and verified:
    on its own, before any team exists.
 4. Team statistics with calibration tests, and the named weekly levels behind the opt-in.
    **Done.**
-5. The weekly report: templated, stored, the CLI and the API (**done**); then the language-model
-   text with the verifier and the templated text as fallback, with one real run on a synthetic
-   team, logged in [costs.md](costs.md) and [experiments.md](experiments.md).
+5. The weekly report: templated, stored, the CLI and the API; then the language-model text with
+   its checks and the templated text as fallback, with real runs on a synthetic team, logged in
+   [costs.md](costs.md) and [experiments.md](experiments.md). **Done.**
 6. Email: a console mailer for development and an HTTP provider.
 7. App, employee side: join, consent, leave, the named-levels switch.
 8. App, supervisor side: Team tab, report, named levels, team settings.

@@ -301,6 +301,13 @@ class SharedLevels(ApiModel):
     levels: dict[str, TeamWeekLevel]  # recovery_score, sleep_minutes, strain, stress_score
 
 
+class NarrativeParagraph(ApiModel):
+    text: str
+    kind: Literal["change", "no_change", "pattern"]
+    metric: str
+    evidence_ids: list[str]
+
+
 class TeamReportSummary(ApiModel):
     week: Window
     status: Literal["ready", "withheld"]
@@ -314,8 +321,9 @@ class TeamReport(TeamReportSummary):
     minimum_members: int
     sections: list[ReportSection]
     weekdays: list[ReportSection]
+    narrative: list[NarrativeParagraph]  # the model's prose, checked; empty when templated
     evidence: dict[str, Evidence]
-    generated_by: str
+    generated_by: Literal["template", "model"]
     levels: list[SharedLevels]
 
 

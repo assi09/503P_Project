@@ -150,6 +150,9 @@ MENTIONS = {
         "rem_sleep_minutes": r"\bREM\b",
         "awake_in_bed_minutes": r"time awake|awake in bed",
         "bedtime_hour": r"\bbedtimes?\b",
+        "recovery_score": r"recovery score",
+        "strain": r"\bstrain\b",
+        "stress_score": r"\bstress\b",
     }.items()
 }
 NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
@@ -256,6 +259,11 @@ VALUE_KEYS = (
     "slope_low",
     "slope_high",
     "change_over_window",
+    # Team reports (app/analysis/team.py)
+    "median_change",
+    "change_q1",
+    "change_q3",
+    "median_deviation_by_weekday",
 )
 
 

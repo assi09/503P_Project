@@ -9,6 +9,8 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 
+from app.agent.llm import ScriptedLLM
+from app.analysis.report import change_text
 from app.analysis.team import MIN_MEMBERS, week_of
 from app.api import auth, teams
 from app.api.main import create_app
@@ -20,6 +22,7 @@ from app.db.session import session_scope
 from app.synthetic import Step, generate
 from app.teams import memberships, reports
 from app.teams.__main__ import main as teams_cli
+from app.teams.narrative import WRITE
 
 NOW = datetime(2026, 10, 26, 9, tzinfo=UTC)  # a Monday
 WEEK = week_of(date(2026, 10, 19))  # the last full week: 19 to 25 October
@@ -69,7 +72,7 @@ def test_a_report_holds_aggregates_with_every_figure_from_its_evidence(engine):
     sleep = next(s for s in report.body["sections"] if s["metric"] == "sleep_minutes")
     assert sleep["status"] == "changed" and "fell" in sleep["text"]
     stats = report.evidence[sleep["evidence_id"]]["stats"]
-    assert reports.change_text("sleep_minutes", stats["median_change"]) in sleep["text"]
+    assert change_text("sleep_minutes", stats["median_change"]) in sleep["text"]
     assert f"{stats['members_down']} lower" in sleep["text"]
     # Nothing about anyone in particular is stored.
     stored = json.dumps([report.headline, report.body, report.evidence])
@@ -101,7 +104,7 @@ def test_too_few_people_with_data_withhold_the_report(engine):
     ],
 )
 def test_changes_read_in_the_metrics_units(metric, value, text):
-    assert reports.change_text(metric, value) == text
+    assert change_text(metric, value) == text
 
 
 def test_the_weekly_command_makes_each_teams_report_once(engine, monkeypatch, capsys):
@@ -196,3 +199,68 @@ def test_reports_are_for_the_teams_supervisor_and_full_weeks_only(client, engine
     assert client.get(f"/teams/{team_id}/reports", headers=other).status_code == 404
     member = signed_in(client, engine, "member00@example.com")
     assert client.post(f"/teams/{team_id}/reports", json={}, headers=member).status_code == 403
+
+
+# The model-written prose
+
+
+def writing_from_payload(messages):
+    """A scripted model that writes one sound paragraph per change in what it was given."""
+    items = json.loads(messages[-1]["content"].split("\n\n", 1)[1])
+    paragraphs = []
+    for item in items:
+        if item.get("changed"):
+            down = item["median_change"].startswith("-")
+            paragraphs.append(
+                {
+                    "text": f"{item['label']} {'fell' if down else 'rose'} across the team: "
+                    f"median change {item['median_change']}.",
+                    "kind": "change",
+                    "metric": item["metric"],
+                    "direction": "down" if down else "up",
+                    "evidence_ids": [item["evidence_id"]],
+                }
+            )
+    return ScriptedLLM.call(
+        WRITE, cost_usd=0.004, headline="The team slept less this week.", paragraphs=paragraphs
+    )
+
+
+def test_a_model_written_report_keeps_the_figures_and_records_its_cost(engine):
+    team_id, _ = team_with(engine, 6, (Step("sleep_minutes", WEEK.start, -70),))
+    with session_scope(engine) as db:
+        report = reports.build_report(
+            db, db.get(Team, team_id), WEEK, NOW, ScriptedLLM([writing_from_payload])
+        )
+        assert report.generated_by == "model" and report.cost_usd == pytest.approx(0.004)
+        assert report.headline == "The team slept less this week."
+        assert report.body["narrative"] and report.body["sections"]  # prose over the figures
+
+
+def test_a_report_whose_prose_fails_its_checks_stays_templated(engine):
+    team_id, _ = team_with(engine, 6, (Step("sleep_minutes", WEEK.start, -70),))
+    careless = ScriptedLLM.call(
+        WRITE,
+        headline="One member is struggling.",
+        paragraphs=[
+            {"text": "Sleep is fine.", "kind": "pattern", "metric": "x", "evidence_ids": ["x"]}
+        ],
+    )
+    with session_scope(engine) as db:
+        report = reports.build_report(
+            db, db.get(Team, team_id), WEEK, NOW, ScriptedLLM([careless, careless])
+        )
+        assert report.generated_by == "template" and "narrative" not in report.body
+        assert report.body["narrative_problems"]
+        assert "struggling" not in report.headline
+
+
+def test_the_api_serves_the_prose_when_it_is_switched_on(client, engine, monkeypatch):
+    team_id, _ = team_with(engine, 6, (Step("sleep_minutes", WEEK.start, -70),))
+    monkeypatch.setattr(teams, "report_writer", lambda: ScriptedLLM([writing_from_payload]))
+    boss = signed_in(client, engine, "boss@example.com", "supervisor")
+    body = client.post(f"/teams/{team_id}/reports", json={}, headers=boss).json()
+    assert body["generatedBy"] == "model"
+    assert body["narrative"] and all(
+        set(p["evidenceIds"]) <= set(body["evidence"]) for p in body["narrative"]
+    )
