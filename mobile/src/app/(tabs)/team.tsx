@@ -15,16 +15,17 @@ import type {
   ISODate,
   SharedLevels,
   SupervisedTeam,
-  TeamLevel,
   TeamReport,
   TeamReportSummary,
 } from '@/api/types';
 import { Row, Section } from '@/components/list';
+import { ChangeChart, KeyFigures, LevelsTable, WeekdayChart } from '@/components/teamReport';
 import { QueryState, Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/ui';
 import { windowLabel } from '@/lib/format';
+import { changeRows } from '@/lib/team';
 import { useWide } from '@/lib/layout';
 import { fonts, radius, spacing, useColors, useMetricColor } from '@/theme';
 
@@ -147,18 +148,11 @@ function ReportSection({
   }
   if (!report) return <Skeleton height={160} radius={radius.md} />;
 
-  const changed = report.sections.filter((s) => s.status === 'changed');
-  const steady = report.sections.filter((s) => s.status !== 'changed');
+  const rows = changeRows(report);
+  const changed = rows.filter((row) => row.status === 'changed').length;
   return (
     <>
-      <Section
-        title={`Week of ${windowLabel(report.week)}`}
-        footer={
-          report.status === 'withheld'
-            ? undefined
-            : `${report.membersIncluded} people with data. Each person is compared with their own four weeks before, and only the team's changes are reported, never anyone's own data. Patterns, not advice.`
-        }
-      >
+      <Section title={`Week of ${windowLabel(report.week)}`}>
         <Text variant="headline" style={styles.headline}>
           {report.headline}
         </Text>
@@ -167,19 +161,39 @@ function ReportSection({
             {paragraph.text}
           </Line>
         ))}
+        {report.status === 'ready' ? (
+          <KeyFigures
+            items={[
+              { value: `${report.membersIncluded}`, label: 'people with data' },
+              { value: `${changed} of ${rows.length}`, label: 'metrics changed' },
+              { value: `${report.levels.length}`, label: 'sharing levels' },
+            ]}
+          />
+        ) : null}
       </Section>
       {report.status === 'ready' ? (
-        <Section title="Figures">
-          {[...changed, ...steady, ...report.weekdays].map((section) => (
-            <Line
-              key={section.evidenceId}
-              metric={section.metric}
-              muted={section.status !== 'changed'}
+        <>
+          <Section
+            title="How the team changed"
+            footer="Each person's week against their own four weeks before; only the counts and the median reach you, never anyone's own data. A metric counts as changed only when the whole team moved clearly. Patterns, not advice."
+          >
+            <ChangeChart rows={rows} />
+          </Section>
+          {report.weekdays.length > 0 ? (
+            <Section
+              title="By weekday"
+              footer="The median, across people, of each weekday against each person's own usual over five weeks. A description, not a test."
             >
-              {section.text}
-            </Line>
-          ))}
-        </Section>
+              {report.weekdays.map((section) => (
+                <WeekdayChart
+                  key={section.evidenceId}
+                  section={section}
+                  evidence={report.evidence[section.evidenceId]}
+                />
+              ))}
+            </Section>
+          ) : null}
+        </>
       ) : null}
     </>
   );
@@ -207,36 +221,18 @@ function Line({
   );
 }
 
-const LEVEL_NAMES: [string, string][] = [
-  ['recovery_score', 'Recovery'],
-  ['sleep_minutes', 'Sleep'],
-  ['strain', 'Strain'],
-  ['stress_score', 'Stress'],
-];
-const LEVEL_WORDS: Record<TeamLevel, string> = { below: 'below', usual: 'usual', above: 'above' };
-
 function LevelsSection({ levels }: { levels: SharedLevels[] }) {
   return (
     <Section
       title="Shared weekly levels"
-      footer="Only people who chose to share, each against their own usual weeks, never against each other. They can stop at any time."
+      footer="Only people who chose to share, each week against their own usual weeks, never against each other. They can stop at any time."
     >
       {levels.length === 0 ? (
         <View style={styles.empty}>
           <Text color="muted">No one shares their levels yet.</Text>
         </View>
       ) : (
-        levels.map((person) => (
-          <Row
-            key={person.member}
-            icon="person-outline"
-            title={person.member}
-            detail={LEVEL_NAMES.map(
-              ([metric, name]) =>
-                `${name} ${person.levels[metric]?.level ? LEVEL_WORDS[person.levels[metric].level!] : '–'}`,
-            ).join(' · ')}
-          />
-        ))
+        <LevelsTable levels={levels} />
       )}
     </Section>
   );

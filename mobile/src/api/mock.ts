@@ -656,16 +656,78 @@ function lastFullWeek(): ISODate {
 
 function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
   const end = new Date(Date.parse(`${start}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
-  const section = (
+  // A section and the aggregate evidence it cites, as the backend stores them.
+  const evidence: Record<string, Evidence> = {};
+  const change = (
     metric: string,
     label: string,
-    status: 'changed' | 'steady',
-    text: string,
-  ) => ({ metric, label, status, text, evidenceId: `e_${metric}` });
+    median: number,
+    shown: string,
+    up: number,
+    down: number,
+    changed = false,
+  ) => {
+    const id = `e_${metric}`;
+    evidence[id] = {
+      id,
+      tool: 'team_change',
+      metrics: [metric],
+      windows: [],
+      n: 8,
+      sufficient: true,
+      stats: { members: 8, median_change: median, members_up: up, members_down: down },
+    };
+    const who = `${up} of 8 higher, ${down} lower`;
+    const text = changed
+      ? `${label} ${median > 0 ? 'rose' : 'fell'} across the team: median change ${shown} (${who}).`
+      : `${label}: no clear change for the team (median ${shown}; ${who}).`;
+    return { metric, label, status: changed ? 'changed' : 'steady', text, evidenceId: id } as const;
+  };
+  evidence.e_weekday_sleep = {
+    id: 'e_weekday_sleep',
+    tool: 'team_weekday',
+    metrics: ['sleep_minutes'],
+    windows: [],
+    n: 8,
+    sufficient: true,
+    stats: {
+      members: 8,
+      median_deviation_by_weekday: {
+        monday: -6,
+        tuesday: -11,
+        wednesday: -19,
+        thursday: -8,
+        friday: 4,
+        saturday: 31,
+        sunday: 22,
+      },
+    },
+  };
+  evidence.e_weekday_steps = {
+    id: 'e_weekday_steps',
+    tool: 'team_weekday',
+    metrics: ['steps'],
+    windows: [],
+    n: 8,
+    sufficient: true,
+    stats: {
+      members: 8,
+      median_deviation_by_weekday: {
+        monday: 420,
+        tuesday: 610,
+        wednesday: 380,
+        thursday: 150,
+        friday: -240,
+        saturday: -1310,
+        sunday: -890,
+      },
+    },
+  };
   return {
     week: { start, end },
     status: 'ready',
-    headline: 'Team sleep fell this week, and recovery dropped with it; the rest held steady.',
+    headline:
+      "This week the team's time asleep fell and recovery fell against the four weeks before; the rest held steady.",
     membersIncluded: 8,
     membersTotal: 8,
     minimumMembers: 5,
@@ -684,28 +746,31 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
         metric: 'recovery_score',
         evidenceIds: ['e_recovery_score'],
       },
-      {
-        text: 'Steps, strain and stress showed no clear change for the team.',
-        kind: 'no_change',
-        metric: 'steps',
-        evidenceIds: ['e_steps'],
-      },
     ],
     sections: [
-      section('sleep_minutes', 'Time asleep', 'changed', 'Time asleep fell across the team: median change -38 min (1 of 8 higher, 7 lower).'),
-      section('recovery_score', 'Recovery', 'changed', 'Recovery fell across the team: median change -9.0 (2 of 8 higher, 6 lower).'),
-      section('steps', 'Steps', 'steady', 'Steps: no clear change for the team (median -310 steps; 3 of 8 higher, 5 lower).'),
-      section('strain', 'Strain', 'steady', 'Strain: no clear change for the team (median +0.4; 5 of 8 higher, 3 lower).'),
-      section('stress_score', 'Stress', 'steady', 'Stress: no clear change for the team (median +3.0; 5 of 8 higher, 3 lower).'),
+      change('sleep_minutes', 'Time asleep', -38, '-38 min', 1, 7, true),
+      change('bedtime_hour', 'Bedtime', 0.2, '+12 min', 5, 3),
+      change('steps', 'Steps', -310, '-310 steps', 3, 5),
+      change('active_zone_minutes', 'Active Zone Minutes', 2.5, '+2.5 min', 5, 3),
+      change('resting_hr', 'Resting heart rate', 0.4, '+0.4 bpm', 4, 4),
+      change('hrv_ms', 'Heart rate variability', -1.8, '-1.8 ms', 3, 5),
+      change('recovery_score', 'Recovery', -9, '-9.0', 2, 6, true),
+      change('strain', 'Strain', 0.4, '+0.4', 5, 3),
+      change('stress_score', 'Stress', 3, '+3.0', 5, 3),
     ],
     weekdays: [
       {
         metric: 'sleep_minutes',
-        text: 'Time asleep by weekday: highest on Saturdays (+31 min against each person\'s usual), lowest on Wednesdays (-19 min).',
+        text: "Time asleep by weekday: highest on Saturdays (+31 min against each person's usual), lowest on Wednesdays (-19 min).",
         evidenceId: 'e_weekday_sleep',
       },
+      {
+        metric: 'steps',
+        text: "Steps by weekday: highest on Tuesdays (+610 steps against each person's usual), lowest on Saturdays (-1,310 steps).",
+        evidenceId: 'e_weekday_steps',
+      },
     ],
-    evidence: {},
+    evidence,
     levels: [
       {
         member: 'maya@example.com',
@@ -723,6 +788,15 @@ function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
           sleep_minutes: { mean: 447, level: 'usual' },
           strain: { mean: 12.4, level: 'above' },
           stress_score: { mean: 47, level: 'usual' },
+        },
+      },
+      {
+        member: 'lina@example.com',
+        levels: {
+          recovery_score: { mean: 66, level: 'usual' },
+          sleep_minutes: { mean: 391, level: 'below' },
+          strain: { mean: null, level: null },
+          stress_score: { mean: 38, level: 'below' },
         },
       },
     ],
