@@ -10,6 +10,7 @@ tens of minutes a night; a history must come from one source, never a mix of bot
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import pandas as pd
@@ -28,6 +29,25 @@ ACTIVE_MINUTES = {
     "MODERATE": "moderately_active_minutes",
     "VIGOROUS": "very_active_minutes",
 }
+
+# Time in Fitbit's heart-rate zones, which Fitbit sets from each wearer's heart-rate reserve. The
+# inputs of the strain score (docs/scores.md).
+HEART_ZONES = {
+    "LIGHT": "hr_zone_light_minutes",
+    "MODERATE": "hr_zone_moderate_minutes",
+    "VIGOROUS": "hr_zone_vigorous_minutes",
+    "PEAK": "hr_zone_peak_minutes",
+}
+
+# The inputs of the stress score: awake minutes spent still, and how far above the day's resting
+# rate the heart beat in them on average (no cutoff: the score ranks each day against the person's
+# own weeks before, and sitting normally runs 10-20 bpm above a resting rate measured asleep).
+# A still minute this soon after a moderately or very active one is left
+# out, so a heart rate settling after exercise is not counted. Levels come a minute at a time, so
+# light movement (walking to the kitchen) must not restart the wait, or few still minutes remain.
+SETTLE_MINUTES = 10
+EXERCISE_LEVELS = ("MODERATELY_ACTIVE", "VERY_ACTIVE")
+HEART_WINDOW_DAYS = 14  # minute heart rate is requested in pieces of this many days
 
 SLEEP_STAGES = {
     "DEEP": "deep_sleep_minutes",
@@ -113,6 +133,20 @@ def _rollup_column(health: HealthClient, column: str, start: date, end: date) ->
     return pd.Series(values, name=column, dtype=float)
 
 
+def _heart_zones(health: HealthClient, start: date, end: date) -> pd.DataFrame:
+    rows: dict[date, dict[str, float]] = {}
+    for point in health.daily_rollup("time-in-heart-rate-zone", start, end):
+        if "timeInHeartRateZone" not in point:
+            continue
+        row = dict.fromkeys(HEART_ZONES.values(), 0.0)  # a zone not reached is left out
+        for zone in point["timeInHeartRateZone"].get("timeInHeartRateZones", []):
+            column = HEART_ZONES.get(zone.get("heartRateZone"))
+            if column:
+                row[column] = round((_seconds(zone.get("duration")) or 0) / 60, 1)
+        rows[_civil(point["civilStartTime"])] = row
+    return pd.DataFrame.from_dict(rows, orient="index", columns=list(HEART_ZONES.values()))
+
+
 def _active_minutes(health: HealthClient, start: date, end: date) -> pd.DataFrame:
     rows: dict[date, dict[str, float]] = {}
     for point in health.daily_rollup("active-minutes", start, end):
@@ -160,17 +194,98 @@ def _utc_filter(field: str, start: date, end: date) -> str:
     return f'{field} >= "{low.isoformat()}T00:00:00Z" AND {field} < "{high.isoformat()}T00:00:00Z"'
 
 
-def _wear_minutes(health: HealthClient, start: date, end: date) -> pd.Series:
-    # Activity level is only recorded for awake minutes with the device on: a wear-time signal.
-    minutes: dict[date, float] = {}
+@dataclass(frozen=True)
+class Level:
+    """One activity-level interval, in minutes since the epoch (UTC)."""
+
+    day: date  # the local day it started on
+    start: int
+    end: int
+    still: bool
+    exercise: bool = False  # moderately or very active
+
+
+def _minute(time: str | datetime) -> int:
+    return int(pd.Timestamp(time).timestamp() // 60)
+
+
+def _activity_levels(health: HealthClient, start: date, end: date) -> list[Level]:
+    # Activity level is only recorded for awake minutes with the device on.
     query = _utc_filter("activity_level.interval.start_time", start, end)
-    for point in health.list_points("activity-level", filter=query, page_size=10_000):
-        interval = point["activityLevel"]["interval"]
-        day = _civil(interval["civilStartTime"])
-        length = pd.Timestamp(interval["endTime"]) - pd.Timestamp(interval["startTime"])
-        minutes[day] = minutes.get(day, 0.0) + length.total_seconds() / 60
-    series = pd.Series(minutes, name="wear_minutes", dtype=float)
+    return [
+        Level(
+            day=_civil(point["activityLevel"]["interval"]["civilStartTime"]),
+            start=_minute(point["activityLevel"]["interval"]["startTime"]),
+            end=_minute(point["activityLevel"]["interval"]["endTime"]),
+            still=point["activityLevel"].get("activityLevelType") == "SEDENTARY",
+            exercise=point["activityLevel"].get("activityLevelType") in EXERCISE_LEVELS,
+        )
+        for point in health.list_points("activity-level", filter=query, page_size=10_000)
+    ]
+
+
+def _in_range(series: pd.Series, start: date, end: date) -> pd.Series:
     return series[(series.index >= start) & (series.index < end)]
+
+
+def _wear_minutes(levels: list[Level], start: date, end: date) -> pd.Series:
+    minutes: dict[date, float] = {}
+    for level in levels:
+        minutes[level.day] = minutes.get(level.day, 0.0) + level.end - level.start
+    return _in_range(pd.Series(minutes, name="wear_minutes", dtype=float), start, end)
+
+
+def _heart_minutes(health: HealthClient, levels: list[Level]) -> dict[int, float]:
+    """The average heart rate of each minute the levels cover, read in 60 s roll-ups."""
+    if not any(level.still for level in levels):
+        return {}
+    low = pd.Timestamp(min(level.start for level in levels) * 60, unit="s", tz="UTC")
+    high = pd.Timestamp(max(level.end for level in levels) * 60 + 60, unit="s", tz="UTC")
+    rates: dict[int, float] = {}
+    while low < high:
+        piece_end = min(high, low + pd.Timedelta(days=HEART_WINDOW_DAYS))
+        points = health.rollup_windows(
+            "heart-rate", low.to_pydatetime(), piece_end.to_pydatetime(), 60
+        )
+        for point in points:
+            rate = _number(point.get("heartRate", {}).get("beatsPerMinuteAvg"))
+            if rate is not None:
+                rates[_minute(point["startTime"])] = rate
+        low = piece_end
+    return rates
+
+
+def still_minutes(levels: list[Level], heart: dict[int, float], resting: pd.Series) -> pd.DataFrame:
+    """Per local day: still awake minutes with a heart rate, and their mean beats above resting.
+
+    A day without a resting heart rate has neither, as there is nothing to compare with.
+    """
+    active: set[int] = set()
+    still: dict[int, date] = {}
+    for level in levels:
+        for minute in range(level.start, max(level.end, level.start + 1)):
+            if level.still:
+                still[minute] = level.day
+            elif level.exercise:
+                active.add(minute)
+    above: dict[date, list[float]] = {}
+    for minute, day in still.items():
+        rate, rest = heart.get(minute), resting.get(day)
+        if rate is None or rest is None or pd.isna(rest):
+            continue
+        if any(minute - gap in active for gap in range(1, SETTLE_MINUTES + 1)):
+            continue
+        above.setdefault(day, []).append(rate - rest)
+    rows = {
+        day: {
+            "still_minutes": len(values),
+            "still_hr_above_resting": round(sum(values) / len(values), 2),
+        }
+        for day, values in above.items()
+    }
+    return pd.DataFrame.from_dict(
+        rows, orient="index", columns=["still_minutes", "still_hr_above_resting"], dtype=float
+    )
 
 
 def _sleep_row(sleep: dict) -> dict:
@@ -219,13 +334,19 @@ def _sleep(health: HealthClient, start: date, end: date) -> pd.DataFrame:
 
 def load_daily(health: HealthClient, start: date, end: date) -> DailyData:
     """The daily table for local days in [start, end), read from the Google Health API."""
+    levels = _activity_levels(health, start, end)
+    daily_values = [_daily_value(health, column, start, end) for column in DAILY_VALUES]
+    resting = next(series for series in daily_values if series.name == "resting_hr")
+    still = still_minutes(levels, _heart_minutes(health, levels), resting)
     columns: list[pd.Series | pd.DataFrame] = [
         *(_rollup_column(health, column, start, end) for column in ROLLUPS),
         _active_minutes(health, start, end),
-        _wear_minutes(health, start, end),
-        *(_daily_value(health, column, start, end) for column in DAILY_VALUES),
+        _heart_zones(health, start, end),
+        _wear_minutes(levels, start, end),
+        *daily_values,
         _skin_temperature(health, start, end),
         _sleep(health, start, end),
+        still[(still.index >= start) & (still.index < end)],
     ]
     frame = pd.concat(columns, axis=1)
     frame.index = pd.DatetimeIndex(pd.to_datetime(frame.index), name="date")

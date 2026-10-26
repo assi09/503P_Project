@@ -93,10 +93,26 @@ export interface DaySummary {
   last: ISODate;
   metrics: DayMetric[];
   recovery?: Recovery | null; // our own estimate, with at least two of its three inputs
+  strain?: Strain | null; // load from time in heart-rate zones (docs/scores.md)
+  stress?: Stress | null; // with 4 hours of still, awake wear that day
 }
 
 /** Where last night's HRV, resting heart rate and sleep sit among the 28 days before (0–100). */
 export interface Recovery {
+  score: number;
+  parts: Record<string, number>; // each input's share of the 28 days before that it beat
+}
+
+/** The day's load from minutes in Fitbit's heart-rate zones, on a 0–21 scale. */
+export interface Strain {
+  score: number;
+  band: 'light' | 'moderate' | 'high' | 'all_out';
+  load: number; // weighted zone minutes
+  method: 'zones' | 'active_zone_minutes'; // the second is an estimate without zone minutes
+}
+
+/** Physical signs of stress against the 28 days before (0–100; 50 is a typical day). */
+export interface Stress {
   score: number;
   parts: Record<string, number>; // each input's share of the 28 days before that it beat
 }

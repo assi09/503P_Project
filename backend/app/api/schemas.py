@@ -86,6 +86,18 @@ class Recovery(ApiModel):
     parts: dict[str, float]  # each input's share (0 to 100) of the 28 days before it beat
 
 
+class Strain(ApiModel):
+    score: float  # 0 to 21
+    band: Literal["light", "moderate", "high", "all_out"]
+    load: float  # weighted minutes in the heart-rate zones
+    method: Literal["zones", "active_zone_minutes"]  # the second is an estimate without zones
+
+
+class Stress(ApiModel):
+    score: float  # 0 to 100; 50 is a typical day for this person, higher means more signs
+    parts: dict[str, float]  # each input's share (0 to 100) of the 28 days before it beat
+
+
 class Day(ApiModel):
     date: date
     partial: bool  # today, still filling in
@@ -94,6 +106,8 @@ class Day(ApiModel):
     last: date
     metrics: list[DayMetric]
     recovery: Recovery | None = None  # with at least two of HRV, resting heart rate, sleep
+    strain: Strain | None = None
+    stress: Stress | None = None  # with 4 hours of still, awake wear that day
 
 
 class Workout(ApiModel):

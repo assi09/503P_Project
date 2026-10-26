@@ -172,6 +172,15 @@ describe('days', () => {
     await expect(mockClient.getDay('2000-01-01')).rejects.toMatchObject({ status: 404 });
   });
 
+  it('serves strain and stress with the day, and their days as metrics', async () => {
+    const day = await mockClient.getDay('latest');
+    expect(day.strain!.score).toBeLessThanOrEqual(21);
+    expect(['light', 'moderate', 'high', 'all_out']).toContain(day.strain!.band);
+    expect(day.stress!.score).toBeGreaterThanOrEqual(0);
+    const stress = await mockClient.getMetricSeries('stress_score', { days: 7 });
+    expect(stress.points).toHaveLength(7);
+  });
+
   it('serves a metric for the days asked for, ending on the day asked for', async () => {
     const { last } = await mockClient.getDay('latest');
     const series = await mockClient.getMetricSeries('resting_hr', { days: 7 });

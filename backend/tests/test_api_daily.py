@@ -39,23 +39,42 @@ def sleep(start, end, asleep, main=True, kind="STAGES", stages=None, offset="108
     }
 
 
-def level_interval(day: str, start: str, end: str) -> dict:
+def level_interval(day: str, start: str, end: str, kind: str = "SEDENTARY") -> dict:
     return {
         "activityLevel": {
             "interval": {"startTime": start, "endTime": end, "civilStartTime": civil(day)},
-            "activityLevelType": "SEDENTARY",
+            "activityLevelType": kind,
         }
     }
 
 
+def heart_minutes(start: str, minutes: int, bpm: float) -> list[dict]:
+    """60 s heart-rate roll-ups, one per minute from `start` (UTC)."""
+    first = pd.Timestamp(start)
+    return [
+        {
+            "startTime": (first + pd.Timedelta(minutes=i)).isoformat().replace("+00:00", "Z"),
+            "heartRate": {"beatsPerMinuteAvg": bpm},
+        }
+        for i in range(minutes)
+    ]
+
+
 class FakeHealth:
-    def __init__(self, rollups=None, points=None):
+    def __init__(self, rollups=None, points=None, heart=None):
         self.rollups = rollups or {}
         self.points = points or {}
+        self.heart = heart or []
         self.filters: dict[str, str | None] = {}
+        self.heart_requests: list[tuple] = []
 
     def daily_rollup(self, data_type, start, end):
         return self.rollups.get(data_type, [])
+
+    def rollup_windows(self, data_type, start, end, window_s):
+        assert data_type == "heart-rate" and window_s == 60
+        self.heart_requests.append((start, end))
+        return [p for p in self.heart if start <= pd.Timestamp(p["startTime"]) < end]
 
     def list_points(self, data_type, filter=None, page_size=None):
         self.filters[data_type] = filter
@@ -82,6 +101,20 @@ def health() -> FakeHealth:
                         "sumInPeakHeartZone": "2",
                     },
                 )
+            ],
+            "time-in-heart-rate-zone": [
+                rollup(
+                    "2026-07-01",
+                    "timeInHeartRateZone",
+                    {
+                        "timeInHeartRateZones": [
+                            {"heartRateZone": "LIGHT", "duration": "3600s"},
+                            {"heartRateZone": "VIGOROUS", "duration": "630s"},
+                            {"heartRateZone": "SOMETHING_NEW", "duration": "60s"},
+                        ]
+                    },
+                ),
+                {"civilStartTime": civil("2026-07-02")},
             ],
             "active-minutes": [
                 rollup(
@@ -187,6 +220,82 @@ def test_wear_time_sums_interval_minutes_within_the_range(health):
     frame = load_daily(health, START, END).frame
     assert day(frame, "2026-07-01")["wear_minutes"] == 45
     assert pd.Timestamp("2026-06-30") not in frame.index
+
+
+def test_heart_zones_become_minutes_with_absent_zones_as_zero(health):
+    frame = load_daily(health, START, END).frame
+    jul1 = day(frame, "2026-07-01")
+    assert jul1["hr_zone_light_minutes"] == 60
+    assert jul1["hr_zone_vigorous_minutes"] == 10.5
+    assert jul1["hr_zone_moderate_minutes"] == 0
+    assert jul1["hr_zone_peak_minutes"] == 0
+    assert pd.isna(day(frame, "2026-07-02")["hr_zone_light_minutes"])  # no zone data that day
+
+
+def test_still_minutes_and_their_heart_rate_above_the_days_resting_rate():
+    # Jul 2 has a resting heart rate of 61.
+    health = FakeHealth(
+        points={
+            "daily-resting-heart-rate": [
+                {
+                    "dailyRestingHeartRate": {
+                        "date": civil("2026-07-02")["date"],
+                        "beatsPerMinute": "61",
+                    }
+                }
+            ],
+            "activity-level": [
+                level_interval("2026-07-02", "2026-07-02T09:00:00Z", "2026-07-02T09:30:00Z"),
+                level_interval("2026-07-02", "2026-07-02T10:00:00Z", "2026-07-02T10:20:00Z"),
+                # No resting heart rate on Jul 3: nothing to compare with.
+                level_interval("2026-07-03", "2026-07-03T09:00:00Z", "2026-07-03T09:30:00Z"),
+            ],
+        },
+        heart=[
+            *heart_minutes("2026-07-02T09:00:00Z", 30, 81),  # 20 above resting
+            *heart_minutes("2026-07-02T10:00:00Z", 10, 66),  # 5 above; no heart rate for
+            *heart_minutes("2026-07-03T09:00:00Z", 30, 90),  # the last 10 minutes
+        ],
+    )
+    frame = load_daily(health, START, END).frame
+    jul2 = day(frame, "2026-07-02")
+    assert jul2["still_minutes"] == 40
+    assert jul2["still_hr_above_resting"] == (30 * 20 + 10 * 5) / 40
+    assert pd.isna(day(frame, "2026-07-03")["still_minutes"])
+
+
+def test_still_minutes_just_after_exercise_are_left_out():
+    levels = [
+        daily.Level(date(2026, 7, 2), start=0, end=5, still=False, exercise=True),
+        daily.Level(date(2026, 7, 2), start=5, end=30, still=True),
+        # Light movement does not restart the wait.
+        daily.Level(date(2026, 7, 2), start=30, end=31, still=False),
+        daily.Level(date(2026, 7, 2), start=31, end=35, still=True),
+    ]
+    heart = {minute: 100.0 for minute in range(35)}
+    counts = daily.still_minutes(levels, heart, pd.Series({date(2026, 7, 2): 60.0}))
+    # Minutes 5 to 14 are within SETTLE_MINUTES of the last exercise minute (4).
+    assert counts.loc[date(2026, 7, 2)].tolist() == [19, 40]
+
+
+def test_no_heart_rate_is_requested_without_still_minutes(health):
+    health.points["activity-level"] = [
+        level_interval("2026-07-01", "2026-07-01T06:00:00Z", "2026-07-01T06:30:00Z", "VERY_ACTIVE")
+    ]
+    frame = load_daily(health, START, END).frame
+    assert health.heart_requests == []
+    assert "still_minutes" not in frame.columns or frame["still_minutes"].isna().all()
+
+
+def test_minute_heart_rate_is_read_in_pieces_of_at_most_two_weeks():
+    levels = [
+        daily.Level(date(2026, 7, 1), start=0, end=1, still=True),
+        daily.Level(date(2026, 7, 31), start=30 * 24 * 60, end=30 * 24 * 60 + 1, still=True),
+    ]
+    health = FakeHealth()
+    daily._heart_minutes(health, levels)
+    assert len(health.heart_requests) == 3
+    assert all(end - start <= pd.Timedelta(days=14) for start, end in health.heart_requests)
 
 
 def test_sleep_is_dated_by_the_local_day_it_ended(health):

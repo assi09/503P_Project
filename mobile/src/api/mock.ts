@@ -85,6 +85,8 @@ const DAILY: [string, number, number, number][] = [
   ['respiratory_rate', 14.6, 0.6, 1],
   ['skin_temp_variation_c', 0, 0.3, 1],
   ['wear_minutes', 1320, 60, 0],
+  ['strain', 9, 5, 1],
+  ['stress_score', 50, 20, 0],
 ];
 
 function dailyValue(metric: number, daysAgo: number): number {
@@ -143,6 +145,11 @@ function mockDay(date: ISODate): DaySummary {
     last: isoDate(0),
     metrics,
     recovery: { score: 64, parts: { hrv_ms: 71, resting_hr: 58, sleep_minutes: 63 } },
+    strain: { score: 11.4, band: 'moderate', load: 152.3, method: 'zones' },
+    stress: {
+      score: 57,
+      parts: { daytime_heart_rate: 62, hrv_ms: 48, resting_hr: 55, sleep_minutes: 51 },
+    },
   };
 }
 

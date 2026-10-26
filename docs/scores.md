@@ -3,9 +3,10 @@
 Two new daily scores, our own and deterministic like the [recovery score](product.md#recovery-score):
 **strain** (how much load the heart carried today) and **stress** (how many physical signs of
 stress the body showed). Every person sees them on Today. A supervisor sees their weekly levels
-only for people who opted in ([teams.md](teams.md)). Status: researched and checked against the
-API, not built. The constants below are starting points, to be checked on synthetic data and on
-our own before they are fixed.
+only for people who opted in ([teams.md](teams.md)). Status: the scores and their inputs are built
+(`backend/app/analysis/day.py`, `backend/app/sync/daily.py`) and served by `/days`; Today shows
+them next. The constants were calibrated on 60 days of the owner's data (below). They are
+versioned and may move once more people use the app.
 
 Like every score in the app, they describe the person's own data against their own baseline.
 They are not medical measurements. "Stress" means physical signs only, never a mental state or a
@@ -41,79 +42,96 @@ We cannot read EDA, daytime HRV or Fitbit's own stress score (in Takeout that is
 1. **Load from Fitbit's own heart-rate zones.** Fitbit sets these zones from heart-rate reserve,
    using the wearer's resting heart rate and age. So the daily zone roll-up already reflects how
    hard the effort was for this person, which settles the maximum-heart-rate question without
-   asking anyone's age. Load is the minutes in each zone times a weight, as in Edwards' TRIMP:
-   `LIGHT` 1, `MODERATE` 2, `VIGOROUS` 3, `PEAK` 4.
-2. **Bounded scale.** `strain = 21 × (1 − exp(−load / k))`, so each extra minute adds less near the
-   top, as with WHOOP. `k` is set so that a typical workout day lands around 14, WHOOP's "high".
-   Bands: 0-9 light, 10-13 moderate, 14-17 high, 18-21 all out.
-3. **No zones that day** (not worn, or nothing above the light zone): Active Zone Minutes, from
-   the same zones, gives the fallback; with neither there is no strain, not a zero.
+   asking anyone's age. `MODERATE`, `VIGOROUS` and `PEAK` are Fitbit's fat-burn, cardio and peak
+   zones: together they reproduce Active Zone Minutes. Load is the minutes in each zone times a
+   weight, as in Edwards' TRIMP: `MODERATE` 2, `VIGOROUS` 3, `PEAK` 4. `LIGHT` holds 99% of a
+   day's zone time, so it is everyday heart rate, not exercise. Weighted 1 it made every day "all
+   out", so it counts **0.04**, enough to give a rest day a few points, as WHOOP does.
+2. **Bounded scale.** `strain = 21 × (1 − exp(−load / 200))`, so each extra minute adds less near
+   the top, as with WHOOP. Bands: 0-9 light, 10-13 moderate, 14-17 high, 18-21 all out.
+3. **No zone minutes that day** (the Takeout history, or days synced before zones were added):
+   load is estimated from Active Zone Minutes, at the person's own ratio of load to AZM on days
+   with both (2 when there are fewer than 7 such days). With neither there is no strain, not a
+   zero. The day records which method was used.
 4. **Later (`strain_v2`):** a muscular part for strength workouts, from logged
    strength-training minutes, since heart rate undercounts lifting.
-
-Checks: strain increases with zone minutes and intensity, never passes 21, and is 0 with no zone
-time. On synthetic days with planted workouts it rises on those days; the fallback agrees with
-the zone method on days that have both.
 
 ## Stress (`stress_v1`), 0 to 100, higher means more signs of stress
 
 Recovery already covers the overnight signals. To avoid scoring the same thing twice, stress is
 weighted toward **daytime**:
 
-1. **Still-elevated minutes (60% of the weight).** These are awake minutes where the activity
-   level is sedentary, at least 10 minutes after the last active minute (so the heart rate coming
-   down after exercise is not counted), and the minute's heart rate is above that day's resting
-   rate by more than a margin. The margin starts at the larger of 10 bpm and the spread of the
-   person's own still heart rate over the previous 28 days. The input is the share of still
-   minutes that are elevated. This is the movement-adjusted heart rate behind Oura's and Fitbit's
-   responsiveness signals, without EDA.
-2. **Nightly HRV below the person's usual and resting heart rate above it (25%),** shared with
-   recovery.
+1. **Heart rate while still, beyond what exercise explains (60% of the weight).** Still minutes
+   are awake minutes labeled sedentary, not within 10 minutes after a moderately or very active
+   minute. The sync stores their mean heart rate above that day's resting rate. The score then
+   takes its distance from a line fitted on the person's 28 days before (still heart rate against
+   log zone load), and that distance is the input. This is the movement-adjusted heart rate
+   behind Oura's and Fitbit's responsiveness signals, without EDA.
+2. **Nightly HRV below the person's usual and resting heart rate above it (12.5% each),** shared
+   with recovery.
 3. **Sleep shortfall against the person's usual (15%).**
 
-Each input becomes a robust z-score against the person's previous 28-60 days, as for recovery.
-They are combined with the fixed weights above, versioned in code, and mapped to 0-100, where 50
-is a typical day for this person. There is no score with fewer than 4 hours of still, awake wear
-that day, or before there is a baseline. Each score lists its parts, so the app and the agent
-can explain it.
+Each input becomes its share of the person's 28 days before that it beat, in the direction of more
+stress (ties count half), exactly as recovery ranks its inputs. The shares are combined with the
+fixed weights above, renormalized over the inputs present, so 50 is a typical day. There is no
+score without the daytime input: under 4 hours of still, awake wear that day, or under 7 earlier
+days to compare with. Each score lists its parts, so the app and the agent can explain it.
 
-**Ground truth.** Nothing we can read measures stress directly, so the score is checked against
-the person: an optional evening check-in ("how stressful was today?", 1-5) next to the morning
-one. The evaluation reports the rank correlation between the score and those ratings, as a pilot
-with one or two people. A still-elevated minute also means caffeine, heat, illness or a standing
-desk, and the score's explanation says so.
+**Ground truth.** Nothing we can read measures stress directly, so the score is to be checked
+against the person: an optional evening check-in ("how stressful was today?", 1-5) next to the
+morning one. The evaluation reports the rank correlation between the score and those ratings, as
+a pilot with one or two people. A raised heart rate while still also comes from caffeine, heat,
+illness or a standing desk, and the score's explanation says so.
+
+## How the constants were chosen
+
+On 60 days of the owner's live data, read-only, recording only counts and ratios:
+
+| Tried | Result | Kept |
+|---|---|---|
+| `LIGHT` zone weighted 1 (Edwards) | every one of 60 days "all out": `LIGHT` is 99% of zone time | weight 0.04, scale 200: 39 light, 11 moderate, 6 high and 4 all-out days; a quiet day about 6 |
+| A still minute waits 10 minutes after any non-sedentary minute | only 15 of 60 days reached 4 hours still: levels come a minute at a time, so walking to the kitchen restarted the wait | wait only after moderately or very active minutes: 56 of 60 days |
+| Share of still minutes above resting + 10 bpm | 85% of still minutes on a median day: Fitbit's resting rate is measured asleep, and sitting runs 10-20 bpm above it | the mean above resting, no cutoff (it ranks days the same as a +25 bpm cutoff, rank correlation 0.86) |
+| That mean as it is | stress followed strain (rank correlation 0.63): active days read as stressful. Waiting 30 minutes after exercise left 13 days with a score, 60 minutes none | the distance from the person's own line against exercise: rank correlation with strain 0.09, 42 days with a score |
+
+With all of this, stress ranks days almost independently of recovery (rank correlation 0.04), so
+the two scores say different things. A test over 20 made-up people checks that a heart rate raised
+only by exercise does not raise stress.
 
 ## Storage and computation
 
 The same as recovery: the sync stores the **inputs** as ordinary daily metrics from the same
-source, and the scores are computed from them when read. A new formula version therefore never
-needs a resync.
+source, and the scores are computed from them when read. A new formula therefore never needs a
+resync.
 
 - `hr_zone_light_minutes`, `hr_zone_moderate_minutes`, `hr_zone_vigorous_minutes`,
-  `hr_zone_peak_minutes`: from the zone roll-up, cheap for the whole history.
-- `still_minutes` and `still_elevated_minutes`: from the minute heart-rate roll-up and the
-  activity-level intervals, one extra request per day. The first sync fills recent days first, as
-  it already does, and syncs after that reread the last 3 days.
-- `strain` and `stress` are computed in `backend/app/analysis/` next to recovery (`day.py`).
-  `/days/{date}` returns them with their parts, like `recovery`. They join the metric list, so the
-  metric pages, the screen, the evidence pages and the experts use them like any other metric
-  (strain belongs to the activity expert, stress to recovery).
+  `hr_zone_peak_minutes`: from the zone roll-up, 90 days per request.
+- `still_minutes` and `still_hr_above_resting`: from the minute heart-rate roll-up (about one
+  request per day; 60 days sync in under 2 minutes) and the activity-level intervals already read
+  for wear time.
+- `strain` and `stress_score` are computed in `backend/app/analysis/day.py` next to recovery.
+  `/days/{date}` returns them with their parts, like `recovery`, and `/metrics/strain` and
+  `/metrics/stress_score` give their days. The inputs are not screened as findings themselves.
+- Days stored before this change have no inputs until they are synced again: later syncs reread
+  only the last 3 days. `python -m app.sync pull --email <account> --days <n>` rewrites a range
+  from the API. Until then strain uses the Active Zone Minutes estimate and stress is missing.
 
-Minute heart rate is never stored, only the two daily counts.
+Minute heart rate is never stored, only the daily values.
 
-## On Today
+## Next
 
-- **Key numbers become Recovery, Strain, Sleep and Stress**: a 2×2 grid on phones, one row on
-  wide screens. Each is shown in large type against the usual range, and opens its metric page.
-  Steps moves to the top of the Activity section. Resting heart rate stays in Heart and body.
-- Strain shows its band (light, moderate, high, all out). Stress shows "below usual", "usual" or
-  "above usual" rather than a bare number, since 50 means a typical day.
-- The metric pages explain the inputs: zone minutes for strain; still-elevated time, HRV, resting
-  heart rate and sleep for stress. The evening stress check-in is a row beside the morning one.
-- Light and dark mode, flat rows as in the [UI plan](ui-plan.md).
+- **Today:** the key numbers become Recovery, Strain, Sleep and Stress (a 2×2 grid on phones,
+  one row on wide screens), each against the usual range and opening its metric page. Steps moves
+  to the top of the Activity section. Strain shows its band, stress "below usual", "usual" or
+  "above usual". The metric pages explain the inputs. Light and dark mode, flat rows as in the
+  [UI plan](ui-plan.md).
+- **The agent:** strain to the activity expert and stress to the recovery expert, so they can be
+  asked about and cited.
+- **The evening stress check-in**, as ground truth.
+- **Backfill** for people already connected: resync the whole history once when new inputs
+  appear.
 
 ## Open
 
-- The constants: `k` for strain, and the margin and the 10-minute gap for stress, tuned on our
-  own data before they are fixed.
 - Whether stress also uses skin temperature, as Oura does. It is nightly only in the API.
+- The constants rest on one person's 60 days; revisit them with more people.
