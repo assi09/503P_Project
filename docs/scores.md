@@ -106,6 +106,14 @@ usual range. Steps leads the Activity section. Today's strain and stress say "so
 up through the day. Strain's page lists the zone minutes and what each counts; stress's lists each
 input's share of the 28 days before. Stress has its own color.
 
+## In Ask
+
+The chat gives the agent the scores as daily metrics. Strain and the zone minutes belong to the
+activity expert; recovery, stress and the still-time inputs to the recovery expert, whose notes
+say they are the app's own estimates built from other metrics, and that stress means signs in
+the data, never a feeling or a condition. The router knows both words. One synthetic run is in
+[experiments.md](experiments.md#the-apps-own-scores-in-ask-2026-10-26).
+
 ## Storage and computation
 
 The same as recovery: the sync stores the **inputs** as ordinary daily metrics from the same
@@ -128,8 +136,6 @@ Minute heart rate is never stored, only the daily values.
 
 ## Next
 
-- **The agent:** strain to the activity expert and stress to the recovery expert, so they can be
-  asked about and cited.
 - **The evening stress check-in**, as ground truth.
 - **Backfill** for people already connected: resync the whole history once when new inputs
   appear.
@@ -138,3 +144,6 @@ Minute heart rate is never stored, only the daily values.
 
 - Whether stress also uses skin temperature, as Oura does. It is nightly only in the API.
 - The constants rest on one person's 60 days; revisit them with more people.
+- **Not validated yet.** The scores look plausible on the owner's data, but nothing has shown
+  they are correct: strain needs a comparison with workouts and perceived effort, stress with the
+  evening check-in. Both belong in the evaluation.

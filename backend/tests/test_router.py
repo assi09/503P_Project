@@ -160,6 +160,8 @@ def test_only_a_clean_short_question_leaves_the_server():
         ("Did my resting heart rate go up?", "recovery"),
         ("Am I walking fewer steps than usual?", "activity"),
         ("How much did I train last month?", "activity"),
+        ("Was my stress score higher this week?", "recovery"),
+        ("Why was my strain so high on Saturday?", "activity"),
         ("How much protein do I eat?", "nutrition"),
         ("How am I doing overall?", GENERAL),
         ("Do I have insomnia?", OUT_OF_SCOPE),

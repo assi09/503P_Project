@@ -43,6 +43,15 @@ METRICS: dict[str, MetricInfo] = {
     "rem_sleep_minutes": MetricInfo("REM sleep", "minutes"),
     "awake_in_bed_minutes": MetricInfo("time awake in bed", "minutes"),
     "bedtime_hour": MetricInfo("bedtime", "clock"),
+    "recovery_score": MetricInfo("recovery score", "score"),
+    "strain": MetricInfo("strain", "score"),
+    "stress_score": MetricInfo("stress score", "score"),
+    "hr_zone_light_minutes": MetricInfo("time in the light heart-rate zone", "minutes"),
+    "hr_zone_moderate_minutes": MetricInfo("time in the fat-burn heart-rate zone", "minutes"),
+    "hr_zone_vigorous_minutes": MetricInfo("time in the cardio heart-rate zone", "minutes"),
+    "hr_zone_peak_minutes": MetricInfo("time in the peak heart-rate zone", "minutes"),
+    "still_minutes": MetricInfo("time still while awake", "minutes"),
+    "still_hr_above_resting": MetricInfo("heart rate while still, above resting", "bpm"),
 }
 
 # Statistics that are a level of the metric, and ones that are a difference between levels.

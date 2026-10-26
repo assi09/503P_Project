@@ -40,8 +40,8 @@ def submission(summary: str, cost: float = 0.0, claims=()) -> Completion:
     return Completion(None, (call,), "scripted", Usage(), cost, 0.0)
 
 
-def describe_then_claim(text: str, cost: float = 0.004):
-    """Runs `describe` on sleep, then submits one claim citing it."""
+def describe_then_claim(text: str, cost: float = 0.004, metric: str = "sleep_minutes"):
+    """Runs `describe` on a metric (sleep unless told), then submits one claim citing it."""
 
     def submit(messages):
         payload = next(
@@ -53,13 +53,13 @@ def describe_then_claim(text: str, cost: float = 0.004):
             "text": text,
             "kind": "no_change",
             "evidence_ids": [payload["evidence_id"]],
-            "metric": "sleep_minutes",
+            "metric": metric,
         }
         return submission("Here is what I found.", cost, [claim])
 
     end = (START + timedelta(days=59)).isoformat()
     return [
-        ScriptedLLM.call("describe", metric="sleep_minutes", start=START.isoformat(), end=end),
+        ScriptedLLM.call("describe", metric=metric, start=START.isoformat(), end=end),
         submit,
     ]
 
@@ -123,6 +123,17 @@ def test_a_new_person_has_an_empty_chat(client, engine):
 
 
 # Answering
+
+
+def test_the_apps_own_scores_can_be_asked_about(client, engine):
+    # The daily table holds no scores; the chat adds them, and strain belongs to activity.
+    llm = ScriptedLLM(describe_then_claim("Your strain held steady.", metric="strain"))
+    activity = AgentParts(llm, FixedRouter(activity=0.9), None)
+    client.app.dependency_overrides[chat.get_agent] = lambda: activity
+    response = ask(client, signed_in(client, engine), "How was my strain?")
+    assert response.status_code == 200, response.text
+    answer = response.json()[1]
+    assert answer["answeredBy"] == "activity" and len(answer["evidenceIds"]) == 1
 
 
 def test_a_question_is_answered_with_verified_claims_and_stored(client, engine, agent):
