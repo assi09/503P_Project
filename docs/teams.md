@@ -106,8 +106,9 @@ Small PRs, each green and verified:
 1. This document.
 2. Roles, teams and memberships (migration 0009), join and leave, the team API, access-control
    tests.
-3. Strain and stress scores ([scores.md](scores.md)): the daily inputs from minute heart rate
-   at sync, the scores, their tests, then on Today.
+3. Strain and stress for everyone ([scores.md](scores.md)): the daily inputs at sync, the
+   scores and their tests, then Strain and Stress among Today's key numbers. This step is useful
+   on its own, before any team exists.
 4. Team statistics with calibration tests, and the named weekly levels behind the opt-in.
 5. The weekly report: templated, then the language-model text with the verifier and fallback,
    then the CLI. One real run on a synthetic team, logged in [costs.md](costs.md) and
