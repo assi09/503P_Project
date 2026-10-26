@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ApiError } from './http';
 import { api } from './index';
@@ -93,9 +93,40 @@ export function useAnswerQuestion() {
 /** Which chat is open: a conversation, the latest one, or a new one not created yet. */
 export type ChatTarget = string | 'latest' | 'new';
 
+const chatKey = (target: ChatTarget) => [...keys.chat, target];
+
+/** A chat with a new exchange added; an edited or retried question replaces itself and after. */
+export function withAnswer(
+  old: ChatMessage[] = [],
+  added: ChatMessage[],
+  replaces?: string,
+): ChatMessage[] {
+  const cut = replaces ? old.findIndex((m) => m.id === replaces) : -1;
+  return [...(cut >= 0 ? old.slice(0, cut) : old), ...added];
+}
+
+/**
+ * Puts a sent question and its answer into the cached chat. Sent to "the latest chat", the screen
+ * then follows the chat's id: that starts from what was shown, or it would hold only this exchange
+ * (as after a page reload, when nothing is cached under the id yet).
+ */
+export function storeAnswer(
+  client: QueryClient,
+  added: ChatMessage[],
+  target: ChatTarget,
+  replaces?: string,
+): void {
+  const id = added[0]?.conversationId;
+  const append = (old?: ChatMessage[]) => withAnswer(old, added, replaces);
+  const shown =
+    target === 'latest' ? client.getQueryData<ChatMessage[]>(chatKey('latest')) : undefined;
+  if (id) client.setQueryData<ChatMessage[]>(chatKey(id), (old) => append(old ?? shown));
+  if (target === 'latest') client.setQueryData<ChatMessage[]>(chatKey('latest'), append);
+}
+
 export function useChat(target: ChatTarget = 'latest') {
   return useQuery({
-    queryKey: [...keys.chat, target],
+    queryKey: chatKey(target),
     queryFn: () => (target === 'new' ? [] : api.getChat(target === 'latest' ? undefined : target)),
     // A question without an answer yet is still being answered on the server: check back.
     refetchInterval: (query) => (query.state.data?.at(-1)?.role === 'user' ? 4000 : false),
@@ -149,14 +180,7 @@ export function useSendMessage() {
     },
     // Append directly so the conversation never flickers while it refetches.
     onSuccess: (added, { target, options }) => {
-      const id = added[0]?.conversationId;
-      // An edited or retried question replaced itself and everything after it.
-      const append = (old: ChatMessage[] = []) => {
-        const cut = options.replaces ? old.findIndex((m) => m.id === options.replaces) : -1;
-        return [...(cut >= 0 ? old.slice(0, cut) : old), ...added];
-      };
-      if (id) client.setQueryData<ChatMessage[]>([...keys.chat, id], append);
-      if (target === 'latest') client.setQueryData<ChatMessage[]>([...keys.chat, 'latest'], append);
+      storeAnswer(client, added, target, options.replaces);
       client.invalidateQueries({ queryKey: keys.conversations });
     },
     // A slow answer was still stored with its question: reload to show them as they arrive.
