@@ -339,3 +339,21 @@ notes are reworded ("Your activity data was not checked for this answer...").
 **Real run ($0.0304, run through `ask()` directly because the day's chat cap was reached):** 7
 `compare_day` calls, 9 day claims (4 carried from Sleep), a summary that answers for today, and
 one note left for activity. Still seen: 5 correlation tests the question did not need.
+
+## The app's own scores in Ask (2026-10-26)
+
+**Tested:** whether the agent can be asked about recovery, strain and stress once they are daily
+metrics for it (strain owned by activity, recovery and stress by recovery, the router told what
+they are). `eval/scores_smoke.py`, one synthetic person, 90 days, with made-up zone minutes and
+still time and a planted rise in the still heart rate over the last two weeks (its stress score
+rose from about 47 to 69).
+**Showed ($0.0535 for two questions):**
+- "Has my stress score been higher in the last two weeks?": Jev routed it to recovery; 5 claims,
+  all verified, 4 model calls, $0.0113. It found the rise and tied it to the heart rate while
+  still, the planted cause, plus slightly less sleep.
+- "How has my strain been in the last two weeks?": routed to activity; 4 claims, all verified,
+  10 model calls, $0.0422. It found no clear change, which is right for this person, after
+  checking wear time. One cited evidence record covers every metric (a coverage check), so the
+  list of cited metrics is long.
+**Changed:** nothing more. Open: the strain answer used more calls than a quick answer usually
+does; watch it in the evaluation.

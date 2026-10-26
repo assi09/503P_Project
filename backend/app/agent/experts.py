@@ -95,12 +95,20 @@ EXPERTS: dict[str, Expert] = {
                 "respiratory_rate",
                 "skin_temp_variation_c",
                 "readiness",
+                "recovery_score",
+                "stress_score",
+                "still_minutes",
+                "still_hr_above_resting",
             ),
             reads=("sleep", "activity"),
             focus="Look at the nights and training before a change: shorter sleep and hard "
             "training days often show up in HRV and resting heart rate a day or two later.",
             notes="Readiness is Fitbit's own score, kept for comparison; describe it, do not "
-            "build on it.",
+            "build on it. The recovery and stress scores are the app's own estimates, built from "
+            "other metrics: recovery from last night's HRV, resting heart rate and time asleep; "
+            "stress mostly from the heart rate while still and awake, allowing for the day's "
+            "exercise. To explain a change in a score, test its inputs. Stress means physical "
+            "signs in the data, never how the person feels or a condition.",
         ),
         Expert(
             "activity",
@@ -114,12 +122,19 @@ EXPERTS: dict[str, Expert] = {
                 "very_active_minutes",
                 "calories",
                 "cardio_load",
+                "strain",
+                "hr_zone_light_minutes",
+                "hr_zone_moderate_minutes",
+                "hr_zone_vigorous_minutes",
+                "hr_zone_peak_minutes",
             ),
             reads=("recovery", "sleep"),
             focus="Check wear time first: days the device was barely worn lower every activity "
             "total. Then look for weekday and weekend patterns.",
             notes="Calories burned is a low-confidence estimate: describe only relative changes "
-            '("about 15% above your usual"), never claims built on its absolute value.',
+            '("about 15% above your usual"), never claims built on its absolute value. Strain is '
+            "the app's own 0 to 21 score of the day's load, from minutes in Fitbit's heart-rate "
+            "zones; to explain it, look at the zone minutes and workouts.",
         ),
         # No nutrition columns exist yet; the expert is listed so routing can name it.
         Expert(

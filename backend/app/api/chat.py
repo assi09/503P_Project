@@ -35,6 +35,7 @@ from app.agent.guard import Guard
 from app.agent.intent import Intent
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
+from app.analysis.day import with_scores
 from app.api import schemas
 from app.api.auth import Db, approved_user
 from app.api.errors import ApiError
@@ -240,7 +241,8 @@ def _answer(
             )
             if timedelta(0) <= now - created <= timedelta(hours=24):
                 continuing_log = last.pending_log_expert
-        frame = data.daily.frame
+        # With the app's own scores as daily metrics, so they can be asked about and cited.
+        frame = with_scores(data.daily.frame)
         # The agent gets the person's local time, so "just now" or "this morning" needs no
         # question; the data range is in the task separately.
         local_now = now.astimezone(ZoneInfo(settings.timezone))

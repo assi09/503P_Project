@@ -48,9 +48,11 @@ CRITERIA = {
     "sleep": "time asleep, time in bed, bedtime, sleep efficiency, sleep stages (deep, light, "
     "REM), time awake at night, sleep score",
     "recovery": "recovery, heart rate variability (HRV), resting heart rate, breathing rate, "
-    "skin temperature, readiness",
+    "skin temperature, readiness, the app's recovery score, the app's stress score (physical "
+    "signs of stress in the data, such as heart rate while still)",
     "activity": "logging workouts; steps, distance, exercise and training, Active Zone Minutes, "
-    "active and sedentary time, calories burned, cardio load",
+    "active and sedentary time, calories burned, cardio load, strain (the day's load from time "
+    "in heart-rate zones)",
     "nutrition": "logging food and drink, or analysing food and drink logged: calories eaten, "
     "protein, carbohydrates, fat, nutrients, "
     "meals",
@@ -243,6 +245,7 @@ KEYWORDS = {
         r"respirat",
         r"skin temp",
         r"temperature",
+        r"stress",
     ),
     "activity": _words(
         r"step",
@@ -256,6 +259,8 @@ KEYWORDS = {
         r"distance",
         r"zone minutes",
         r"azm\b",
+        r"strain",
+        r"heart[- ]rate zone",
         r"sedentary",
         r"cardio",
         r"burn",
