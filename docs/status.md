@@ -212,8 +212,8 @@ Next, in order:
 7. **Teams** (planned 2026-10-26): a supervisor's weekly report on a group of employees, team
    aggregates, nothing from fewer than 5 people, joined by invite code with consent, plus opt-in
    named weekly levels of recovery, sleep, strain and stress ([teams.md](teams.md),
-   [scores.md](scores.md)). Backend (#79-#82) and app screens (#83, #84) done. **Email of the weekly
-   report is deferred** until after deployment ([teams.md](teams.md#build-order)).
+   [scores.md](scores.md)). Backend (#79-#82), app screens (#83, #84, figures #87) and the weekly
+   email (outbox locally, Resend when turned on) done. The Monday schedule comes with deployment.
 
 ## What has been tested
 

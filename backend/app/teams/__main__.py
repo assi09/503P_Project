@@ -21,6 +21,7 @@ from app.db.models import Team
 from app.db.session import session_scope
 from app.teams import memberships, reports
 from app.teams.demo import add_demo_members
+from app.teams.email import MailError, deliver, mailer_from_settings
 
 LOCAL_HOSTS = {None, "localhost", "127.0.0.1", "::1", "db"}
 
@@ -34,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     weekly.add_argument(
         "--narrate", action="store_true", help="have a model write the prose (paid; checked)"
     )
+    weekly.add_argument("--no-email", action="store_true", help="make reports without emailing")
     demo = commands.add_parser(
         "demo-members", help="fill a team with made-up members (local database only)"
     )
@@ -50,7 +52,12 @@ def main(argv: list[str] | None = None) -> int:
         print("That week is not over yet.", file=sys.stderr)
         return 1
     writer = OpenAILLM.from_settings(settings) if args.narrate else None
-    made = withheld = written = 0
+    try:
+        mailer = None if args.no_email else mailer_from_settings(settings)
+    except MailError as error:
+        print(error, file=sys.stderr)
+        return 1
+    made = withheld = written = emailed = failed = 0
     cost = 0.0
     with session_scope() as session:
         query = select(Team).order_by(Team.created_at)
@@ -64,10 +71,19 @@ def main(argv: list[str] | None = None) -> int:
             withheld += report.status == "withheld"
             written += report.generated_by == "model"
             cost += report.cost_usd
+            if mailer is not None:
+                try:
+                    emailed += deliver(session, team, report, mailer, settings.app_url, now)
+                except MailError as error:
+                    failed += 1  # the report is kept; the next run tries the email again
+                    print(f"{team.name}: {error}", file=sys.stderr)
     print(f"Week of {week.start}: {made} reports ready, {withheld} withheld (too few people).")
     if writer:
         print(f"{written} written by the model, the rest templated; ${cost:.4f}.")
-    return 0
+    if mailer is not None:
+        where = "sent" if settings.email_backend == "resend" else "written to data/outbox/"
+        print(f"{emailed} emails {where}" + (f", {failed} failed." if failed else "."))
+    return 1 if failed else 0
 
 
 def _demo_members(code: str, count: int, sharing: int, now: datetime) -> int:

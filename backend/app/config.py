@@ -1,6 +1,7 @@
 """Central configuration, loaded from environment variables or a local `.env` file."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,6 +52,12 @@ class Settings(BaseSettings):
     # the most one report's text may cost.
     team_report_narrative: bool = False
     team_report_cap_usd: float = 0.02
+    # Team report emails: written to data/outbox/ unless sending through Resend is turned on,
+    # with its key and a sender Resend accepts (onboarding@resend.dev only reaches the account's
+    # own address; any other needs a verified domain).
+    email_backend: Literal["outbox", "resend"] = "outbox"
+    email_api_key: SecretStr | None = None
+    email_from: str = "Patterns <onboarding@resend.dev>"
 
 
 settings = Settings()
