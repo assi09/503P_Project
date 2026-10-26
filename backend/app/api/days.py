@@ -77,6 +77,8 @@ def get_day(day: date, data: Data, clock: Now) -> schemas.Day:
             for m in days.day_summary(frame, day)
         ],
         recovery=_recovery(frame, day),
+        strain=_strain(frame, day),
+        stress=_stress(frame, day),
     )
 
 
@@ -84,6 +86,17 @@ def _recovery(frame: pd.DataFrame, day: date) -> schemas.Recovery | None:
     parts = days.recovery_parts(frame, day)
     score = days.recovery_score(parts)
     return schemas.Recovery(score=score, parts=parts) if score is not None else None
+
+
+def _strain(frame: pd.DataFrame, day: date) -> schemas.Strain | None:
+    found = days.strain_days(frame).get(pd.Timestamp(day))
+    return schemas.Strain(**vars(found)) if found else None
+
+
+def _stress(frame: pd.DataFrame, day: date) -> schemas.Stress | None:
+    parts = days.stress_parts(frame, day)
+    score = days.stress_score(parts)
+    return schemas.Stress(score=score, parts=parts) if score is not None else None
 
 
 # Read live from Google Health
@@ -234,7 +247,7 @@ def get_metric(
     span: Annotated[int, Query(alias="days", ge=7, le=366)] = 30,
 ) -> schemas.MetricSeries:
     frame = data.daily.frame
-    if metric not in frame.columns and metric != days.RECOVERY:  # the score is computed, not stored
+    if metric not in frame.columns and metric not in days.SCORES:  # computed, not stored
         raise ApiError(404, "unknown_metric", "There is no such metric.")
     first, last = _range(data)
     end = min(end or last, last)

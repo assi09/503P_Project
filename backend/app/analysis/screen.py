@@ -29,10 +29,25 @@ WEAR_DEPENDENT = (
     "lightly_active_minutes",
     "moderately_active_minutes",
     "very_active_minutes",
+    "hr_zone_light_minutes",
+    "hr_zone_moderate_minutes",
+    "hr_zone_vigorous_minutes",
+    "hr_zone_peak_minutes",
+    "strain",
 )
 
-# Data-quality signals and columns derived from others are not findings in themselves.
-NOT_SCREENED = ("wear_minutes", "time_in_bed")
+# Data-quality signals and columns derived from others are not findings in themselves; the
+# inputs of the strain and stress scores are read through the scores.
+NOT_SCREENED = (
+    "wear_minutes",
+    "time_in_bed",
+    "hr_zone_light_minutes",
+    "hr_zone_moderate_minutes",
+    "hr_zone_vigorous_minutes",
+    "hr_zone_peak_minutes",
+    "still_minutes",
+    "still_hr_above_resting",
+)
 
 
 @dataclass(frozen=True)

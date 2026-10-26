@@ -90,7 +90,17 @@ def test_day_endpoint_uses_the_app_contract(synthetic):
     last = START + timedelta(days=44)
     client = client_for(synthetic, today=datetime(2026, 8, 14, 9, tzinfo=UTC))
     body = client.get(f"/days/{last.isoformat()}").json()
-    assert set(body) == {"date", "partial", "lowWear", "first", "last", "metrics", "recovery"}
+    assert set(body) == {
+        "date",
+        "partial",
+        "lowWear",
+        "first",
+        "last",
+        "metrics",
+        "recovery",
+        "strain",
+        "stress",
+    }
     assert set(body["recovery"]) == {"score", "parts"} and 0 <= body["recovery"]["score"] <= 100
     assert "recovery_score" in {m["metric"] for m in body["metrics"]}
     assert body["partial"] is True and body["lowWear"] is False  # Aug 14 is today, Beirut
@@ -136,7 +146,7 @@ def test_days_need_an_approved_sign_in(synthetic):
 
 
 def test_recovery_scores_where_last_night_sits_among_the_weeks_before():
-    from app.analysis.day import recovery_parts, recovery_score, with_recovery
+    from app.analysis.day import recovery_parts, recovery_score, with_scores
 
     days = 30
     frame = frame_of(
@@ -154,7 +164,7 @@ def test_recovery_scores_where_last_night_sits_among_the_weeks_before():
     }
     assert recovery_score(recovery_parts(frame, last)) == 50
     assert recovery_score({"hrv_ms": 80.0}) is None  # one input is not enough
-    scores = with_recovery(frame)["recovery_score"]
+    scores = with_scores(frame)["recovery_score"]
     assert scores.iloc[:MIN_USUAL_DAYS].isna().all() and scores.iloc[-1] == 50
     # A higher resting heart rate counts down.
     higher = frame.assign(resting_hr=[60.0] * (days - 1) + [70.0])
