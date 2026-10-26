@@ -52,6 +52,7 @@ export const METRIC_COLORS = {
   recovery: { dark: '#7BCB6A', light: '#4E9A3A', gradient: ['#4E9A3A', '#A6DB7D'] },
   temperature: { dark: '#5CC8D6', light: '#1E8E9C', gradient: ['#1E8E9C', '#7FDCE6'] },
   nutrition: { dark: '#F2C14E', light: '#B98512', gradient: ['#E0A21C', '#F7D877'] },
+  stress: { dark: '#C39BFF', light: '#7C4DCC', gradient: ['#7C4DCC', '#C9A6FF'] },
 } as const;
 
 export type MetricFamily = keyof typeof METRIC_COLORS;
@@ -80,6 +81,12 @@ const FAMILY_BY_METRIC: Record<string, MetricFamily> = {
   respiratory_rate: 'heart',
   readiness: 'recovery',
   recovery_score: 'recovery',
+  strain: 'activity',
+  hr_zone_light_minutes: 'activity',
+  hr_zone_moderate_minutes: 'activity',
+  hr_zone_vigorous_minutes: 'activity',
+  hr_zone_peak_minutes: 'activity',
+  stress_score: 'stress',
   skin_temp_variation_c: 'temperature',
 };
 
