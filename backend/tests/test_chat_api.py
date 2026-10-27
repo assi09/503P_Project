@@ -273,12 +273,14 @@ def test_a_reply_to_the_log_or_ask_question_continues_with_the_meal(client, engi
         source="test",
         intent_probabilities={str(i): float(i == Intent.CLARIFY) for i in Intent},
     )
-    # Only saying what was eaten: the agent asks whether to log it, without a model call.
+    # Only saying what was eaten: the agent reacts and asks whether to log it, without tools.
     agent.router.result = unclear
     meal = "I ate chicken and rice: 50 g carbs, 40 g protein, 10 g fat"
+    question = "Chicken and rice, a solid meal! Want me to log it, or look at your data?"
+    agent.llm.turns.append(ScriptedLLM.say(question))
     _, asked = ask(client, headers, meal).json()
-    assert asked["text"].startswith("Would you like to prepare a logging draft")
-    assert agent.llm.requests == []
+    assert asked["text"] == question
+    assert agent.llm.requests[0]["tools"] == []
     # "yes log" alone is unclear too, but it answers that question: the meal comes with it, and
     # the logging tool is offered.
     agent.llm.turns.append(submission("Which meal was it?"))
@@ -312,7 +314,7 @@ def test_asking_what_was_said_during_a_logging_request_reads_the_chat(client, en
     assert answer["text"] == "You said you had a bowl of pasta."
     assert answer["answeredBy"] == "general"
     task = agent.llm.requests[-1]["messages"][1]["content"]
-    assert "I had a bowl of pasta" in task and "Would you like to prepare" in task
+    assert "I had a bowl of pasta" in task and "Do you want me to log that" in task
 
 
 # Attachments

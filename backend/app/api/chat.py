@@ -30,6 +30,7 @@ from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
 from app.agent.ask import ask, default_guard, default_router
 from app.agent.context import Attachment, turns_from
+from app.agent.conversation import DRAFT_NOTE, draft_reply
 from app.agent.experts import EXPERTS, Depth, available
 from app.agent.guard import Guard
 from app.agent.intent import Intent
@@ -305,11 +306,12 @@ def _answer(
                 return [question, answer]
             result = reply.result
             if prepared:
-                note = "A logging draft is ready for review. It has not been sent to Google Health."
+                note = DRAFT_NOTE
                 if reply.route.classification.intent == Intent.LOG or any(
                     step.get("continuing_log_expert") for step in result.trace
                 ):
-                    result.summary, result.claims = note, []
+                    # The expert's own words when they are safe; the card holds the values.
+                    result.summary, result.claims = draft_reply(result.summary), []
                 elif reply.route.expert == "nutrition" and not available(
                     EXPERTS["nutrition"], frame
                 ):

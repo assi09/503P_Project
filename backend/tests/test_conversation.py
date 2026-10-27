@@ -1,5 +1,14 @@
 from app.agent.context import Turn
-from app.agent.conversation import RECALL_TURNS, problems, quoted_back, recall
+from app.agent.conversation import (
+    ASK_FALLBACK,
+    DRAFT_NOTE,
+    RECALL_TURNS,
+    ask_what_they_want,
+    draft_reply,
+    problems,
+    quoted_back,
+    recall,
+)
 from app.agent.guard import GuardError, Judgement
 from app.agent.llm import LLMError, ScriptedLLM
 
@@ -95,3 +104,59 @@ def test_quoting_back_shows_the_latest_three_messages_oldest_first():
         "then “Message 4”"
     )
     assert quoted_back(turns[:1]) == "Your earlier message here was: “Message 0”"
+
+
+# Asking what the person wants
+
+SNACK = "just finished a brutal leg day after a pre workout snack of like 4 dates"
+
+
+def test_an_unclear_message_gets_a_reaction_then_the_question():
+    reply = (
+        "Leg day after four dates, nice! Want me to log the workout and the snack, or see "
+        "how today looks?"
+    )
+    llm = ScriptedLLM([ScriptedLLM.say(reply)])
+    result = ask_what_they_want(llm, SNACK, expert="activity")
+    assert result.summary == reply
+    assert (result.stop_reason, result.expert) == ("clarification", "activity")
+    request = llm.requests[0]
+    assert request["tools"] == []
+    assert "Your voice" in request["messages"][0]["content"]
+    assert "4 dates" in request["messages"][1]["content"]
+
+
+def test_a_reaction_that_breaks_a_rule_falls_back_to_the_plain_question():
+    bad = {
+        "That's about 270 kcal of dates! Log it?": "quotes numbers",
+        "Nice workout. Want me to log it": "does not end with the question",
+        "I've logged the workout for you. Anything else?": "says something was logged",
+        "Sounds like it could be a disorder. Log it?": "medical words",
+        "Wow! " * 70 + "Log it?": "too long",
+    }
+    for reply, reason in bad.items():
+        result = ask_what_they_want(ScriptedLLM([ScriptedLLM.say(reply)]), SNACK, expert="activity")
+        assert result.summary == ASK_FALLBACK, reply
+        assert any(reason in p for p in result.trace[-1]["problems"]), reply
+    assert ask_what_they_want(Failing(), SNACK, expert="activity").summary == ASK_FALLBACK
+    flagged = ask_what_they_want(
+        ScriptedLLM([ScriptedLLM.say("Big day! Log it?")]),
+        SNACK,
+        expert="activity",
+        guard=FlagAll(),
+    )
+    assert flagged.summary == ASK_FALLBACK and flagged.stop_reason == "clarification"
+
+
+def test_a_draft_reply_is_kept_only_when_it_is_safe():
+    assert draft_reply("Nice run! Your draft is ready to review below.") == (
+        "Nice run! Your draft is ready to review below."
+    )
+    for unsafe in (
+        "",
+        "Logged it! Enjoy.",  # claims a write and does not say it waits
+        "I've added the run. Review it below.",
+        "Your 520 kcal lunch draft is ready for review.",  # values belong on the card
+        "Great lunch!",  # does not say it waits for them
+    ):
+        assert draft_reply(unsafe) == DRAFT_NOTE, unsafe

@@ -85,3 +85,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-26 | Scores in Ask, synthetic person: a stress question (recovery, 5 verified claims, $0.0113) and a strain question (activity, 4 verified claims, 10 calls, $0.0422) | $0.0535 |
 | 2026-10-26 | Team report prose, synthetic team of 8: two rejected runs (labels for keys; too many paragraphs for the form), then a passing one after the fixes (third run approved) | $0.0155 |
 | 2026-10-27 | Questions about the chat itself, made-up text: Jev routing of 10 questions (10/10; $0.000544) and one recall answer from OpenAI ($0.000548) | $0.0011 |
+| 2026-10-27 | Agent voice, synthetic person and made-up messages: the reaction to an unclear workout-and-meal message ($0.0004), a workout-and-meal log request (two drafts, $0.0059), a sleep question ($0.0130), and that question again with its trace ($0.0108) | $0.0301 |

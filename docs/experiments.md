@@ -400,3 +400,31 @@ questions and a made-up chat only.
 **Changed:** the router's labels and the keyword fallback, as above. Open: the screenshot's first
 answer, the log-or-ask question to "Why is my sleep worse lately?", was not reproduced: Jev routed
 that question to sleep with a read intent here.
+
+## The agent's voice, and asking what the person wants (2026-10-27)
+
+**Tested:** whether the agent sounds like a companion rather than a report, without loosening any
+check. Reported on the deployed app: a message about a hard workout after a pre-workout
+meal got the fixed "Would you like to prepare a logging draft, or ask about your
+existing data?" from Activity alone, with no reaction. Changes: a shared voice in every prompt
+(`app/agent/voice.py`); the fixed question replaced by one model call that reacts, then asks,
+checked (ends with a question, no new numbers, no medical words, no claim of a write, the advice
+guard), with a plain fixed question as fallback; a new log request offers the logging tools of the
+lead and of the experts the router says it needs; a draft reply keeps the expert's words when they
+carry no values, no claim of a write and say the draft waits for review. Synthetic person and
+made-up messages only.
+**Showed ($0.0301):**
+- That message (rerun as typed, not stored here): Jev led with activity and marked nutrition as needed, intent clarify. Reply:
+  "That sounds like a big workout. Do you want me to log the meal, the workout, or both?" ($0.0004).
+  It dropped the "or look at your data" half the prompt asks for.
+- A made-up request to log a 40-minute run and a snack eaten an hour before it: both drafts
+  prepared in one answer (workout and food), reply in the new voice ($0.0059).
+- "How has my sleep been in the last two weeks?": 4 verified claims, but the summary failed its
+  check twice, so the joined claims were shown, four near-identical "did not clearly change"
+  sentences ($0.0130). Run again with its trace ($0.0108): the first summary described a change
+  no significant evidence showed; the repair passed: "Your sleep looks steady over the last two
+  weeks. Time asleep, bedtime, sleep efficiency and time awake in bed all stayed within the range
+  of normal variation..."
+**Changed:** as above. Open: when the summary fails twice, the joined claims read like a report;
+that fallback needs its own fix.
+

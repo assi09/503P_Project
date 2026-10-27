@@ -34,6 +34,7 @@ from app.agent.verifier import (
     text_problems,
     verify,
 )
+from app.agent.voice import VOICE
 from app.analysis.evidence import Evidence
 from app.analysis.screen import screen
 
@@ -102,6 +103,7 @@ Rules for claims:
 - Describe patterns in the person's data. Never diagnose or give medical advice, and never reason
   about calorie balance: calories burned is only an estimate.
 """
+SYSTEM_PROMPT += VOICE
 
 
 @dataclass(frozen=True)
