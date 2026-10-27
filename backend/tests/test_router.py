@@ -7,6 +7,7 @@ from app.agent.intent import Intent, keyword_intent
 from app.agent.jev import JEV_PATH
 from app.agent.llm import LLMError, ScriptedLLM
 from app.agent.router import (
+    CONVERSATION,
     EXPERT_LABELS,
     GENERAL,
     LABELS,
@@ -175,6 +176,36 @@ def test_the_keyword_rule_labels_plain_questions(question, label):
     assert result.top == label and result.source == "keyword"
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what was my previous two messages saying",
+        "What did I say about my sleep?",
+        "What did you mean by that?",
+        "Can you recap this chat?",
+        "Repeat your last answer",
+        "What have we talked about?",
+    ],
+)
+def test_the_keyword_rule_knows_a_question_about_the_chat_itself(question):
+    # The food question before it does not pull it to the nutrition expert.
+    result = KeywordRouter().classify(question, ["I had pasta, can you log it?"])
+    assert result.top == CONVERSATION
+    assert set(result.needs.values()) == {0.0}
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What was my sleep like last night?",
+        "Did I walk more than the previous week?",
+        "What did my steps look like?",
+    ],
+)
+def test_the_keyword_rule_leaves_questions_about_the_data_with_their_topic(question):
+    assert KeywordRouter().classify(question).top != CONVERSATION
+
+
 def test_the_keyword_rule_does_not_refuse_questions_about_being_sick():
     result = KeywordRouter().classify("Did my HRV drop when I was sick?")
     assert result.top == "recovery"
@@ -264,6 +295,16 @@ def test_out_of_scope_is_refused_even_when_the_person_picked_an_expert():
     assert decide(classified(out_of_scope=0.7, sleep=0.3)).action == "refuse"
     route = decide(classified(out_of_scope=0.7, sleep=0.3), choice="sleep")
     assert route.action == "refuse" and route.expert is None
+
+
+def test_a_question_about_the_chat_is_answered_from_it_whoever_was_picked():
+    route = decide(classified(conversation=0.8, nutrition=0.2))
+    assert (route.action, route.expert, route.consult) == ("conversation", None, ())
+    picked = decide(classified(conversation=0.8, nutrition=0.2), choice="nutrition")
+    assert picked.action == "conversation" and not picked.routed
+    # Below the threshold the usual rules apply, and out of scope still wins.
+    assert decide(classified(conversation=0.4, nutrition=0.6)).expert == "nutrition"
+    assert decide(classified(out_of_scope=0.5, conversation=0.5)).action == "refuse"
 
 
 def test_a_chosen_expert_leads_and_the_router_still_picks_its_consults():

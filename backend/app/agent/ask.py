@@ -3,7 +3,8 @@
 The context (earlier turns, their evidence, an attachment) is chosen by code before any model runs
 (`context.py`). The router sees the question and the earlier questions only. An attachment's metric
 decides the lead, like picking an expert, unless the person picked one; the scope check and the
-choice of consults stay with the router. What the context included and how the question was routed
+choice of consults stay with the router. A question about the conversation itself is answered from
+the conversation (`conversation.py`). What the context included and how the question was routed
 are the first steps of the trace, so every answer can be traced to its context and its routing.
 """
 
@@ -17,6 +18,7 @@ import pandas as pd
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer
 from app.agent.context import Attachment, Context, MemoryItem, Turn, build, earlier_questions
+from app.agent.conversation import recall
 from app.agent.experts import (
     BUDGETS,
     EXPERTS,
@@ -202,7 +204,7 @@ def ask(
             or (continuing_log == "general" and choice in (action_tools or {}))
         )
         and route.classification.intent == Intent.CLARIFY
-        and route.action != "refuse"
+        and route.action not in ("refuse", "conversation")
     )
     if continuing:
         # This state comes from the server's unfinished clarification, not earlier text alone.
@@ -232,6 +234,8 @@ def ask(
     tools += logging_tools
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
+    elif route.action == "conversation":
+        result = recall(llm, question, history, guard=guard)
     elif action_tools and route.classification.intent == Intent.MANAGE:
         result = AgentResult(
             run_id=uuid.uuid4().hex[:12],

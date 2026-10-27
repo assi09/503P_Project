@@ -290,6 +290,31 @@ def test_a_reply_to_the_log_or_ask_question_continues_with_the_meal(client, engi
     assert "propose_food_log" in json.dumps(request.get("tools", []))
 
 
+def test_asking_what_was_said_during_a_logging_request_reads_the_chat(client, engine, agent):
+    from app.agent.intent import Intent
+
+    headers = signed_in(client, engine)
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"nutrition": 0.95},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.CLARIFY) for i in Intent},
+    )
+    ask(client, headers, "I had a bowl of pasta")  # asks whether to log, without a model call
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"conversation": 0.9, "nutrition": 0.1},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent.CLARIFY) for i in Intent},
+    )
+    agent.llm.turns.append(ScriptedLLM.say("You said you had a bowl of pasta."))
+    _, answer = ask(client, headers, "what was my previous message saying").json()
+    assert answer["text"] == "You said you had a bowl of pasta."
+    assert answer["answeredBy"] == "general"
+    task = agent.llm.requests[-1]["messages"][1]["content"]
+    assert "I had a bowl of pasta" in task and "Would you like to prepare" in task
+
+
 # Attachments
 
 
