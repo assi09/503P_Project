@@ -192,10 +192,11 @@ do not run experiments with the person. The plan is to beat them on rigour, with
 already have. Order: deployment, tracing and the evaluation first (required, most of the grade);
 then 1 and 2, the strongest demo story.
 
-1. **N-of-1 experiments.** The agent proposes one ("no screens after 23:00 for 14 days"), the
-   person approves it, the app tracks it and `compare_windows` judges before against during; a
-   crossover (alternating weeks) separates cause from coincidence. Reports "worked for you", "no
-   clear effect", or "too few days", with evidence. (Decision 11.)
+1. **Personal experiments: the headline agentic feature** (decided 2026-10-27; see the workstream
+   below and [product.md](product.md#personal-experiments-headline-agentic-feature-planned)). The
+   agent proposes, designs a randomised on/off schedule from the person's own variation, tracks
+   adherence and data quality daily, adapts, and reports "worked for you", "no clear effect" or
+   "too few usable days" with evidence. (Decision 11.)
 2. **Habit impact done properly.** Each journal habit compared with matched days without it (same
    weekday mix, enough wear), corrected for the number of habits tested; honest "no clear effect
    yet, n days". Bevel compares against all days.
@@ -214,6 +215,43 @@ then 1 and 2, the strongest demo story.
 
 Also worth fixing first, from the open issues: follow the router's consults (issue 23) and stop
 tests the question does not need; validate the recovery score against check-ins (issue 24).
+
+## Personal experiments workstream (planned)
+
+Decided on 2026-10-27 as the feature that makes Patterns clearly agentic and better than the
+commercial coaches at one thing: finding out, with the person, whether a habit actually changes
+their own data. WHOOP's Journal shows associations between logged habits and Recovery (at least five
+"yes" and five "no" days in 90) and says they are not causation; its experiments are a guide the
+person runs by hand. Patterns designs, runs and judges the experiment.
+
+Order, each step its own PR:
+
+1. **Evaluation harness first** (also the main graded evaluation): synthetic people from
+   `app/synthetic.py` with a planted behaviour effect of known size, or none, plus simulated
+   adherence and lost days. It grades the experiment tools and, later, the whole agent.
+2. **Deterministic tools**: `design_experiment`, `experiment_status`, `analyse_experiment`, with
+   property tests over many seeds (false-positive rate near alpha with no effect, power near the
+   design's target with the planted one, interval coverage, unbiased effect estimates).
+3. **State and approval**: the migration, `propose_experiment` with the allow and deny lists, the
+   approval card, stop and status endpoints, and the experiment screen (plan, today's assignment,
+   progress, result).
+4. **Daily run**: the cron after the morning sync, reminders (the Reminders tab off the mock),
+   adherence taps, extensions, the Today note.
+5. **Report**: the owning expert's write-up from `analyse_experiment`, the verifier rules, the
+   result stored as a finding in memory.
+6. **One real experiment** by the owner, started early enough to finish before the demo.
+
+**How it is evaluated** (planted effects, many synthetic people per setting):
+
+- **Detection**: share of planted effects found, against the design's target power.
+- **False alarms**: share of no-effect people reported as "worked", which should stay near alpha.
+- **Effect size**: bias and interval coverage of the estimate.
+- **Honesty**: "too few usable days" when adherence or wear is poor, rather than a verdict.
+- **Baselines**: WHOOP-style association (habit yes against no days, no schedule, people choosing
+  their days with a planted confounder such as weekends) and a plain before/after window, on the
+  same synthetic people, to show what randomisation buys.
+- **Agent**: whether it proposes a sensible single outcome and lag, refuses risky experiments
+  (red-team set), keeps every claim backed by evidence, and its cost per experiment.
 
 ## App and UI plan
 

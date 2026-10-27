@@ -65,6 +65,61 @@ drafts, and server code alone enforces approval and execution. See the task-base
 [tool plan and provider findings](agent-actions.md) and
 [roadmap.md](roadmap.md#agent-assisted-logging-workstream-planned).
 
+## Personal experiments (headline agentic feature, planned)
+
+**The problem.** People keep wondering whether a habit matters for them: does coffee after 2 pm
+cost them sleep, do two rest days lift their HRV, does a late dinner lower their recovery? The
+trackers answer with associations at best. WHOOP's Journal comes closest: its Behavior Insights
+compare Recovery on days a logged habit was "yes" and "no" once there are at least five of each in
+90 days, and say themselves that this is not causation; its "mini experiments" are a guide for the
+person to run by hand. Those comparisons are confounded (people drink on weekends, train after
+good nights) and nobody checks whether the result could be chance or how big an effect the data
+could even detect.
+
+**What Patterns does instead.** The agent runs the experiment *with* the person, from question to
+answer, over weeks:
+
+1. **Propose.** From a question ("does late coffee hurt my sleep?"), a finding the daily run made,
+   or the agent's own suggestion after a large unexplained change. One behaviour, one main
+   outcome metric (plus at most two secondary ones), stated before any data is collected.
+2. **Design.** Deterministic code, not the model, sets the plan from the person's own history: a
+   balanced schedule of "on" and "off" days (randomised in blocks so weekdays are spread evenly),
+   the lag at which to measure (tonight's sleep, tomorrow's HRV), and how many usable days it needs
+   to detect an effect worth knowing, from the metric's own day-to-day variation. If the history is
+   too noisy for any sensible length, it says so instead of starting.
+3. **Approve.** The person sees the plan in plain words (what to do on which days, for how long,
+   what will be measured) and starts it or not. Nothing starts without approval (decision 10).
+4. **Run.** Each morning after the sync the agent reminds them of the day's assignment, records
+   whether they followed it (one tap, or a log entry), and checks the night: worn enough, not
+   flagged sick or travelling. Days that do not count are excluded by fixed rules, and the plan is
+   extended when too many are lost. A short note on Today says where the experiment stands.
+5. **Answer.** At the end, the comparison runs as a deterministic tool (assigned "on" days against
+   "off" days, with a randomisation test that respects the schedule, an effect size and an
+   interval) and returns Evidence. The agent writes the answer from it: **"worked for you"**,
+   **"no clear effect"** (with the smallest effect the experiment could have caught), or **"too
+   few usable days"**. Every number links to its computation, as everywhere else.
+6. **Remember.** The result becomes a finding in memory, so later answers can cite it ("your
+   caffeine experiment in November found no clear effect on time asleep").
+
+**What makes it agentic.** It is a goal pursued over weeks: the agent plans, acts (reminders and
+records, with approval), observes each day, adapts the plan when days are lost, and concludes with
+verified claims. A dashboard or a single chat answer cannot do that.
+
+**Better than the commercial coaches on rigour.** Assignment is decided in advance, so the
+comparison is not confounded by when people happen to do things; one main outcome is fixed
+beforehand, so there is no hunting through metrics; adherence and data quality are tracked rather
+than assumed; and "no clear effect" comes with what the experiment could and could not detect.
+
+**Limits and safety.** Experiments are about everyday behaviour only (timing of caffeine, meals,
+screens, bedtime, training and rest). Nothing involving medication, supplement dosing, fasting,
+restriction or anything that could be risky is proposed or accepted; such requests are refused like
+medical questions. Results describe the person's own data and are never advice. One experiment
+runs at a time, so two cannot blur each other. The person can stop at any time; a stopped
+experiment is reported with what it had, or not at all if too short.
+
+See [architecture.md](architecture.md#experiment-runner-planned) for how it is built and
+[roadmap.md](roadmap.md#personal-experiments-workstream-planned) for the plan and its evaluation.
+
 ## Morning check-in
 
 One question each morning: **"How do you feel today?"** on a 1 to 5 scale, with optional tags
@@ -180,9 +235,9 @@ which experts it consulted.
 - **Remember, leanly:** context answers, past findings, check-ins and preferences, stored as short
   structured facts; only facts relevant to the current question are loaded, and facts that never
   matter fade out. New facts the agent wants to keep are confirmed by the user first.
-- **Propose reminders** and **N-of-1 experiments** (for example "bedtime before midnight for 10
-  days"): the agent tracks an accepted experiment and reports whether the metric changed,
-  comparing the experiment window with the user's baseline.
+- **Propose reminders** and **personal experiments** (for example "no coffee after 2 pm on
+  alternate days for three weeks"): the agent designs, tracks and analyses an accepted experiment;
+  see [Personal experiments](#personal-experiments-headline-agentic-feature-planned).
 
 Any user must approve before a reminder is scheduled, an experiment starts, a new fact is saved
 to memory, or data is deleted.
