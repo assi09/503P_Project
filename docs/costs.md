@@ -84,3 +84,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-25 | Any workout type: "45 minutes of kickboxing yesterday at 6pm" (KICKBOXING draft; showed the wrong "not covered" note and a repair round) and "tennis for an hour this morning at 9" after the fix (TENNIS draft, no note); both cancelled | $0.0134 |
 | 2026-10-26 | Scores in Ask, synthetic person: a stress question (recovery, 5 verified claims, $0.0113) and a strain question (activity, 4 verified claims, 10 calls, $0.0422) | $0.0535 |
 | 2026-10-26 | Team report prose, synthetic team of 8: two rejected runs (labels for keys; too many paragraphs for the form), then a passing one after the fixes (third run approved) | $0.0155 |
+| 2026-10-27 | Questions about the chat itself, made-up text: Jev routing of 10 questions (10/10; $0.000544) and one recall answer from OpenAI ($0.000548) | $0.0011 |

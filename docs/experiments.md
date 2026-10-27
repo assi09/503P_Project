@@ -378,3 +378,25 @@ found sleep and recovery changed.
   where the prompt asked for at most 8.
 **Changed:** the form and the repair messages, as above. Every failure fell back to the templated
 text, so nothing unchecked would have been shown.
+
+## Questions about the chat itself (2026-10-27)
+
+**Tested:** whether a question about the conversation reaches something that reads it. Found on
+the deployed app: after a food logging request, "what was my previous two messages saying" took
+the nutrition topic from the earlier question, and the nutrition expert, with no data, answered
+"There is no nutrition data to look at yet." without a model call. Two causes: the router had no
+topic for the chat itself, and every data answer's check allows only numbers from computed
+evidence, so even the general agent could not repeat the grams the person typed back. The fix is a
+`conversation` topic and a recall step (`app/agent/conversation.py`). Checked with made-up
+questions and a made-up chat only.
+**Showed ($0.0011):**
+- Jev routing, 10 questions with earlier questions as context: all 10 right. Five chat questions
+  went to `conversation` (probability 0.74 to 0.99, the lowest "What did I say about my
+  dinner?"); "Why is my sleep worse lately?", "And last week?" after a steps question, a protein
+  question and "Log a 30 minute run" kept their experts (conversation 0.03 at most); melatonin was
+  refused. $0.000544.
+- One recall on the screenshot's chat: it listed the two earlier messages word for word and the
+  assistant's reply that the draft was not sent yet; it passed the number check. $0.000548.
+**Changed:** the router's labels and the keyword fallback, as above. Open: the screenshot's first
+answer, the log-or-ask question to "Why is my sleep worse lately?", was not reproduced: Jev routed
+that question to sleep with a read intent here.

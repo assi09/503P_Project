@@ -6,8 +6,8 @@ the lead and checks the scope. And, independently
 for each expert, whether answering **needs** that expert's data: a cross-domain question ("did my
 late nights hurt my recovery?") needs two. A single topic distribution cannot say that, because its
 spare probability is uncertainty, not a second topic. Code, not the classifier, decides what to do
-(`decide`): refuse, hand the question to the general agent, or give it to the lead expert, which may
-consult the other experts the question needs.
+(`decide`): refuse, answer from the conversation itself, hand the question to the general agent, or
+give it to the lead expert, which may consult the other experts the question needs.
 
 Jev (TypeSafe's typed decision model) is the classifier in the app. If it fails or times out, a
 keyword rule over metric names routes instead, so a question is never lost to the router. An LLM
@@ -39,9 +39,10 @@ from app.agent.llm import LLM, Budget, LLMError
 from app.agent.verifier import MEDICAL
 
 GENERAL = "general"
+CONVERSATION = "conversation"
 OUT_OF_SCOPE = "out_of_scope"
 EXPERT_LABELS = tuple(EXPERTS)
-LABELS = (*EXPERT_LABELS, GENERAL, OUT_OF_SCOPE)
+LABELS = (*EXPERT_LABELS, GENERAL, CONVERSATION, OUT_OF_SCOPE)
 
 # What each label means, for the classifiers. Experts are described by the metrics they own.
 CRITERIA = {
@@ -57,9 +58,13 @@ CRITERIA = {
     "protein, carbohydrates, fat, nutrients, "
     "meals",
     GENERAL: "the person's own Fitbit data overall, or several areas with no main one",
+    # Without it, "what did I just say?" takes the earlier questions' topic and reaches an expert
+    # that looks only at data.
+    CONVERSATION: "this chat itself, not the data: what the person or the assistant said "
+    "earlier in it, a recap of it, or what an earlier answer meant",
     OUT_OF_SCOPE: "medical diagnosis, symptoms, treatment, medication or health advice, or "
-    "anything unrelated to analysing their own Fitbit data or logging their food, drink or "
-    "workouts",
+    "anything unrelated to analysing their own Fitbit data, logging their food, drink or "
+    "workouts, or this conversation",
 }
 INSTRUCTIONS = (
     "A person asks about their own Fitbit data or asks to log food, drink or workouts, possibly "
@@ -81,6 +86,7 @@ MAX_EARLIER = 3  # earlier questions the router sees, newest first
 
 # Thresholds on the probabilities. Tuned by the router evaluation, not fitted to anyone's data.
 REFUSE_AT = 0.5  # out of scope at least this likely: refuse
+RECALL_AT = 0.5  # about the conversation itself at least this likely: answered from it
 LEAD_AT = 0.4  # the most likely expert must reach this, or the general agent answers
 CONSULT_AT = 0.5  # other experts whose data the question needs this likely are consulted
 
@@ -286,6 +292,16 @@ KEYWORDS = {
         r"intake",
     ),
 }
+# Questions about the chat itself, not about any metric.
+CONVERSATION_WORDS = re.compile(
+    r"\b(?:what|which) (?:did|do|was|were) (?:i|you)\b.{0,20}?\b(?:say|said|ask|asked|write|"
+    r"wrote|mean|meant|tell|told|saying|asking)"
+    r"|\b(?:previous|earlier|last|first|above) (?:\w+ )?(?:messages?|questions?|answers?|"
+    r"repl(?:y|ies))\b"
+    r"|\b(?:summari[sz]e|recap)\b.{0,20}\b(?:chat|conversation)\b"
+    r"|\bwhat (?:have )?we (?:talked|discussed|said)\b",
+    re.IGNORECASE,
+)
 # Not "sick" or "ill": "did my HRV drop when I was sick?" is a question about the data. Not
 # "supplement" either: "did my protein-supplement days go with better recovery?" is one too.
 OFF_TOPIC = _words(
@@ -302,7 +318,8 @@ OFF_TOPIC = _words(
 class KeywordRouter:
     """Metric words decide the topic; medical words mean out of scope. Free and instant.
 
-    A question with no metric words takes its topic from the latest earlier question that has some.
+    A question with no metric words takes its topic from the latest earlier question that has some,
+    unless it asks about the conversation itself.
     """
 
     def classify(self, question: str, earlier: Sequence[str] = ()) -> Classification:
@@ -322,7 +339,10 @@ class KeywordRouter:
                 probabilities, needs, source="keyword", intent_probabilities=intents
             )
         total = sum(hits.values())
-        if not total:
+        if CONVERSATION_WORDS.search(text):
+            probabilities[CONVERSATION] = 1.0
+            needs = dict.fromkeys(needs, 0.0)
+        elif not total:
             probabilities[GENERAL] = 1.0
         else:
             probabilities |= {label: count / total for label, count in hits.items()}
@@ -423,7 +443,7 @@ class FallbackRouter:
 
 @dataclass(frozen=True)
 class Route:
-    action: Literal["expert", "general", "refuse"]
+    action: Literal["expert", "general", "conversation", "refuse"]
     expert: str | None  # the lead, for `expert`
     consult: tuple[str, ...]  # the other experts the lead may consult
     routed: bool  # True when the router chose the expert, False when the person did
@@ -441,6 +461,9 @@ def decide(classification: Classification, choice: str = "auto") -> Route:
     p = classification.probabilities
     if p[OUT_OF_SCOPE] >= REFUSE_AT:
         return Route("refuse", None, (), choice == "auto", classification)
+    if p[CONVERSATION] >= RECALL_AT:
+        # Whoever was picked, a question about the chat is answered from the chat.
+        return Route("conversation", None, (), choice == "auto", classification)
     needs = classification.needs
     ranked = sorted(EXPERT_LABELS, key=lambda label: needs[label], reverse=True)
     if choice != "auto":

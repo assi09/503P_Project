@@ -83,6 +83,20 @@ def test_low_confidence_goes_to_the_general_agent(frame):
     assert "You are the" not in llm.requests[0]["messages"][0]["content"]
 
 
+def test_a_question_about_the_chat_is_answered_from_it_not_from_the_data(frame):
+    from app.agent.context import Turn
+
+    history = [Turn("I had pasta, log it", "A logging draft is ready for review.")]
+    llm = ScriptedLLM([ScriptedLLM.say("You asked me to log pasta.")])
+    # Nutrition has no data here; before, its expert answered that without reading the chat.
+    router = FixedRouter(("nutrition",), conversation=0.8, nutrition=0.2)
+    reply = ask(llm, router, frame, "What did I just say?", history=history, choice="nutrition")
+    assert reply.route.action == "conversation"
+    assert reply.result.summary == "You asked me to log pasta."
+    assert reply.result.expert == "general"
+    assert [s["type"] for s in reply.result.trace][:3] == ["context", "route", "recall"]
+
+
 def test_a_chosen_expert_answers_and_the_answer_says_it_was_chosen(frame):
     llm = ScriptedLLM([empty_submission()])
     router = FixedRouter(("sleep",), sleep=1.0)
