@@ -190,7 +190,8 @@ def test_chat_prepares_a_persisted_nutrition_draft_without_history_or_execution(
     assert response.status_code == 200
     reply = response.json()[-1]
     assert reply["answeredBy"] == "nutrition" and len(reply["actionIds"]) == 1
-    assert "not been sent" in reply["text"]
+    # The expert's own words, safe to show: no values, and it says the draft waits for review.
+    assert reply["text"] == "Draft ready for review."
     row = client.get(f"/actions/{reply['actionIds'][0]}", headers=headers).json()
     assert row["status"] == "draft" and row["log"]["proteinG"] == 40
     assert "propose_food_log" in agent.llm.requests[0]["tools"]
@@ -254,7 +255,7 @@ def test_missing_details_can_continue_the_owned_pending_logging_request(setup):
     assert first.status_code == 200 and "actionIds" not in first.json()[-1]
     follow = client.post("/chat", headers=headers, json={"text": "At 12:00 today, UTC+3."})
     assert follow.status_code == 200 and len(follow.json()[-1]["actionIds"]) == 1
-    assert "not been sent" in follow.json()[-1]["text"]
+    assert follow.json()[-1]["text"] == "Draft ready for review."
 
 
 def test_read_only_topic_change_clears_the_pending_log(setup):
@@ -264,7 +265,8 @@ def test_read_only_topic_change_clears_the_pending_log(setup):
     client.post("/chat", headers=headers, json={"text": "Log lunch with 40 g protein."})
     client.post("/chat", headers=headers, json={"text": "How much protein did I eat yesterday?"})
     client.post("/chat", headers=headers, json={"text": "At noon."})
-    assert len(agent.llm.requests) == 1
+    # "At noon." alone is only asked about: no logging tool is offered for it.
+    assert len(agent.llm.requests) == 2 and agent.llm.requests[1]["tools"] == []
     assert client.get("/actions", headers=headers).json() == []
 
 
@@ -282,7 +284,8 @@ def test_expired_pending_log_does_not_offer_proposal_tools(setup):
         for index, row in enumerate(rows):
             row.created_at = datetime.now(UTC) - timedelta(hours=25) + timedelta(seconds=index)
     client.post("/chat", headers=headers, json={"text": "At noon."})
-    assert len(agent.llm.requests) == 1
+    # "At noon." alone is only asked about: no logging tool is offered for it.
+    assert len(agent.llm.requests) == 2 and agent.llm.requests[1]["tools"] == []
     assert client.get("/actions", headers=headers).json() == []
 
 

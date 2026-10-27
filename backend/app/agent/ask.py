@@ -18,7 +18,7 @@ import pandas as pd
 
 from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer
 from app.agent.context import Attachment, Context, MemoryItem, Turn, build, earlier_questions
-from app.agent.conversation import recall
+from app.agent.conversation import ask_what_they_want, recall
 from app.agent.experts import (
     BUDGETS,
     EXPERTS,
@@ -230,7 +230,11 @@ def ask(
         if route.action == "general":
             logging_tools = [tool for group in (action_tools or {}).values() for tool in group]
         else:
-            logging_tools = (action_tools or {}).get(route.expert, [])
+            # The lead's own, and in a new request those of the experts the router says it also
+            # needs: "a swim after three figs" is a workout and a meal. A reply continuing a
+            # request stays with its kind; its text quotes the question, which names both.
+            names = (route.expert,) if continuing else (route.expert, *route.consult)
+            logging_tools = [tool for name in names for tool in (action_tools or {}).get(name, [])]
     tools += logging_tools
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
@@ -250,12 +254,7 @@ def ask(
         and route.expert in ("nutrition", "activity")
         and not continuing
     ):
-        result = AgentResult(
-            run_id=uuid.uuid4().hex[:12],
-            stop_reason="clarification",
-            expert=route.expert,
-            summary="Would you like to prepare a logging draft, or ask about your existing data?",
-        )
+        result = ask_what_they_want(llm, question, expert=route.expert, guard=guard)
     elif route.action == "general":
         result = answer(
             llm,

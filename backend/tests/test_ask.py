@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -95,6 +96,26 @@ def test_a_question_about_the_chat_is_answered_from_it_not_from_the_data(frame):
     assert reply.result.summary == "You asked me to log pasta."
     assert reply.result.expert == "general"
     assert [s["type"] for s in reply.result.trace][:3] == ["context", "route", "recall"]
+
+
+def test_a_workout_and_a_meal_in_one_request_offer_both_logging_tools(frame):
+    from app.agent.agent import ExtraTool
+    from app.agent.intent import Intent
+
+    def tool(name):
+        return ExtraTool(name, "", {"type": "object", "properties": {}}, lambda a: ("{}", {}))
+
+    tools = {"activity": [tool("propose_workout_log")], "nutrition": [tool("propose_food_log")]}
+    router = FixedRouter(("activity", "nutrition"), activity=0.7, nutrition=0.3)
+    router.result = replace(
+        router.result, intent_probabilities={str(i): float(i == Intent.LOG) for i in Intent}
+    )
+    llm = ScriptedLLM([empty_submission()])
+    ask(llm, router, frame, "Log my swim and the 3 figs before it", action_tools=tools)
+    offered = llm.requests[0]["tools"]
+    assert "propose_workout_log" in offered and "propose_food_log" in offered
+    # Every answer speaks in the same voice.
+    assert "Your voice" in llm.requests[0]["messages"][0]["content"]
 
 
 def test_a_chosen_expert_answers_and_the_answer_says_it_was_chosen(frame):
