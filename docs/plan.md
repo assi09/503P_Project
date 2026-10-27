@@ -259,9 +259,37 @@ poster if the instructor asks for one (the pitch poster updated with results).
 
 ## Who does what
 
-Karim with Claude Code: the code, the evaluation runs and the PRs. Jad: to be decided with Karim;
-a natural split is the threat model, the Failure Matrix, the pilot (recruiting, survey,
-interviews), the report and the presentation, plus reviewing PRs (needed for the review bonus).
+Agreed on 2026-10-27.
+
+**Karim** (with Claude Code): the hard and core parts, and the people.
+- The agent: chat fixes and new tools (A), personal experiments (B), reminders (C), team
+  improvements including "Ask about the team" (D), the daily run, proposals inbox, memory page,
+  onboarding and account security (E).
+- **The pilot (F)**: the testers are Karim's, so he recruits, onboards and talks with them, runs
+  the survey and interviews, and keeps the feedback log.
+- The evaluation harness, its question sets and paid runs (G); stored traces and Langfuse (the
+  AgentOps core in I).
+- The final report, the presentation and the demo (J), with Jad's sections.
+
+**Jad**: testing the whole app, security, and the bonus practices.
+- **Testing**: a manual pass over every screen each week (phone and web, light and dark, empty and
+  error states), filed as issues; the contract tests (backend schemas against
+  `mobile/src/api/types.ts`); the load test (k6 or Locust) with its write-up; the chaos tests
+  (each external call failing or slow); and a fresh-clone run-through of the README to prove it
+  reproduces.
+- **Security**: the red-team set (prompt injection, medical questions, other people's data, unsafe
+  experiments, unauthorized writes) with expected outcomes, run against the app; the threat
+  model; the Failure Matrix, with Karim adding the rows the pilot finds.
+- **Bonus practices**: the GitHub Project board and sprints; Dependabot, CodeQL, pip-audit and npm
+  audit, Trivy, Semgrep; coverage to Codecov or SonarCloud with a floor; Sentry with alerts; the
+  full-stack `docker compose`; a smoke test after each deploy; the free evaluation gate in CI once
+  Karim's harness exists.
+- **Reviews**: one approving review on Karim's PRs (and Karim on Jad's), which the review bonus
+  needs.
+
+Both follow [AGENTS.md](../AGENTS.md): no tester or personal health data in git, no AI attribution in
+commits or PRs, every change through a PR with green checks. Jad writes the red-team set without
+reading the router and guard prompts, so it measures them rather than mirroring them.
 
 ## Risks
 
