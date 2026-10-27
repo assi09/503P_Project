@@ -94,6 +94,9 @@ verifier rejections); API metrics → Prometheus/Grafana; cost per successful ta
 
 ## Schedule: most of the build in two weeks, the rest is buffer
 
+**Superseded from 2026-10-27 by [plan.md](plan.md)**, the plan for the last four weeks. Sprint 1
+and most of Sprint 2 below were done; what was left of them moved into that plan.
+
 Front-loaded on purpose: if a big obstacle hits (API limits, deployment, model behaviour), there
 are still three weeks to recover. Each item is its own PR per AGENTS.md; risky items go first.
 

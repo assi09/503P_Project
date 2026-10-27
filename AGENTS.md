@@ -12,14 +12,15 @@ inspect. The course grades evaluation, reliability, security, AgentOps and engin
 and bonus credit needs *evidence of use*, so process matters as much as code.
 
 **Start with [docs/status.md](docs/status.md)**: the objective, what works, the local setup
-(including the Google Cloud project), the data on disk, decisions so far and what is next. The
-agent and its evaluation are the priority.
+(including the Google Cloud project), the data on disk and decisions so far. **Then
+[docs/plan.md](docs/plan.md)**: what is left until 2026-11-23, week by week, with every deliverable
+and bonus practice. The agent and its evaluation are the priority.
 
 | Path | Contents |
 |---|---|
 | `backend/` | Python 3.12+ package `app`: Takeout ingestion (`app/ingest`), live Google Health sync (`app/sync`: sign-in, API client, mapping, `python -m app.sync`), database (`app/db`, migrations in `backend/migrations`), deterministic analysis tools returning `Evidence` (`app/analysis`), the agent (`app/agent`: LLM layer, router, experts, verifier, guard), accounts (`app/auth`, `python -m app.auth`), confirmed logging and Google writes (`app/actions`), the API (`app/api`), synthetic data with planted effects (`app/synthetic.py`) |
 | `mobile/` | Expo (SDK 58) + Expo Router + TypeScript app for iOS, Android and web |
-| `docs/` | `status.md` (where the project is), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `agent-actions.md` (confirmed food and workout logging), `teams.md` (weekly team reports for a supervisor, and their privacy rules), `scores.md` (the proposed strain and stress scores), `workouts.md` (workout types, the metrics each kind gets and their Google fields), `ui-plan.md` (the agreed app and UI plan, step by step), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `deployment.md` (Railway, Vercel and phones, step by step), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
+| `docs/` | `status.md` (where the project is), `plan.md` (the plan for the last four weeks, deliverables and bonus practices), `costs.md` (API budgets, cost per request, spend log), `product.md` (what the app does and why), `architecture.md` (settled design), `agent-actions.md` (confirmed food and workout logging), `teams.md` (weekly team reports for a supervisor, and their privacy rules), `scores.md` (the proposed strain and stress scores), `workouts.md` (workout types, the metrics each kind gets and their Google fields), `ui-plan.md` (the agreed app and UI plan, step by step), `metrics.md` (every daily metric, its Takeout and API source, and how it was verified), `deployment.md` (Railway, Vercel and phones, step by step), `roadmap.md` (plan to the demo), `experiments.md` (every real run: what it tested, showed and changed) |
 | `.github/workflows/` | CI: `backend` and `mobile` jobs, both required on `main` |
 | `eval/` | evaluation sets and scripts that call paid APIs on purpose (never run in CI) |
 | `docker-compose.yml` | local Postgres on port 5433 |
