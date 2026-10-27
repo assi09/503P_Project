@@ -137,13 +137,19 @@ To let someone else sign in, add their Google account as a test user in the cons
   makes claims about a metric**: a claim about another expert's metric passes only on evidence
   that expert produced through `consult`, so the lead can cite what it was told.
 - **Consulting is the router's decision**, not the depth's and not the lead's. Jev answers, in one
-  call, the topic (which expert leads, or general, or out of scope) and, per expert, whether the
-  question needs its data; a single topic distribution could not mark cross-domain questions
-  ([experiments.md](experiments.md#router-pr-29-2026-10-23)). Depth only sets the budget; each
-  allowed consult adds its own.
+  call, the topic (which expert leads, or general, the conversation itself, or out of scope) and,
+  per expert, whether the question needs its data; a single topic distribution could not mark
+  cross-domain questions ([experiments.md](experiments.md#router-pr-29-2026-10-23)). Depth only
+  sets the budget; each allowed consult adds its own.
 - **Routing thresholds** (hand-set, to be tuned by the router evaluation): refuse when out of scope
   is at least 0.5, even if the person picked an expert; the general agent answers when no expert
   reaches 0.4; consult experts needed at 0.5 or more.
+- **Questions about the chat itself** ("what did I just say?", "recap this chat") have their own
+  topic, `conversation`, at 0.5 or more whoever was picked. They are answered from the chat's
+  latest eight exchanges in one model call without tools (`app/agent/conversation.py`), checked
+  so every number comes from those messages; otherwise the person's own messages are quoted back.
+  Before, such a question took the earlier questions' topic, and an expert without data answered
+  "no data" without reading the chat.
 - **Jev is called with our own small `httpx2` client** rather than TypeSafe's SDK: a 2 s timeout
   with no retries so a slow call falls back to the keyword rule, error bodies (which may repeat the
   question) never kept, cost in our own accounting, tests on a fake transport; no new dependency.

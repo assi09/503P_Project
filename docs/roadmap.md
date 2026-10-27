@@ -58,8 +58,9 @@ consulted.
 **General agent** (baseline): same loop, all tools, no routing, no consults.
 
 **Router** (`backend/app/agent/router.py`, built): one Jev call with a choice over {sleep,
-recovery, activity, nutrition, general, out_of_scope} and a yes/no per expert (does the question
-need its data) → code thresholds decide lead + consults / general / refuse. On failure the keyword
+recovery, activity, nutrition, general, conversation, out_of_scope} and a yes/no per expert (does
+the question need its data) → code thresholds decide lead + consults / general / answer from the
+chat / refuse. On failure the keyword
 rule routes; the LLM router is kept for the evaluation's comparison. Only the question text leaves
 the server.
 
