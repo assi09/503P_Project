@@ -144,6 +144,12 @@ To let someone else sign in, add their Google account as a test user in the cons
 - **Routing thresholds** (hand-set, to be tuned by the router evaluation): refuse when out of scope
   is at least 0.5, even if the person picked an expert; the general agent answers when no expert
   reaches 0.4; consult experts needed at 0.5 or more.
+- **The agent has one voice** (`app/agent/voice.py`, added to every prompt that writes to the
+  person): warm and casual, reacting briefly to what the person says before answering, never
+  adding facts or advice. When a message could be logged or asked about, one model call reacts and
+  asks which (checked, with a fixed question as fallback); a new log request gets the logging
+  tools of the lead and of the experts the router says it needs, so a workout and a meal can be
+  drafted together.
 - **Questions about the chat itself** ("what did I just say?", "recap this chat") have their own
   topic, `conversation`, at 0.5 or more whoever was picked. They are answered from the chat's
   latest eight exchanges in one model call without tools (`app/agent/conversation.py`), checked
