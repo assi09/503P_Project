@@ -1,6 +1,6 @@
 # Project status
 
-The page to read first when picking the project up. Updated 2026-10-25.
+The page to read first when picking the project up, with [plan.md](plan.md) for what is left. Updated 2026-10-27.
 
 ## Objective
 
@@ -178,9 +178,10 @@ To let someone else sign in, add their Google account as a test user in the cons
 
 ## Next
 
-The approved plan and schedule are in [roadmap.md](roadmap.md): **Sprint 1 (Oct 22–28)** builds the
-agent end to end; **Sprint 2 (Oct 29–Nov 4)** completes it and puts it online; November is buffer
-and hardening.
+**The plan for the last four weeks is [plan.md](plan.md)** (2026-10-27 to 11-23, then two weeks of
+buffer): join the parts into one agentic loop (daily run, proposals inbox, shared memory), personal
+experiments, reminders for real, team improvements, chat fixes and new tools, a pilot with about 10
+people, and every deliverable and bonus practice. What was done before it:
 
 **Sprint 1 is done**, a few days early. The agent: LLM layer, tools, general agent, verifier,
 experts with consult (#28), router (#29), metric check (#30), chat storage (#31), context builder
@@ -212,25 +213,11 @@ and workouts (#69); answers about today and consults kept with the answer (#64);
 (#65); conversations with shared memory (#66), their controls (#67) and chat polish (#68). Both
 test entries left in the owner's Google were undone.
 
-Next, in order:
-
-1. **Deployment**: Railway (API and Postgres) with a public HTTPS address, a "Web application"
-   OAuth client listing its `/google/callback`, the web build on Vercel, phones through "Add to
-   Home Screen" (free) or Expo Go. The repository side is ready; the account steps are in
-   [deployment.md](deployment.md).
-2. **Tracing (Langfuse) and the first evaluation** (40% of the grade), then the attack suite.
-3. UI plan steps 3-6: weekly workout summary, journal with habit impact, real reminders as phone
-   notifications, fitness age ([ui-plan.md](ui-plan.md)).
-4. The daily run after sync (the agent's note on Today when the user wants it).
-5. Logging, continued: reconciliation of pending writes, food lookup, nutrition mapping, photo
-   estimates ([agent-actions.md](agent-actions.md)).
-6. Going beyond the commercial coaches: N-of-1 experiments, habit impact, a proactive daily
-   investigator, tested causes, calibrated predictions ([roadmap.md](roadmap.md#beyond-the-commercial-coaches-planned)).
-7. **Teams** (planned 2026-10-26): a supervisor's weekly report on a group of employees, team
-   aggregates, nothing from fewer than 5 people, joined by invite code with consent, plus opt-in
-   named weekly levels of recovery, sleep, strain and stress ([teams.md](teams.md),
-   [scores.md](scores.md)). Backend (#79-#82), app screens (#83, #84, figures #87) and the weekly
-   email (outbox locally, Resend when turned on) done. The Monday schedule comes with deployment.
+Then deployment (#89, #90; Railway with auto-deploy after CI, Vercel), chat fixes (#91, #92,
+#94: questions about the chat answered from it), the agent's voice and a reaction before asking
+what to do (#95), and the plan for personal experiments (#96). Teams were built on 2026-10-26
+(#79-#88): memberships with consent, statistics, the weekly report with checked prose and figures,
+the Team tab and the Monday email.
 
 ## What has been tested
 
@@ -336,7 +323,8 @@ Spent so far on real runs: about $0.67 in all, almost all OpenAI (Jev under $0.0
     address (approval is the gate), and a forgotten password needs the owner (`python -m app.auth set-password`). Both need an email
     service. The log-in lock is kept in memory, so it resets on restart and is per server process. On
     the web the session token sits in localStorage, readable by any script on the page.
-17. **Connecting Google Health from a phone needs the deployed backend.** Google sends the browser
+17. ~~Connecting Google Health from a phone needs the deployed backend.~~ Done: the API is on
+    Railway and the web app on Vercel ([deployment.md](deployment.md)). Kept for the record: Google sends the browser
     back to this server, which locally is `127.0.0.1` (accepted by the Desktop OAuth client) and
     unreachable from a phone. Deployment needs a public HTTPS address and a "Web application" OAuth
     client listing its `/google/callback`. Sign-ins in progress and running syncs are kept in

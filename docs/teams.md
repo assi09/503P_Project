@@ -207,6 +207,12 @@ Small PRs, each green and verified:
    weeks. One team per supervisor in the app for now.
 9. Scheduling, with the deployment.
 
+## Next
+
+Invite by link, participation counts, trends over weeks, "Ask about the team" for supervisors
+(aggregates only, the same floor of 5), a team challenge, a verified sending domain, and a pilot
+with a real team of about 10: see [plan.md](plan.md#d-teams-improved).
+
 ## Open
 
 - A verified sending domain for Resend, so reports can reach any supervisor's address.

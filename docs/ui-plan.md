@@ -139,6 +139,9 @@ neat, not a stack of rounded boxes. Each step below ships as its own pull reques
 
 ## Steps (each a pull request)
 
+Steps 4–7 are scheduled in [plan.md](plan.md): reminders (step 5) and the agent on Today (step 7)
+in weeks 2–3; the journal, the weekly workout summary and fitness age only if time allows.
+
 1. **Design foundation and tabs**: type scale with large numerals, section and row components,
    hairline dividers, fewer cards; the five tabs; Settings with the Data tab's content, profile
    and appearance. No new data yet. **Done**: `Section`, `Row` and `Stat` (`components/list.tsx`)
