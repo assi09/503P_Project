@@ -153,21 +153,66 @@ Friends who train and wear a Fitbit or Pixel Watch, one team, a supervisor (to b
 
 ### G. Evaluation (deliverable, 20%)
 
-A harness in `eval/` that anyone can rerun (`python -m eval.run --suite …`), writing results to
-`eval/results/` with the code version, prompt versions, seed and cost:
+Two kinds of testing, kept apart (decided 2026-10-27):
 
-| Suite | Measures | Against |
-|---|---|---|
-| Planted changes | finding a planted change and its cause on synthetic people; false reports on calm people | templated screen (no LLM), LLM without tools, general agent, experts, experts without verifier |
-| Experiments | detection, false alarms near alpha, effect bias and interval coverage, "too few days" honesty | habit yes/no association (WHOOP-style), before/after windows |
-| Router | accuracy, latency, cost on a labeled held-out question set (including chat and logging questions) | Jev, LLM router, keyword rule |
-| Claims | unsupported-claim rate, overstatements, advice leaks | with and without verifier and guard |
-| Red team | prompt injection, medical questions, cross-user access, unsafe experiments, unauthorized writes | expected refusals and blocks |
-| Cost and latency | cost per successful task, end-to-end and per-step latency | per depth and per expert |
+- **The data side** (ingestion, daily metrics, the analysis tools) is deterministic: unit and
+  property tests over time series, and the verifier's rule that every number in an answer comes
+  from Evidence. Already in CI; it grows with each new tool.
+- **The agentic side** (does the agent pick the right things to test, conclude correctly, and
+  answer the question better than the alternatives?) is evaluated on **real, public wearable
+  data**, with reference answers to compare against, not only on our own synthetic people.
 
-Scenarios are checked with the deterministic tools before they grade the agent (issue 6); the
-consult policy A against B (issue 2) and the thresholds (issue 5) are settled by it. Paid runs are
-budgeted in [costs.md](costs.md); **top up OpenAI to about $10–15 before week 3**.
+**Real data with clear provenance.** Each dataset is downloaded by a script with a checksum into the
+git-ignored `data/` folder (never committed, like any health data), imported per participant as its
+own source, and cited with its licence in the report:
+
+- **[PMData](https://datasets.simula.no/pmdata)** (Simula, CC BY 4.0): Fitbit data from
+  participants over several months, with self-reported wellness (fatigue, mood, readiness, sleep
+  quality, soreness, stress), training sessions with their effort, and injuries. The main set: its
+  Fitbit files are close to the export format the importer already reads, and its logs give
+  independent events to ask about.
+- **Fitbit Fitness Tracker Data** (Möbius on Kaggle, from a 2016 survey of about 30 people):
+  a month each, for breadth.
+- **[LifeSnaps](https://zenodo.org/records/6832186)** (4 months, 71 people, Fitbit Sense plus
+  surveys) if its Zenodo access terms allow it; the record is marked restricted, so check first.
+
+**What the agent's answers are compared with:**
+
+1. **Reference answers from an independent oracle.** For each question in the set (changes between
+   two windows, weekday patterns, relationships between metrics, one day against the usual), a
+   separate, deliberately simple implementation (plain pandas and SciPy, not `app/analysis`) works
+   out the answer: which metrics changed, in which direction, significant or not, and the values.
+   Each verified claim is scored against it (right metric, right direction, right verdict, right
+   value), and so are the claims the answer should have made but missed.
+2. **The datasets' own logs as outside truth.** Questions about a participant's injury, a hard
+   training block or low-readiness weeks: does the agent find what the logs say happened, and does
+   it avoid inventing causes the logs contradict?
+3. **Real data with a planted effect.** Real series with a known change added (a later bedtime, a
+   lower HRV for two weeks) keep the real noise and give a known answer: detection and false
+   alarms on real texture. The same method drives the experiment suite.
+4. **The alternatives, on the same questions:** a plain LLM given the person's data table and no
+   tools (what most AI coaches do), the templated statistics screen with no LLM, the general agent
+   against the experts, and the experts without the verifier.
+5. **Blind human grading of a sample.** Karim and Jad rate about 50 answers, shuffled so they cannot
+   tell which system wrote them, for correctness, usefulness and clarity; an LLM judge is then
+   checked against those ratings before it grades the rest.
+
+| Suite | Data | Measures | Against |
+|---|---|---|---|
+| Real-data questions | PMData, Fitbit Kaggle (LifeSnaps if allowed) | claim accuracy against the oracle, missed findings, agreement with logged events, blind human ratings | plain LLM with the data, templated screen, general agent, experts without verifier |
+| Planted changes | real series with a planted change; synthetic people | detection, false reports on unchanged series | the same baselines |
+| Experiments | real series with a planted habit effect; synthetic people | detection, false alarms near alpha, effect bias and interval coverage, "too few days" honesty | habit yes/no association (WHOOP-style), before/after windows |
+| Router | a labeled held-out question set (including chat and logging questions) | accuracy, latency, cost | Jev, LLM router, keyword rule |
+| Claims | all of the above | unsupported-claim rate, overstatements, advice leaks | with and without verifier and guard |
+| Red team | Jad's set (H) | refusals and blocks | expected outcomes |
+| Cost and latency | all runs | cost per successful task, end-to-end and per-step latency | per depth and per expert |
+
+The harness lives in `eval/` and anyone can rerun it (`python -m eval.run --suite …`), writing to
+`eval/results/` the code and prompt versions, the dataset and its checksum, the seed and the cost;
+results publish only aggregates. Scenarios and reference answers are checked before they grade
+the agent (issue 6); the consult policy A against B (issue 2) and the thresholds (issue 5) are
+settled by it. Paid runs are budgeted in [costs.md](costs.md); **top up OpenAI to about $10–15
+before week 3**.
 
 ### H. Reliability and security (deliverables, 15%)
 
@@ -209,7 +254,8 @@ poster if the instructor asks for one (the pitch poster updated with results).
 **Week 1 — Oct 27 to Nov 2: measure, secure, prepare**
 - AgentOps: stored traces, Langfuse, prompt versions; Sentry. DevSecOps bundle, coverage,
   SonarCloud, GitHub Project and sprint issues.
-- Evaluation harness and the free CI gate; the labeled router set started.
+- Evaluation harness and the free CI gate; the PMData importer and the reference-answer oracle;
+  the labeled router set started.
 - Chat fixes A1 (summary fallback) and A5; experiment statistics tools with property tests (B).
 - Pilot prerequisites: account deletion, consent page, email verification and reset, issue 21 and
   18; testers' emails collected and added as test users.
