@@ -278,6 +278,39 @@ Provider references checked 2026-10-24: [supported data types and scopes](https:
 [nutrition guide](https://developers.google.com/health/data-types/nutrition),
 [data point reference](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints).
 
+### Experiment runner (planned)
+
+The personal experiments of [product.md](product.md#personal-experiments-headline-agentic-feature-planned).
+The model proposes, explains and writes; every design choice that needs a number and every result
+comes from deterministic code, as for answers.
+
+- **State** (new tables, one migration): `experiments` (owner, behaviour text, main and secondary
+  outcome metrics, lag in days, status `proposed → approved → running → finished | stopped |
+  abandoned`, planned and minimum usable days, seed, timestamps); `experiment_days` (date, assigned
+  on/off, followed yes/no/unknown, usable yes/no with the reason, from wear time and check-in tags).
+  The schedule is stored when the experiment is approved and never changed afterwards, only
+  extended with new balanced blocks.
+- **Tools** (`backend/app/analysis/experiments.py`, each returning Evidence):
+  `design_experiment` (block-randomised balanced schedule; required usable days from the outcome's
+  own variation over the last 60 days, by simulation, for a minimal effect worth knowing per metric:
+  for example 20 minutes of sleep, 3 ms of HRV), `experiment_status` (adherence, usable days, days
+  still needed) and `analyse_experiment` (on against off days as assigned and as followed, a
+  randomisation test over the stored schedule's blocks, the difference with an interval, and the
+  smallest detectable effect). Outcomes are the existing daily metrics and check-in ratings.
+- **Agent tools**: `propose_experiment` (the model fills behaviour, outcome and lag; the server
+  validates against an allow-list of behaviour kinds and a deny-list of risky ones, then runs
+  `design_experiment` and stores a `proposed` row for the app's approval card, like logging
+  drafts); the expert that owns the outcome metric writes the final report from
+  `analyse_experiment`'s evidence through the normal verifier. Approval, stopping and starting are
+  server endpoints the person calls from the app, never model tools.
+- **Daily run** (a Railway cron after the morning sync, the same pattern as `weekly-email`): for
+  each running experiment, record yesterday's usable and followed flags, extend when needed,
+  finish when the usable days are reached, and queue the reminder and the Today note. No model call
+  on ordinary days; one expert run when an experiment finishes.
+- **Verifier rules**: an experiment claim must cite `analyse_experiment` evidence; "worked" needs
+  the main outcome significant on the as-assigned comparison; secondary outcomes are corrected for
+  their number; "caused" stays forbidden in text even here, since adherence is self-reported.
+
 ## Memory and context
 
 The course asks for memory's scope, lifetime, retrieval strategy and privacy to be defined. The

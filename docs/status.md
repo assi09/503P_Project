@@ -25,11 +25,14 @@ priority**; the UI and data plumbing exist to serve them.
 | App | landing page; sign up / sign in (keychain, or localStorage on the web), waiting screen, Access requests for the owner; tabs **Today** (day switcher; Recovery, Sleep, Steps and, on wide screens, Resting heart rate in large figures against the usual range; morning check-in; sleep stages; steps by hour; the day's workouts with a page each; heart and body; what changed lately; a page per metric with 7/30/90 days and the usual band; two columns on wide screens), **Ask** (separate chats with a collapsible sidebar on the web, pin, rename, delete; copy, edit and retry on messages; attach a metric or finding; expert picker, quick/deep), **Reminders** (mock data) and **Settings** (account, appearance, Google Health, data coverage, logged entries); an evidence page per computation (question, answer, chart, figures, method); flat sections and rows in the "Track day" palette, light and dark; Expo SDK 58, Expo Go and web |
 | Engineering | protected `main`, PRs with both CI jobs required, 695 backend and 102 mobile tests |
 
-**Not built yet:** deployment (so phones cannot connect Google yet); the evaluation suite, tracing
-and metrics, the failure matrix and threat model; the daily run (and the agent's note on Today,
-skipped for now at the user's request); real reminders (the tab runs on the mock); the journal
-with habit impact; fitness age; the weekly workout summary; nutrition columns; a screen to approve
-facts the agent proposes; teams and weekly supervisor reports.
+**Not built yet:** **personal experiments**, the headline agentic feature
+([product.md](product.md#personal-experiments-headline-agentic-feature-planned)); the evaluation
+suite, tracing and metrics, the failure matrix and threat model; the daily run (and the agent's
+note on Today, skipped for now at the user's request); real reminders (the tab runs on the mock);
+the journal with habit impact; fitness age; the weekly workout summary; nutrition columns; a screen
+to approve facts the agent proposes. Deployment (Railway and Vercel, see
+[deployment.md](deployment.md)) and teams with weekly supervisor reports ([teams.md](teams.md))
+are built.
 
 ## Core logging: first local implementation
 
