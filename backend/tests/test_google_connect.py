@@ -290,11 +290,59 @@ def test_a_later_sync_rereads_only_the_last_days(client, engine):
     headers = signed_in(client, engine)
     connect(client, headers)
     wait_for_sync()
-    assert client.post("/google/sync", headers=headers).status_code == 202
+    response = client.post("/google/sync", headers=headers, json={"force": True})
+    assert response.status_code == 202
     wait_for_sync()
     with session_scope(engine) as session:
         latest = session.scalar(select(SyncRun).order_by(SyncRun.started_at.desc()).limit(1))
     assert latest.range_start == TODAY - timedelta(days=connections.RESYNC_DAYS)
+
+
+def sync_runs(engine) -> int:
+    with session_scope(engine) as session:
+        return len(session.scalars(select(SyncRun)).all())
+
+
+def test_the_apps_automatic_syncs_start_at_most_one_every_ten_minutes(client, engine):
+    headers = signed_in(client, engine)
+    connect(client, headers)
+    wait_for_sync()
+    age(engine, timedelta(0))  # runs start on the real clock; requests use the test's NOW
+    first = sync_runs(engine)  # the first sync writes one run per chunk of history
+    # Opening the app again right after it: answered, but nothing new starts.
+    response = client.post("/google/sync", headers=headers)
+    assert response.status_code == 202 and response.json()["syncing"] is False
+    assert sync_runs(engine) == first
+    # "Sync now" in Settings always starts one.
+    client.post("/google/sync", headers=headers, json={"force": True})
+    wait_for_sync()
+    assert sync_runs(engine) == first + 1
+    age(engine, timedelta(0))
+    # Once the last attempt is older than ten minutes, opening the app syncs again.
+    age(engine, google.RESYNC_AFTER + timedelta(minutes=1))
+    client.post("/google/sync", headers=headers)
+    wait_for_sync()
+    assert sync_runs(engine) == first + 2
+
+
+def test_a_failed_sync_is_not_retried_on_every_refresh(client, engine):
+    headers = signed_in(client, engine)
+    connect(client, headers)
+    wait_for_sync()
+    age(engine, timedelta(0))
+    first = sync_runs(engine)
+    with session_scope(engine) as session:
+        for run in session.scalars(select(SyncRun)):
+            run.status, run.error = "failed", "Google did not answer."
+    client.post("/google/sync", headers=headers)
+    assert sync_runs(engine) == first
+
+
+def age(engine, by: timedelta) -> None:
+    """Makes every sync run look as if it started `by` before the test's clock."""
+    with session_scope(engine) as session:
+        for run in session.scalars(select(SyncRun)):
+            run.started_at = NOW - by
 
 
 def test_disconnecting_forgets_the_sign_in_but_keeps_the_data(client, engine):

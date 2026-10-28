@@ -179,7 +179,8 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     getGoogleStatus: () => request<GoogleStatus>(baseUrl, '/google/status'),
     connectGoogle: (capability) =>
       post<{ url: string }>(baseUrl, '/google/connect', capability ? { capability } : undefined),
-    syncGoogle: () => post<GoogleStatus>(baseUrl, '/google/sync'),
+    syncGoogle: (options) =>
+      post<GoogleStatus>(baseUrl, '/google/sync', { force: options?.force ?? false }),
     disconnectGoogle: () => post<GoogleStatus>(baseUrl, '/google/disconnect'),
     sendMessage: (text, { expert, depth, attachment, conversationId, replaces }) =>
       post<ChatMessage[]>(

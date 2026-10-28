@@ -21,6 +21,7 @@ import { Section } from '@/components/list';
 import { NoData } from '@/components/NoData';
 import { Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
+import { SyncLine } from '@/components/SyncLine';
 import { Text } from '@/components/Text';
 import { metricOf, shiftDate, stages, STRAIN_BANDS, wakeHour } from '@/lib/day';
 import { formatValue, metricLabel } from '@/lib/format';
@@ -136,6 +137,7 @@ export default function TodayScreen() {
             <DaySkeleton wide={wide} />
           ) : (
             <View style={{ opacity: day.isPlaceholderData ? 0.5 : 1, gap: spacing.md }}>
+              <SyncLine />
               <DayBody
                 day={data}
                 wide={wide}

@@ -539,6 +539,8 @@ let google: GoogleStatus = {
   missingScopes: [],
 };
 
+const RESYNC_AFTER_MS = 10 * 60 * 1000;
+
 function startMockSync() {
   google = { ...google, syncing: true };
   setTimeout(() => {
@@ -1042,12 +1044,15 @@ export const mockClient: ApiClient = {
       startMockSync();
       return { url: '' }; // nothing to open
     }),
-  syncGoogle: () =>
+  syncGoogle: (options) =>
     later(() => {
       if (google.status !== 'active') {
         throw new ApiError('Connect Google Health first.', 'not_connected', 409);
       }
-      startMockSync();
+      // Like the server: the app's own syncs start at most one every 10 minutes.
+      const recent =
+        google.lastSync !== null && Date.now() - Date.parse(google.lastSync) < RESYNC_AFTER_MS;
+      if (options?.force || (!recent && !google.syncing)) startMockSync();
       return google;
     }),
   disconnectGoogle: () =>

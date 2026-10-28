@@ -1,4 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 
 import { ApiError } from './http';
 import { api } from './index';
@@ -6,6 +8,7 @@ import type {
   Account,
   ChatMessage,
   CheckIn,
+  GoogleStatus,
   ISODate,
   NotificationSettings,
   ReminderStatus,
@@ -253,14 +256,61 @@ export function useGoogleStatus() {
   });
 }
 
-/** Sync now or disconnect; both answer with the new status. */
+/** Sync now or disconnect; both answer with the new status. "Sync now" always starts one. */
 export function useGoogleAction() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (action: 'sync' | 'disconnect') =>
-      action === 'sync' ? api.syncGoogle() : api.disconnectGoogle(),
+      action === 'sync' ? api.syncGoogle({ force: true }) : api.disconnectGoogle(),
     onSuccess: (status) => client.setQueryData(keys.google, status),
   });
+}
+
+/**
+ * Asks the server to sync, when Google is connected; it starts one only if the last began over
+ * 10 minutes ago. Called on open, on coming back to the app and on every pull to refresh, so
+ * nobody has to think about syncing. Failures stay quiet: the status shows them in Settings.
+ */
+export async function requestSync(client: QueryClient): Promise<void> {
+  try {
+    const current =
+      client.getQueryData<GoogleStatus>(keys.google) ??
+      (await client.fetchQuery({ queryKey: keys.google, queryFn: api.getGoogleStatus }));
+    if (current?.status !== 'active' || current.syncing) return;
+    client.setQueryData(keys.google, await api.syncGoogle());
+  } catch {
+    // Not connected yet, offline or signed out: nothing to sync now.
+  }
+}
+
+/** What a finished sync can change: refetched so new numbers appear without another pull. */
+export function refreshSyncedData(client: QueryClient): Promise<unknown> {
+  return Promise.all(
+    [['day'], ['workouts'], ['hourly'], ['metric'], ['evidence'], keys.report, keys.dataStatus].map(
+      (queryKey) => client.invalidateQueries({ queryKey }),
+    ),
+  );
+}
+
+/** Mounted once for a signed-in person: syncs on open and on return, refreshes when done. */
+export function useAutoSync() {
+  const client = useQueryClient();
+  const syncing = useGoogleStatus().data?.syncing ?? false;
+  const wasSyncing = useRef(syncing);
+
+  useEffect(() => {
+    void requestSync(client);
+    // AppState covers phones and, through react-native-web, the browser tab's visibility.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void requestSync(client);
+    });
+    return () => subscription.remove();
+  }, [client]);
+
+  useEffect(() => {
+    if (wasSyncing.current && !syncing) void refreshSyncedData(client);
+    wasSyncing.current = syncing;
+  }, [client, syncing]);
 }
 
 // Teams, as a member (docs/teams.md)

@@ -1,8 +1,10 @@
 import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+import { useQueryClient } from '@tanstack/react-query';
 import { useContext, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { requestSync } from '@/api/hooks';
 import { PressableScale } from '@/components/PressableScale';
 import { WIDE_CONTENT } from '@/lib/layout';
 import { floatingTabBar } from '@/lib/platform';
@@ -31,6 +33,7 @@ export function Screen({
 }: ScreenProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const client = useQueryClient();
   // On iOS the tab bar floats over the content, so leave room for it.
   const barHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const tabBarHeight = floatingTabBar ? barHeight : 0;
@@ -49,7 +52,11 @@ export function Screen({
         onRefresh && (
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => void onRefresh()} // React Native 0.88 types the callback's result
+            onRefresh={() => {
+              // Pulling to refresh also fetches new data from Google when it is due.
+              void requestSync(client);
+              void onRefresh(); // React Native 0.88 types the callback's result
+            }}
             tintColor={colors.muted}
           />
         )
