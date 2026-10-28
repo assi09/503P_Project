@@ -242,6 +242,7 @@ LEVEL_KEYS = (
     "usual_median",
     "usual_low",
     "usual_high",
+    "split_at",
 )
 
 # Statistics expressed in the metric's own unit, which may be quoted in a related unit.
@@ -548,6 +549,14 @@ def overstated(summary: str, evidence: list[Evidence]) -> list[str]:
     tested, significant or not: that is the honest way to describe a borderline result."""
     supported = {
         metric for e in evidence if e.tool in TEST_TOOLS and _significant(e) for metric in e.metrics
+    }
+    # A habit the person's data supports ("being in bed by 23:30 went with higher efficiency")
+    # names its metrics with direction words; habit_options is the test behind it.
+    supported |= {
+        metric
+        for e in evidence
+        if e.tool == "habit_options" and e.stats.get("supported")
+        for metric in e.metrics
     }
     # "Higher than usual today" describes where a day sits, which compare_day shows.
     supported |= {

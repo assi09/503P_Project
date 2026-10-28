@@ -11,18 +11,23 @@ import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
+from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agent.llm import ToolCall
 from app.agent.present import display, label
+from app.analysis import coaching, habits
 from app.analysis import tools as analysis
 from app.analysis.day import compare_day
 from app.analysis.evidence import Evidence, ToolError, Window
+from app.analysis.habits import CHECKIN_RATING, TAG_PREFIX
+from app.db.models import CHECKIN_TAGS
 
 # Kept with any metric set: activity totals are not comparable on days the device was barely worn.
-ALWAYS_VISIBLE = ("wear_minutes",)
+# Every expert sees wear time and the morning check-in (its rating and the tags chosen).
+ALWAYS_VISIBLE = ("wear_minutes", CHECKIN_RATING)
 
 
 class _Arguments(BaseModel):
@@ -55,6 +60,21 @@ class CorrelateArguments(Period):
     driver: str = Field(description="The metric that may explain the change")
     target: str = Field(description="The metric that changed")
     max_lag: int = Field(0, ge=0, le=analysis.MAX_LAG_DAYS, description="Days the effect may lag")
+
+
+class RankArguments(MetricPeriod):
+    order: Literal["best", "worst", "highest", "lowest"] = Field(
+        description="best and worst follow which way is better for the metric"
+    )
+    count: int = Field(3, ge=1, le=5)
+
+
+class DayOnly(_Arguments):
+    day: date = Field(description="The day, YYYY-MM-DD; the last day of data for 'today'")
+
+
+class TagArguments(MetricPeriod):
+    tag: Literal[CHECKIN_TAGS] = Field(description="A morning check-in tag")
 
 
 @dataclass(frozen=True)
@@ -129,6 +149,57 @@ TOOLS: dict[str, AgentTool] = {
             MetricPeriod,
             lambda frame, a: analysis.weekday_split(frame, a.metric, _window(a)),
         ),
+        AgentTool(
+            "sleep_regularity",
+            "How regular bedtimes and wake times are over a period (their spread in minutes) and "
+            "how much later bedtime is on weekends.",
+            Period,
+            lambda frame, a: habits.sleep_regularity(frame, _window(a)),
+        ),
+        AgentTool(
+            "training_load",
+            "The last 7 days' strain against the last 28 days' (lighter, steady or heavier than "
+            "usual), and how the recovery score went the morning after the hardest days.",
+            DayOnly,
+            lambda frame, a: habits.training_load(frame, a.day),
+        ),
+        AgentTool(
+            "rank_days",
+            "The best, worst, highest or lowest days of a metric in a period.",
+            RankArguments,
+            lambda frame, a: habits.rank_days(frame, a.metric, _window(a), a.order, a.count),
+        ),
+        AgentTool(
+            "usual_ranges",
+            "The person's usual range (the middle half of the 28 days before a day) for each main "
+            "metric: what is normal for them.",
+            DayOnly,
+            lambda frame, a: habits.usual_ranges(frame, a.day),
+        ),
+        AgentTool(
+            "checkins",
+            "How the person rated their mornings over a period (1 to 5) and how often they chose "
+            "each tag (hard training, alcohol, late meal, stress, travel, feeling sick).",
+            Period,
+            lambda frame, a: habits.checkin_summary(frame, _window(a)),
+        ),
+        AgentTool(
+            "tag_effect",
+            "A metric on days the person tagged in their check-in (for example a late meal or "
+            "stress) against days without that tag. Association, not cause.",
+            TagArguments,
+            lambda frame, a: habits.tag_effect(frame, a.tag, a.metric, _window(a)),
+        ),
+        AgentTool(
+            "habit_options",
+            "For coaching: which everyday habits from a fixed, non-medical list this person's own "
+            "data supports for improving a metric (earlier or more regular bedtime, an easier day "
+            "after hard training, more active days, an earlier dinner, winding down on stressful "
+            "days), each a comparison of their own days, corrected for the number tested. Suggest "
+            "only supported habits, citing this evidence.",
+            MetricPeriod,
+            lambda frame, a: coaching.habit_options(frame, a.metric, _window(a)),
+        ),
     )
 }
 
@@ -167,6 +238,8 @@ class Toolbox:
         allowed = set(metrics)
         self.metrics = tuple(sorted(c for c in frame.columns if c in allowed))
         context = [c for c in ALWAYS_VISIBLE if c in frame.columns and c not in allowed]
+        # The check-in's tags (1 or 0 on check-in days), for tag_effect and habit_options.
+        context += [c for c in frame.columns if c.startswith(TAG_PREFIX) and c not in allowed]
         self.frame = frame[[*self.metrics, *context]]
         self.tools = {name: TOOLS[name] for name in (tools or TOOLS)}
         self.evidence: dict[str, Evidence] = {}
