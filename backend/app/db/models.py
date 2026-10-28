@@ -50,6 +50,16 @@ TEAM_EVENTS = (
 )
 REMINDER_STATUSES = ("proposed", "active", "paused", "declined", "cancelled", "done")
 REMINDER_SOURCES = ("person", "agent")
+DELIVERY_CHANNELS = ("email", "in_app")
+# skipped_late: the server was down at the time, and a reminder hours late helps nobody.
+DELIVERY_STATUSES = (
+    "sent",
+    "failed",
+    "skipped_quiet",
+    "skipped_cap",
+    "skipped_late",
+    "skipped_off",
+)
 TEAM_REPORT_STATUSES = ("ready", "withheld")  # withheld: fewer active members than the minimum
 
 
@@ -563,3 +573,53 @@ class NotificationSetting(Base):
     max_per_day: Mapped[int] = mapped_column(default=3)  # applies to suggestions, not your own
     email: Mapped[bool] = mapped_column(default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ReminderDelivery(Base):
+    """One send of a reminder on one channel. Unique per due time, so it happens once even when
+    two copies of the API overlap during a deploy."""
+
+    __tablename__ = "reminder_deliveries"
+    __table_args__ = (
+        UniqueConstraint("reminder_id", "due_at", "channel", name="uq_reminder_deliveries_once"),
+        CheckConstraint(
+            f"channel IN ({', '.join(repr(c) for c in DELIVERY_CHANNELS)})",
+            name="ck_reminder_deliveries_channel",
+        ),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in DELIVERY_STATUSES)})",
+            name="ck_reminder_deliveries_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    reminder_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("reminders.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    channel: Mapped[str] = mapped_column(String(8))
+    status: Mapped[str] = mapped_column(String(16))
+    error: Mapped[str | None] = mapped_column(String(200), default=None)  # safe to show
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """What the app's inbox shows: a reminder that came due, later the smart alarms."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notifications_user_created", "user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))  # reminder
+    title: Mapped[str] = mapped_column(String(80))
+    body: Mapped[str] = mapped_column(String(400))
+    link: Mapped[str | None] = mapped_column(String(200), default=None)  # an app path
+    reminder_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("reminders.id", ondelete="SET NULL"), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

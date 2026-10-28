@@ -4,6 +4,8 @@ Run from the repository root: `uvicorn app.api.main:app --app-dir backend --relo
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -12,12 +14,24 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 
-from app.api import actions, auth, chat, data, days, google, reminders, reports, teams
+from app.api import (
+    actions,
+    auth,
+    chat,
+    data,
+    days,
+    google,
+    notifications,
+    reminders,
+    reports,
+    teams,
+)
 from app.api.errors import ApiError
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
 from app.config import settings
 from app.ingest.takeout import IngestError
+from app.reminders.loop import ReminderLoop
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +41,19 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status, content=body.model_dump(by_alias=True))
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Background work that lives as long as the server: sending due reminders."""
+    loop = ReminderLoop() if settings.reminders_enabled else None
+    if loop:
+        loop.start()
+    yield
+    if loop:
+        loop.stop()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Fitbit agent API", version="0.1.0")
+    app = FastAPI(title="Fitbit agent API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -79,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(google.router)
     app.include_router(data.router)
     app.include_router(days.router)
+    app.include_router(notifications.router)
     app.include_router(reminders.router)
     app.include_router(reports.router)
     app.include_router(teams.router)
