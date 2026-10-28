@@ -230,7 +230,7 @@ def test_the_agent_gets_the_local_time_not_the_last_day_of_data(client, engine, 
     agent.llm.turns.append(submission("Nothing stood out."))
     ask(client, signed_in(client, engine))
     task = agent.llm.requests[0]["messages"][1]["content"]
-    assert task.startswith("It is now ") and "UTC" in task
+    assert "\nIt is now " in task and "UTC" in task
 
 
 def test_a_reply_to_a_logging_question_is_given_with_its_request(client, engine, agent):

@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.agent.guard import REASON as ADVICE_REASON
 from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget, BudgetExceeded, LLMError, Role, ToolCall
-from app.agent.present import column, metric_list
+from app.agent.present import column, label, metric_list
 from app.agent.tools import Toolbox, evidence_payload
 from app.agent.verifier import (
     Claim,
@@ -48,16 +48,20 @@ class HypothesesArguments(BaseModel):
     hypotheses: list[str] = Field(min_length=1, max_length=8)
 
 
-SYSTEM_PROMPT = """You analyze one person's own Fitbit data and explain what changed and why.
-
-How to work:
+# How to work on a question that needs explaining. Other kinds of question get their own guide
+# (strategy.py); the guide goes in the task, so this system prompt is the same for every question
+# and its prefix is cached.
+DEFAULT_GUIDE = """How to work:
 1. Read the task. Before testing anything, call record_hypotheses with the explanations worth
    checking, for example a bedtime shift, more or less training, low wear time or missing data,
    a weekday/weekend pattern, or a change in another metric that tracks this one.
 2. Test each hypothesis with the analysis tools. Date a change with change_point, size it with
    compare_windows, check data quality with coverage, and look for metrics that move with it with
    correlate. Every tool returns evidence with an evidence_id.
-3. Call submit_findings once, with a short summary, your claims and each hypothesis's status.
+3. Call submit_findings once, with a short summary, your claims and each hypothesis's status."""
+
+SYSTEM_PROMPT = """You analyze one person's own Fitbit data: what changed and why, what is usual
+for them, and which everyday habits their own data supports. Each task says how to work on it.
 
 Writing for the person:
 - The summary is the answer they read, so write it as a short, natural reply: two to four connected
@@ -234,7 +238,6 @@ def run_agent(
     result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="no_submission", budget=budget)
     result.evidence = toolbox.evidence  # shared: tools add to it as they run
     extras = {tool.name: tool for tool in extra_tools}
-    tools = toolbox.schemas() + [tool.schema() for tool in extras.values()] + _control_tools()
     messages: list[dict] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": task},
@@ -246,6 +249,8 @@ def run_agent(
             messages.append(
                 {"role": "user", "content": f"This is your last turn: call {SUBMIT} now."}
             )
+        # Built each turn: expand_tools may have widened the toolbox.
+        tools = toolbox.schemas() + [tool.schema() for tool in extras.values()] + _control_tools()
         try:
             completion = llm.complete(messages, role=role, tools=tools, budget=budget)
         except BudgetExceeded as exc:
@@ -371,8 +376,8 @@ def _handle(
                 list(verdict.rejected), len(verdict.accepted), summary_problems, uncovered
             )
             return message, False
-        if summary_problems:  # still wrong after the repair: show the verified claims instead
-            result.summary = " ".join(c.text for c in verdict.accepted)
+        if summary_problems:  # still wrong after the repair: written from the verified claims
+            result.summary = fallback_summary(list(verdict.accepted))
         return json.dumps({"accepted_claims": len(verdict.accepted)}), True
 
     if over_budget:
@@ -486,15 +491,23 @@ def answer(
     evidence: dict[str, Evidence] | None = None,
     guard: Guard | None = None,
     extra_tools: list[ExtraTool] = (),
+    tools: tuple[str, ...] | None = None,
+    guide: str = DEFAULT_GUIDE,
+    widen: Callable[[Toolbox, Budget, list[dict]], ExtraTool] | None = None,
 ) -> AgentResult:
     """Answers a person's question about their data, with verified claims.
 
     `context` is the conversation block from `context.build`, and `evidence` what it lets the run
-    cite without recomputing."""
-    toolbox = Toolbox(frame, metrics or list(frame.columns))
+    cite without recomputing. `tools` is the starting toolset and `guide` how to work, from the
+    question's strategy; `widen` makes the tool that lets the agent ask for the rest."""
+    toolbox = Toolbox(frame, metrics or list(frame.columns), tools)
     toolbox.evidence.update(evidence or {})
-    task = answer_task(toolbox, question, today, context)
-    return run_agent(
+    task = answer_task(toolbox, question, today, context, guide)
+    budget = budget or Budget()
+    steps: list[dict] = []
+    if widen is not None:
+        extra_tools = [*extra_tools, widen(toolbox, budget, steps)]
+    result = run_agent(
         llm,
         toolbox,
         task,
@@ -503,10 +516,33 @@ def answer(
         guard=guard,
         extra_tools=list(extra_tools),
     )
+    result.trace += steps
+    return result
+
+
+def fallback_summary(claims: list[Claim]) -> str:
+    """A summary from verified claims when the model's failed its checks twice: what changed or
+    is suggested first, then the steady metrics together in one sentence, not one each."""
+
+    def sentence(text: str) -> str:
+        text = text.strip()
+        return text[:1].upper() + text[1:] + ("" if text.endswith((".", "!", "?")) else ".")
+
+    lead = [sentence(c.text) for c in claims if c.kind != "no_change"][:3]
+    unchanged = [c for c in claims if c.kind == "no_change"]
+    steady = list(dict.fromkeys(label(c.metric) for c in unchanged if c.metric))
+    if len(steady) < 2:  # one steady metric reads best in its own claim's words
+        return " ".join(lead + [sentence(c.text) for c in unchanged])
+    names = f"{', '.join(steady[:-1])} and {steady[-1]}"
+    return " ".join([*lead, sentence(f"{names} showed no clear change")])
 
 
 def answer_task(
-    toolbox: Toolbox, question: str, today: date | None = None, context: str = ""
+    toolbox: Toolbox,
+    question: str,
+    today: date | None = None,
+    context: str = "",
+    guide: str = DEFAULT_GUIDE,
 ) -> str:
     """The task the model reads. `today` may be a timezone-aware datetime: the person's local
     time, so it can place "just now" or "this morning" without asking."""
@@ -518,7 +554,7 @@ def answer_task(
     else:
         when = f"Today is {today}. " if today else ""
     earlier = f"\n\n{context}" if context else ""
-    return f"{when}{_describe_range(toolbox)}{earlier}\n\nThe person asks: {question}"
+    return f"{guide}\n\n{when}{_describe_range(toolbox)}{earlier}\n\nThe person asks: {question}"
 
 
 def trace_json(result: AgentResult) -> str:
