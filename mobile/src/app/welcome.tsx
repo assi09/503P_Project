@@ -73,6 +73,7 @@ export default function Welcome() {
       <StatusBar style="light" />
       <ScrollExpandHero
         image={require('../../assets/landing/hero.jpg')}
+        imageSize={{ width: 1328, height: 1400 }}
         background={background}
         eyebrow="Your Fitbit, explained"
         title={['Know your', 'patterns']}
