@@ -84,7 +84,7 @@ New tools, so the agent can do what the system needs:
 Each tool validates its input, raises `ToolError`, returns `Evidence`, and gets tests including the
 unhappy paths. Prompt and tool versions are recorded on every trace (workstream I).
 
-### A2. Memory that listens: short-term, long-term, and "cognify"
+### K. Memory that listens: short-term, long-term, and "cognify"
 
 Asked for on 2026-10-28: the agent should be **actively listening**. Today it mostly forgets what
 people tell it:
@@ -314,7 +314,7 @@ poster if the instructor asks for one (the pitch poster updated with results).
 - The daily run (cron), Today's note, the proposals inbox; reminders backend and agent proposals.
 - New tools: `workouts`, `checkins`, `memory_lookup`; chat fixes A2–A4.
 - **Pilot onboarding** (about 10 people, one team).
-- Memory that listens (A2): the listener, conversation summaries, dated events, the Cognee
+- Memory that listens (K): the listener, conversation summaries, dated events, the Cognee
   spike against our own extractor.
 - **Done when**: a synthetic person goes through propose → approve → daily recording → result in
   tests; the pilot team exists; reminders are proposed and approved in the app.
@@ -344,7 +344,7 @@ poster if the instructor asks for one (the pitch poster updated with results).
 | 2 consult policy, 5 thresholds, 6 detectable scenarios, 20 verdict vs number of tests | evaluation (G), weeks 1–3 |
 | 4 missing parts, 11 overstating, 13 quick depth, 14 hidden change, 23 consults | chat fixes A2–A4, week 2 |
 | 7 quote marks | A5, week 1 |
-| 15 facts never proposed, 19 facts screen, 9 recomputing instead of citing memory | memory that listens (A2), weeks 2–3 |
+| 15 facts never proposed, 19 facts screen, 9 recomputing instead of citing memory | memory that listens (K), weeks 2–3 |
 | 10 guard misses implied diagnoses, 12 scope check when Jev is down | red team (H), week 3 |
 | 16 no email check or reset, token in localStorage; 18 `?google=`; 21 code in the log | accounts (E), week 1 |
 | 17 phones need the deployed backend | done: deployed on Railway and Vercel |
