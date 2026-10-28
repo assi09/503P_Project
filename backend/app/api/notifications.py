@@ -10,7 +10,7 @@ from sqlalchemy import func, select, update
 from app.api.auth import Db, Now, approved_user
 from app.api.errors import ApiError
 from app.api.schemas import ApiModel
-from app.db.models import Notification, User
+from app.db.models import Alarm, Notification, User
 from app.reminders.store import utc
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -24,6 +24,8 @@ class NotificationOut(ApiModel):
     title: str
     body: str
     link: str | None  # a path in the app
+    alarm_id: str | None  # a smart alarm, which the person may mark useful or not
+    alarm_feedback: str | None  # "useful", "not_useful", or not given yet
     created_at: datetime
     read_at: datetime | None
 
@@ -33,13 +35,15 @@ class Inbox(ApiModel):
     unread: int  # over all of them, not just those shown
 
 
-def _out(row: Notification) -> NotificationOut:
+def _out(row: Notification, feedback: str | None = None) -> NotificationOut:
     return NotificationOut(
         id=str(row.id),
         kind=row.kind,
         title=row.title,
         body=row.body,
         link=row.link,
+        alarm_id=str(row.alarm_id) if row.alarm_id else None,
+        alarm_feedback=feedback,
         created_at=utc(row.created_at),
         read_at=utc(row.read_at),
     )
@@ -58,7 +62,14 @@ def inbox(db: Db, user: Person) -> Inbox:
         .select_from(Notification)
         .where(Notification.user_id == user.id, Notification.read_at.is_(None))
     )
-    return Inbox(items=[_out(row) for row in rows], unread=unread)
+    rows = list(rows)
+    alarm_ids = [row.alarm_id for row in rows if row.alarm_id]
+    feedback = dict(
+        db.execute(select(Alarm.id, Alarm.feedback).where(Alarm.id.in_(alarm_ids))).all()
+        if alarm_ids
+        else []
+    )
+    return Inbox(items=[_out(row, feedback.get(row.alarm_id)) for row in rows], unread=unread)
 
 
 @router.post("/{notification_id}/read", response_model=NotificationOut)

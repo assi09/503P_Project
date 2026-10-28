@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8081"
     # Send due reminders from a loop inside the API, once a minute.
     reminders_enabled: bool = True
+    # Have the owning expert explain each smart alarm (one quick run each); off: the template.
+    alarm_explanations: bool = True
     # Opt-in only after the confirmed-action path and Google write scopes are configured.
     google_writes_enabled: bool = False
     # The database: Postgres from docker-compose.yml locally, a managed Postgres when deployed.

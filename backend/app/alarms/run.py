@@ -7,8 +7,9 @@ links to its numbers. `deliver` sends pending alarms in the app and by email, ou
 and under the person's daily limit (shared with the agent's suggested reminders), strongest
 first; one that waited `EXPIRE_AFTER` is dropped, since news that old is no longer news.
 
-The text here is a fixed template built from the evidence; the agent's explanation replaces it
-when it passes its checks (`explain.py`, next).
+The title is a fixed template built from the evidence; the body is the agent's explanation when
+it passes its checks (`explain.py`), written just before the alarm is sent, and the template
+otherwise.
 """
 
 import html
@@ -22,10 +23,13 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.guard import Guard
+from app.agent.llm import LLM
 from app.agent.present import format_level, label, short_date
 from app.alarms.detect import KINDS, Candidate, detect
+from app.alarms.explain import Explanation, explain
 from app.analysis.day import with_scores
-from app.db.chat import store_evidence
+from app.db.chat import load_evidence, store_evidence
 from app.db.daily import load_daily
 from app.db.models import Alarm, AlarmSetting, GoogleConnection, Notification, User
 from app.email import Email, Mailer, MailError
@@ -168,7 +172,17 @@ def check(
     return created
 
 
-def deliver(db: Session, user: User, now: datetime, mailer: Mailer, app_url: str) -> Counter:
+Explainer = Callable[[Session, Alarm], Explanation]
+
+
+def deliver(
+    db: Session,
+    user: User,
+    now: datetime,
+    mailer: Mailer,
+    app_url: str,
+    explainer: Explainer | None = None,
+) -> Counter:
     """Sends the person's pending alarms that may go now; returns what happened to each."""
     counts: Counter = Counter()
     pending = list(
@@ -192,6 +206,10 @@ def deliver(db: Session, user: User, now: datetime, mailer: Mailer, app_url: str
         elif sent >= prefs.max_per_day:
             alarm.status, alarm.reason = "suppressed", "daily_limit"
         else:
+            if explainer is not None and alarm.written_by == "template":
+                explanation = explainer(db, alarm)
+                alarm.body, alarm.written_by = explanation.body, explanation.written_by
+                alarm.cost_usd = round(explanation.cost_usd, 6)
             db.add(
                 Notification(
                     user_id=user.id,
@@ -199,6 +217,7 @@ def deliver(db: Session, user: User, now: datetime, mailer: Mailer, app_url: str
                     title=alarm.title[:80],
                     body=alarm.body[:400],
                     link=link(alarm),
+                    alarm_id=alarm.id,
                     created_at=now,
                 )
             )
@@ -229,7 +248,34 @@ def compose(alarm: Alarm, user: User, app_url: str) -> Email:
     return Email(to=user.email, subject=alarm.title, text=text_body, html=page)
 
 
-def run_all(sessions: Sessions, now: datetime, mailer: Mailer, app_url: str) -> Counter:
+def explainer_for(frame, today, llm: LLM | None, guard: Guard | None) -> Explainer:
+    """Explains one person's alarms from their data, with the evidence each alarm stored."""
+
+    def explain_one(db: Session, alarm: Alarm) -> Explanation:
+        evidence = load_evidence(db, alarm.user_id, list(alarm.evidence_ids or []))
+        return explain(
+            llm,
+            frame,
+            kind=alarm.kind,
+            metric=alarm.metric,
+            title=alarm.title,
+            body=alarm.body,
+            evidence=[evidence[i] for i in alarm.evidence_ids or [] if i in evidence],
+            today=today,
+            guard=guard,
+        )
+
+    return explain_one
+
+
+def run_all(
+    sessions: Sessions,
+    now: datetime,
+    mailer: Mailer,
+    app_url: str,
+    llm: LLM | None = None,
+    guard: Guard | None = None,
+) -> Counter:
     """Checks and delivers for everyone connected to Google; one failing person stops no one."""
     counts: Counter = Counter()
     with sessions() as db:
@@ -246,7 +292,9 @@ def run_all(sessions: Sessions, now: datetime, mailer: Mailer, app_url: str) -> 
                     db, user, now, frame, reconnect_needed=connection.status == "reconnect_needed"
                 )
                 counts["created"] += len(created)
-                counts.update(deliver(db, user, now, mailer, app_url))
+                today = now.astimezone(zone(store.timezone_of(user))).date()
+                explainer = explainer_for(frame, today, llm, guard) if llm else None
+                counts.update(deliver(db, user, now, mailer, app_url, explainer))
         except Exception:
             logger.exception("Checking alarms failed for one person")
             counts["errors"] += 1

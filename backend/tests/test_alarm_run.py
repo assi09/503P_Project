@@ -314,3 +314,80 @@ def test_every_kind_of_alarm_has_text_from_its_own_evidence():
     for metric in ("reconnect", "stale"):
         assert all(run.text(Candidate("data", metric, LAST, None, 1.0)))
     assert "finding" in kinds
+
+
+# The agent's explanation
+
+
+def test_the_owning_expert_explains_an_alarm_and_the_inbox_asks_for_feedback(client, engine):
+    from app.agent.agent import SUBMIT
+    from app.agent.llm import ScriptedLLM
+
+    headers = signed_in(client, engine)
+    explanation = "Last night's time asleep sat well under your usual range."
+    llm = ScriptedLLM([ScriptedLLM.call(SUBMIT, summary=explanation, claims=[], cost_usd=0.004)])
+    run.run_all(sessions(engine), NOON, Mailbox(), APP, llm=llm)
+    with session_scope(engine) as db:
+        alarm = db.scalar(select(Alarm).where(Alarm.key == "day:sleep_minutes"))
+        assert alarm.body == explanation and alarm.written_by == "sleep"
+        assert alarm.cost_usd == pytest.approx(0.004)
+    # The expert was given the alarm and its evidence, and was told not to advise.
+    task = llm.requests[0]["messages"][0]["content"]
+    assert "You are the sleep expert" in task
+    inbox = client.get("/notifications", headers=headers).json()["items"]
+    item = next(i for i in inbox if i["title"] == "Time asleep well below your usual")
+    assert item["body"] == explanation and item["alarmId"] and item["alarmFeedback"] is None
+    client.post(f"/alarms/{item['alarmId']}/feedback", json={"useful": True}, headers=headers)
+    again = client.get("/notifications", headers=headers).json()["items"]
+    assert next(i for i in again if i["id"] == item["id"])["alarmFeedback"] == "useful"
+
+
+def test_a_failed_or_unsafe_explanation_keeps_the_template(engine):
+    from app.agent.agent import SUBMIT
+    from app.agent.llm import LLMError, ScriptedLLM
+    from app.alarms.detect import detect
+    from app.alarms.explain import explain
+
+    frame = with_scores(bad_night_frame())
+    candidate = next(c for c in detect(frame, LAST) if c.metric == "sleep_minutes")
+    title, body = run.text(candidate)
+
+    def explained(llm):
+        return explain(
+            llm,
+            frame,
+            kind=candidate.kind,
+            metric=candidate.metric,
+            title=title,
+            body=body,
+            evidence=candidate.evidence,
+            today=LAST,
+        )
+
+    class Down:
+        def complete(self, *args, **kwargs):
+            raise LLMError("OpenAI is down")
+
+    # A metric no evidence covers ("bedtime") fails the summary check: the template stays.
+    unsupported = ScriptedLLM(
+        [ScriptedLLM.call(SUBMIT, summary="Shorter than usual, after a later bedtime.", claims=[])]
+        * 2
+    )
+    assert explained(unsupported).written_by == "template"
+    assert explained(Down()).written_by == "template"
+    assert explained(None).body == body
+    diagnosis = ScriptedLLM(
+        [ScriptedLLM.call(SUBMIT, summary="This could be insomnia.", claims=[])]
+    )
+    assert explained(diagnosis).written_by == "template"
+    nothing = ScriptedLLM([ScriptedLLM.say("I will not submit.")] * 3)
+    assert explained(nothing).body == body
+    # Data alarms are not sent to the model at all.
+    unused = ScriptedLLM([])
+    assert (
+        explain(
+            unused, frame, kind="data", metric="stale", title="t", body="b", evidence=[], today=LAST
+        ).body
+        == "b"
+    )
+    assert unused.requests == []
