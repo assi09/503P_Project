@@ -7,6 +7,7 @@ import { describeSchedule, nextDue, validTime } from '@/lib/reminders';
 import { ApiError } from './http';
 import { getToken } from './token';
 import type {
+  AlarmSettings,
   AppNotification,
   AccessRequest,
   Account,
@@ -373,10 +374,25 @@ let inbox: AppNotification[] = [
     title: 'Stretch',
     body: 'Ten minutes of stretching before dinner.',
     link: '/reminders',
+    alarmId: null,
+    alarmFeedback: null,
     createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
     readAt: null,
   },
+  {
+    id: 'n_alarm',
+    kind: 'alarm',
+    title: 'Time asleep well below your usual',
+    body: "Last night's time asleep sat well under your usual range of 6 h 50 min to 7 h 30 min.",
+    link: '/reminders',
+    alarmId: 'a_sleep',
+    alarmFeedback: null,
+    createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+    readAt: null,
+  },
 ];
+
+let alarmSettings: AlarmSettings = { enabled: true, mutedKinds: [], sensitivity: 'normal' };
 
 let chat: ChatMessage[] = [];
 
@@ -1454,6 +1470,20 @@ export const mockClient: ApiClient = {
     }),
 
   setTimezone: () => delay(undefined),
+
+  getAlarmSettings: () => delay(alarmSettings),
+
+  updateAlarmSettings: (settings) => {
+    alarmSettings = settings;
+    return delay(alarmSettings);
+  },
+
+  sendAlarmFeedback: (alarmId, useful) =>
+    later(() => {
+      const found = inbox.find((n) => n.alarmId === alarmId);
+      if (!found) throw new ApiError('No such alarm.', 'not_found', 404);
+      found.alarmFeedback = useful ? 'useful' : 'not_useful';
+    }),
 
   getDataStatus: () =>
     later<DataStatus>(() => {

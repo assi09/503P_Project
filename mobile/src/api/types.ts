@@ -259,8 +259,19 @@ export interface AppNotification {
   title: string;
   body: string;
   link: string | null; // a path in the app, such as "/reminders"
+  alarmId: string | null; // a smart alarm, which can be marked useful or not
+  alarmFeedback: 'useful' | 'not_useful' | null;
   createdAt: ISODateTime;
   readAt: ISODateTime | null;
+}
+
+/** Which smart alarms (alerts sent automatically from the data) the person wants. */
+export type AlarmKind = 'day' | 'streak' | 'finding' | 'data';
+
+export interface AlarmSettings {
+  enabled: boolean;
+  mutedKinds: AlarmKind[];
+  sensitivity: 'fewer' | 'normal' | 'more';
 }
 
 export interface Inbox {
@@ -435,6 +446,9 @@ export interface ApiClient {
   readNotification(id: string): Promise<AppNotification>;
   readAllNotifications(): Promise<void>;
   setTimezone(timezone: string): Promise<void>; // the device's IANA zone; reminders follow it
+  getAlarmSettings(): Promise<AlarmSettings>;
+  updateAlarmSettings(settings: AlarmSettings): Promise<AlarmSettings>;
+  sendAlarmFeedback(alarmId: string, useful: boolean): Promise<void>;
   getDataStatus(): Promise<DataStatus>;
   previewTeam(code: string): Promise<TeamPreview>;
   joinTeam(code: string, consentVersion: string): Promise<Membership>;

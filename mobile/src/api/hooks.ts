@@ -6,6 +6,7 @@ import { ApiError } from './http';
 import { api } from './index';
 import type {
   Account,
+  AlarmSettings,
   ChatMessage,
   CheckIn,
   GoogleStatus,
@@ -24,6 +25,7 @@ export const keys = {
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
   notifications: ['notifications'] as const,
+  alarmSettings: ['settings', 'alarms'] as const,
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
   myTeams: ['me', 'teams'] as const,
@@ -242,6 +244,28 @@ export function useReadNotifications() {
   return useMutation({
     mutationFn: (id: string | 'all') =>
       id === 'all' ? api.readAllNotifications() : api.readNotification(id).then(() => undefined),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.notifications }),
+  });
+}
+
+export function useAlarmSettings() {
+  return useQuery({ queryKey: keys.alarmSettings, queryFn: api.getAlarmSettings });
+}
+
+export function useUpdateAlarmSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: AlarmSettings) => api.updateAlarmSettings(settings),
+    onSuccess: (saved) => client.setQueryData(keys.alarmSettings, saved),
+  });
+}
+
+/** "Was this alert useful?": kept on the alarm, and counted in the evaluation. */
+export function useAlarmFeedback() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ alarmId, useful }: { alarmId: string; useful: boolean }) =>
+      api.sendAlarmFeedback(alarmId, useful),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.notifications }),
   });
 }
