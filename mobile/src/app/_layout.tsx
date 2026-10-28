@@ -90,6 +90,7 @@ function Navigation() {
           <Stack.Screen name="entries" options={{ title: 'Logged food and workouts' }} />
           <Stack.Screen name="metric/[metric]" options={{ title: '' }} />
           <Stack.Screen name="workout/[id]" options={{ title: '' }} />
+          <Stack.Screen name="reminder/[id]" options={{ title: 'Reminder' }} />
           <Stack.Screen name="chats" options={{ title: 'Your chats' }} />
           <Stack.Screen name="teams" options={{ title: 'Teams' }} />
           <Stack.Screen name="data" options={{ headerShown: false }} />

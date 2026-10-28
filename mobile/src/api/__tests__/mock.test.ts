@@ -41,7 +41,10 @@ describe('mock API', () => {
 
   it('records which finding a question was about', async () => {
     const attachment = { kind: 'finding', id: 'f_eff' } as const;
-    const [question, answer] = await mockClient.sendMessage('Tell me more', { ...AUTO, attachment });
+    const [question, answer] = await mockClient.sendMessage('Tell me more', {
+      ...AUTO,
+      attachment,
+    });
     expect(question.attachment).toEqual(attachment);
     expect(answer.evidenceIds).toContain('ev_eff');
   });
@@ -129,19 +132,52 @@ describe('mock API', () => {
     expect(answer.evidenceIds).toEqual([]);
   });
 
-  it('remembers reminder decisions', async () => {
-    await mockClient.setReminderStatus('r_wind', 'active');
-    const reminders = await mockClient.getReminders();
-    expect(reminders.find((r) => r.id === 'r_wind')?.status).toBe('active');
+  it('approves a suggested reminder at the version shown, and refuses a stale one', async () => {
+    const [suggested] = (await mockClient.getReminders()).filter((r) => r.status === 'proposed');
+    const approved = await mockClient.changeReminder(suggested.id, {
+      version: suggested.version,
+      status: 'active',
+    });
+    expect(approved.status).toBe('active');
+    expect(approved.nextDueAt).not.toBeNull();
+    await expect(
+      mockClient.changeReminder(suggested.id, { version: suggested.version, status: 'paused' }),
+    ).rejects.toThrow('changed');
+  });
+
+  it('creates reminders like the backend, refusing bad ones', async () => {
+    const created = await mockClient.createReminder({
+      title: 'Stretch',
+      message: '',
+      schedule: { kind: 'weekly', time: '07:30', weekdays: [5, 6] },
+      channels: ['in_app'],
+    });
+    expect(created.status).toBe('active');
+    expect(created.scheduleText).toBe('Weekends at 07:30');
+    await expect(
+      mockClient.createReminder({
+        ...created,
+        schedule: { kind: 'once', date: '2020-01-01', time: '07:00' },
+      }),
+    ).rejects.toThrow('already passed');
+    await expect(mockClient.createReminder({ ...created, channels: [] })).rejects.toThrow('Choose');
+  });
+
+  it('keeps an inbox with an unread count', async () => {
+    const before = await mockClient.getNotifications();
+    expect(before.unread).toBeGreaterThan(0);
+    await mockClient.readAllNotifications();
+    expect((await mockClient.getNotifications()).unread).toBe(0);
   });
 
   it('saves notification settings and rejects invalid limits', async () => {
-    const saved = await mockClient.updateNotificationSettings({ quietHours: null, maxPerDay: 3 });
-    expect(saved).toEqual({ quietHours: null, maxPerDay: 3 });
+    const settings = { quietHours: null, maxPerDay: 3, email: false };
+    const saved = await mockClient.updateNotificationSettings(settings);
+    expect(saved).toEqual(settings);
     expect(await mockClient.getNotificationSettings()).toEqual(saved);
     await expect(
-      mockClient.updateNotificationSettings({ quietHours: null, maxPerDay: 0 }),
-    ).rejects.toThrow('between 1 and 5');
+      mockClient.updateNotificationSettings({ ...settings, maxPerDay: 0 }),
+    ).rejects.toThrow('between 1 and 10');
   });
 
   it('remembers answers to context questions', async () => {
@@ -152,9 +188,9 @@ describe('mock API', () => {
 
   it('returns copies so callers cannot change stored data', async () => {
     const first = await mockClient.getReminders();
-    first[0].status = 'muted';
+    first[0].title = 'Changed by the caller';
     const second = await mockClient.getReminders();
-    expect(second[0].status).not.toBe('muted');
+    expect(second[0].title).not.toBe('Changed by the caller');
   });
 });
 

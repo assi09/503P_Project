@@ -1,257 +1,276 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { usingMock } from '@/api';
 import {
-  useNoData,
+  useChangeReminder,
+  useNotifications,
   useNotificationSettings,
+  useReadNotifications,
   useReminders,
-  useReport,
-  useSetReminderStatus,
   useUpdateNotificationSettings,
 } from '@/api/hooks';
-import type { NotificationSettings, Reminder } from '@/api/types';
-import { PressableScale } from '@/components/PressableScale';
+import type { AppNotification, NotificationSettings, Reminder } from '@/api/types';
+import { Row, Section } from '@/components/list';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { Card, Chip, SectionTitle } from '@/components/ui';
+import { Button, Chip } from '@/components/ui';
+import { timeAgo } from '@/lib/format';
 import { select, success } from '@/lib/haptics';
-import { radius, spacing, useColors, useMetricColor } from '@/theme';
+import { dueText } from '@/lib/reminders';
+import { spacing, useColors } from '@/theme';
 
 const QUIET_HOURS: { label: string; value: NotificationSettings['quietHours'] }[] = [
   { label: '22:00 – 07:00', value: { start: '22:00', end: '07:00' } },
   { label: '23:00 – 08:00', value: { start: '23:00', end: '08:00' } },
   { label: 'Off', value: null },
 ];
-const MAX_PER_DAY = [1, 2, 3];
+const MAX_PER_DAY = [1, 2, 3, 5];
+const INBOX_SHOWN = 5;
 
+/**
+ * Reminders and the inbox in one place: what came in, what Patterns suggests, and what you set.
+ * Reminders arrive in the app (this inbox, and the badge on this tab) and by email.
+ */
 export default function RemindersScreen() {
   const colors = useColors();
   const reminders = useReminders();
-  const noData = useNoData();
-  const [showDeclined, setShowDeclined] = useState(false);
+  const inbox = useNotifications();
 
   return (
-    <Screen title="Reminders" refreshing={reminders.isRefetching} onRefresh={reminders.refetch}>
+    <Screen
+      title="Reminders"
+      refreshing={reminders.isRefetching}
+      onRefresh={() => {
+        reminders.refetch();
+        inbox.refetch();
+      }}
+    >
+      <Inbox items={inbox.data?.items ?? []} unread={inbox.data?.unread ?? 0} />
       <QueryState query={reminders}>
         {() => {
           const all = reminders.data!;
-          const proposed = all.filter((r) => r.status === 'proposed');
-          const current = all.filter((r) => r.status === 'active' || r.status === 'muted');
-          const declined = all.filter((r) => r.status === 'declined');
+          const suggested = all.filter((r) => r.status === 'proposed');
+          const yours = all.filter((r) => r.status === 'active' || r.status === 'paused');
           return (
             <>
-              {usingMock && (
-                <View style={[styles.notice, { backgroundColor: colors.accentSoft }]}>
-                  <Ionicons name="information-circle" size={16} color={colors.accent} />
-                  <Text variant="caption" color="accent" style={{ flex: 1 }}>
-                    Preview: reminders are saved, but notifications are not sent yet.
-                  </Text>
-                </View>
-              )}
-
-              <SectionTitle>Suggested</SectionTitle>
-              {noData ? (
-                <Text color="muted">
-                  Suggestions come from patterns in your Fitbit data, once it is connected in
-                  Settings.
-                </Text>
-              ) : proposed.length === 0 ? (
-                <Text color="muted">No new suggestions.</Text>
-              ) : (
-                <>
-                  <Text variant="caption" color="muted">
-                    Based on patterns in your data. Nothing is scheduled until you approve it.
-                  </Text>
-                  {proposed.map((r) => (
-                    <ProposalCard key={r.id} reminder={r} />
+              {suggested.length > 0 && (
+                <Section
+                  title="Suggested by Patterns"
+                  footer="From patterns in your data. Nothing is scheduled until you approve it."
+                >
+                  {suggested.map((r) => (
+                    <Suggestion key={r.id} reminder={r} />
                   ))}
-                </>
+                </Section>
               )}
 
-              <SectionTitle>Your reminders</SectionTitle>
-              {current.length === 0 ? (
-                <Text color="muted">No reminders yet.</Text>
-              ) : (
-                <Card style={{ paddingVertical: spacing.xs }}>
-                  {current.map((r, i) => (
-                    <ActiveRow key={r.id} reminder={r} divider={i > 0} />
-                  ))}
-                </Card>
-              )}
-
-              {declined.length > 0 && (
-                <>
+              <Section
+                title="Your reminders"
+                action={
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => {
-                      select();
-                      setShowDeclined((v) => !v);
-                    }}
-                    style={styles.toggle}
+                    onPress={() => router.push('/reminder/new')}
                     hitSlop={8}
+                    style={styles.add}
                   >
-                    <Text variant="caption" color="muted">
-                      {showDeclined ? 'Hide' : 'Show'} declined ({declined.length})
+                    <Ionicons name="add" size={16} color={colors.accent} />
+                    <Text variant="caption" color="accent">
+                      New
                     </Text>
-                    <Ionicons
-                      name={showDeclined ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={colors.muted}
-                    />
                   </Pressable>
-                  {showDeclined && declined.map((r) => <DeclinedRow key={r.id} reminder={r} />)}
-                </>
-              )}
-
-              <SectionTitle>Notifications</SectionTitle>
-              <SettingsCard />
+                }
+                footer="Tip: ask in Ask, for example “remind me every weeknight at 22:30 to wind down”."
+              >
+                {yours.length === 0 ? (
+                  <Row
+                    icon="alarm-outline"
+                    title="No reminders yet"
+                    detail="Add one here, or ask Patterns to set it up."
+                    onPress={() => router.push('/reminder/new')}
+                  />
+                ) : (
+                  yours.map((r) => <ReminderRow key={r.id} reminder={r} />)
+                )}
+              </Section>
             </>
           );
         }}
       </QueryState>
+      <SettingsSection />
     </Screen>
   );
 }
 
-function useStatus(reminder: Reminder) {
-  const mutation = useSetReminderStatus();
-  const pending = mutation.isPending && mutation.variables?.id === reminder.id;
-  return {
-    pending,
-    error: mutation.error,
-    set: (status: Reminder['status']) =>
-      mutation.mutate(
-        { id: reminder.id, status },
-        { onSuccess: () => (status === 'active' ? success() : select()) },
-      ),
-  };
-}
+function Inbox({ items, unread }: { items: AppNotification[]; unread: number }) {
+  const read = useReadNotifications();
+  if (items.length === 0) return null;
 
-function ProposalCard({ reminder }: { reminder: Reminder }) {
-  const report = useReport();
-  const status = useStatus(reminder);
-  const finding = report.data?.findings.find((f) => f.id === reminder.findingId);
-  const color = useMetricColor(finding?.metric ?? 'sleep_minutes');
+  function open(item: AppNotification) {
+    if (!item.readAt) read.mutate(item.id);
+    if (item.link && item.link !== '/reminders') router.push(item.link as never);
+  }
 
   return (
-    <Card glow={color}>
-      <View style={styles.titleRow}>
-        <View style={[styles.icon, { backgroundColor: `${color}22` }]}>
-          <Ionicons name="alarm" size={16} color={color} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text variant="headline">{reminder.title}</Text>
-          <Text variant="caption" color="muted">
-            {reminder.schedule}
-          </Text>
-        </View>
-      </View>
-      <View style={[styles.quote, { borderLeftColor: color }]}>
-        <Text color="muted">“{reminder.message}”</Text>
-      </View>
-      <Text variant="caption" color="muted">
-        Why: {reminder.reason}
-      </Text>
-      {finding && (
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => router.push(`/finding/${finding.id}`)}
-          hitSlop={6}
-        >
-          <Text variant="caption" color={color}>
-            See the finding: {finding.title} ›
-          </Text>
-        </Pressable>
-      )}
-      {status.error && (
-        <Text variant="caption" color="danger">
-          Could not save. Please try again.
-        </Text>
-      )}
-      <View style={styles.actions}>
-        <ActionButton
-          label="Not now"
-          onPress={() => status.set('declined')}
-          disabled={status.pending}
+    <Section
+      title={unread > 0 ? `Inbox · ${unread} new` : 'Inbox'}
+      action={
+        unread > 0 ? (
+          <Pressable accessibilityRole="button" onPress={() => read.mutate('all')} hitSlop={8}>
+            <Text variant="caption" color="accent">
+              Mark all read
+            </Text>
+          </Pressable>
+        ) : undefined
+      }
+    >
+      {items.slice(0, INBOX_SHOWN).map((item) => (
+        <Row
+          key={item.id}
+          icon={item.readAt ? 'notifications-outline' : 'notifications'}
+          title={item.title}
+          detail={`${item.body} · ${timeAgo(item.createdAt)}`}
+          accessory={item.readAt ? undefined : <UnreadDot />}
+          onPress={() => open(item)}
+          accessibilityLabel={`${item.readAt ? '' : 'Unread: '}${item.title}. ${item.body}`}
         />
-        <ActionButton
-          label="Approve"
-          primary
-          onPress={() => status.set('active')}
-          disabled={status.pending}
-        />
-      </View>
-    </Card>
+      ))}
+    </Section>
   );
 }
 
-function ActiveRow({ reminder, divider }: { reminder: Reminder; divider: boolean }) {
-  const colors = useColors();
-  const status = useStatus(reminder);
-  const on = reminder.status === 'active';
+function UnreadDot() {
+  return <View style={[styles.dot, { backgroundColor: useColors().accent }]} />;
+}
+
+function Suggestion({ reminder }: { reminder: Reminder }) {
+  const change = useChangeReminder();
+  const pending = change.isPending && change.variables?.id === reminder.id;
+  const decide = (status: 'active' | 'declined') =>
+    change.mutate(
+      { id: reminder.id, change: { version: reminder.version, status } },
+      { onSuccess: () => (status === 'active' ? success() : select()) },
+    );
 
   return (
-    <View
-      style={[
-        styles.row,
-        divider && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
-      ]}
-    >
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="bodyStrong" color={on ? 'text' : 'muted'}>
-          {reminder.title}
-        </Text>
+    <View style={styles.suggestion}>
+      <Text variant="bodyStrong">{reminder.title}</Text>
+      <Text variant="caption" color="muted">
+        {reminder.scheduleText} · “{reminder.message}”
+      </Text>
+      {reminder.reason && (
         <Text variant="caption" color="muted">
-          {on ? reminder.schedule : 'Muted'}
+          Why: {reminder.reason}
         </Text>
+      )}
+      {reminder.evidenceId && (
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push(`/evidence/${reminder.evidenceId}`)}
+          hitSlop={6}
+        >
+          <Text variant="caption" color="accent">
+            See the numbers behind it ›
+          </Text>
+        </Pressable>
+      )}
+      {change.error && change.variables?.id === reminder.id && (
+        <Text variant="caption" color="danger">
+          {change.error.message}
+        </Text>
+      )}
+      <View style={styles.actions}>
+        <Button
+          label="Not now"
+          variant="secondary"
+          onPress={() => decide('declined')}
+          disabled={pending}
+        />
+        <Button label="Approve" onPress={() => decide('active')} disabled={pending} />
       </View>
-      <Switch
-        accessibilityLabel={`${reminder.title} ${on ? 'on' : 'muted'}`}
-        value={on}
-        disabled={status.pending}
-        onValueChange={(value) => status.set(value ? 'active' : 'muted')}
-        trackColor={{ true: colors.accent, false: colors.track }}
-        thumbColor="#FFFFFF"
-        // react-native-web colors the "on" knob separately.
-        {...({ activeThumbColor: '#FFFFFF' } as object)}
-      />
     </View>
   );
 }
 
-function DeclinedRow({ reminder }: { reminder: Reminder }) {
-  const status = useStatus(reminder);
+function ReminderRow({ reminder }: { reminder: Reminder }) {
+  const colors = useColors();
+  const change = useChangeReminder();
+  const on = reminder.status === 'active';
+  const pending = change.isPending && change.variables?.id === reminder.id;
+  const when = on ? dueText(reminder.nextDueAt) : null;
+  const via =
+    reminder.channels.length === 2
+      ? 'app and email'
+      : reminder.channels[0] === 'email'
+        ? 'email'
+        : 'app';
+
   return (
-    <Card style={styles.declined}>
-      <Text color="muted" style={{ flex: 1 }}>
-        {reminder.title}
-      </Text>
-      <ActionButton
-        label="Restore"
-        onPress={() => status.set('proposed')}
-        disabled={status.pending}
-      />
-    </Card>
+    <Row
+      title={reminder.title}
+      detail={
+        on
+          ? `${reminder.scheduleText}${when ? ` · next ${when}` : ''} · by ${via}`
+          : `Paused · ${reminder.scheduleText}`
+      }
+      onPress={() => router.push(`/reminder/${reminder.id}`)}
+      accessory={
+        <Switch
+          accessibilityLabel={`${reminder.title} ${on ? 'on' : 'paused'}`}
+          value={on}
+          disabled={pending}
+          onValueChange={(value) => {
+            select();
+            change.mutate({
+              id: reminder.id,
+              change: { version: reminder.version, status: value ? 'active' : 'paused' },
+            });
+          }}
+          trackColor={{ true: colors.accent, false: colors.track }}
+          thumbColor="#FFFFFF"
+          // react-native-web colors the "on" knob separately.
+          {...({ activeThumbColor: '#FFFFFF' } as object)}
+        />
+      }
+    />
   );
 }
 
-function SettingsCard() {
+function SettingsSection() {
+  const colors = useColors();
   const settings = useNotificationSettings();
   const update = useUpdateNotificationSettings();
 
   return (
-    <Card>
+    <Section
+      title="How you hear from Patterns"
+      footer="Quiet hours and the daily limit apply to suggestions and alerts. Reminders you set come at the time you chose."
+    >
       <QueryState query={settings}>
         {() => {
           const current = update.isPending ? update.variables! : settings.data!;
           const save = (next: Partial<NotificationSettings>) =>
             update.mutate({ ...current, ...next });
           return (
-            <>
-              <Text variant="bodyStrong">Quiet hours</Text>
+            <View style={styles.settings}>
+              <Row
+                icon="mail-outline"
+                title="Email me too"
+                detail="When a reminder is set to send by email."
+                accessory={
+                  <Switch
+                    accessibilityLabel="Email me too"
+                    value={current.email}
+                    onValueChange={(email) => save({ email })}
+                    trackColor={{ true: colors.accent, false: colors.track }}
+                    thumbColor="#FFFFFF"
+                    {...({ activeThumbColor: '#FFFFFF' } as object)}
+                  />
+                }
+              />
+              <Text variant="caption" color="muted" style={styles.label}>
+                Quiet hours
+              </Text>
               <View style={styles.chips}>
                 {QUIET_HOURS.map(({ label, value }) => (
                   <Chip
@@ -262,8 +281,8 @@ function SettingsCard() {
                   />
                 ))}
               </View>
-              <Text variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-                At most per day
+              <Text variant="caption" color="muted" style={styles.label}>
+                Suggestions and alerts per day, at most
               </Text>
               <View style={styles.chips}>
                 {MAX_PER_DAY.map((n) => (
@@ -280,72 +299,20 @@ function SettingsCard() {
                   Could not save. Please try again.
                 </Text>
               )}
-            </>
+            </View>
           );
         }}
       </QueryState>
-    </Card>
-  );
-}
-
-function ActionButton({
-  label,
-  onPress,
-  primary = false,
-  disabled = false,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-}) {
-  const colors = useColors();
-  return (
-    <PressableScale
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      haptic={false}
-      style={[
-        styles.action,
-        primary
-          ? { backgroundColor: colors.text }
-          : { backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderWidth: 1 },
-      ]}
-    >
-      <Text variant="bodyStrong" color={primary ? 'background' : 'text'}>
-        {label}
-      </Text>
-    </PressableScale>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  notice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.md,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  icon: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quote: { borderLeftWidth: 2, paddingLeft: spacing.md, marginVertical: spacing.xs },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'flex-end',
-    marginTop: spacing.sm,
-  },
-  action: { paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  declined: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
+  add: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  suggestion: { gap: 4, paddingVertical: spacing.md },
+  actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end', marginTop: 4 },
+  settings: { paddingBottom: spacing.md },
+  label: { marginTop: spacing.md, marginBottom: spacing.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

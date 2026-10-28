@@ -4,7 +4,7 @@ import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
-import { useAutoSync } from '@/api/hooks';
+import { useAutoSync, useNotifications, useSyncTimezone } from '@/api/hooks';
 import { select } from '@/lib/haptics';
 import { useSession } from '@/lib/session';
 import { floatingTabBar as glass } from '@/lib/platform';
@@ -34,6 +34,8 @@ const TABS: {
 export default function TabLayout() {
   const { account } = useSession();
   useAutoSync(); // signed in from here on: keep the data fresh without a button
+  useSyncTimezone();
+  const unread = useNotifications().data?.unread ?? 0;
   const supervisor = account?.role === 'supervisor';
   const colors = useColors();
   const scheme = useScheme();
@@ -75,6 +77,9 @@ export default function TabLayout() {
           options={{
             title,
             href: supervisors && !supervisor ? null : undefined, // hidden, not just disabled
+            // Unread notifications show on Reminders, where the inbox is.
+            tabBarBadge: name === 'reminders' && unread > 0 ? Math.min(unread, 9) : undefined,
+            tabBarBadgeStyle: { backgroundColor: colors.accent, fontSize: 10 },
             tabBarIcon: ({ focused, size }) => (
               <Ionicons
                 name={focused ? iconActive : icon}

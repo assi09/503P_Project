@@ -5,6 +5,7 @@ import type {
   AccessRequest,
   Account,
   ApiClient,
+  AppNotification,
   ChatMessage,
   CheckIn,
   Conversation,
@@ -16,8 +17,11 @@ import type {
   GoogleStatus,
   HealthAction,
   HourlySteps,
+  Inbox,
   Membership,
   MetricSeries,
+  NotificationSettings,
+  Reminder,
   Report,
   SignedIn,
   SupervisedTeam,
@@ -126,6 +130,27 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
         approve && role ? { role } : undefined,
       ),
     getDataStatus: () => request<DataStatus>(baseUrl, '/data/status'),
+    getReminders: () => request<Reminder[]>(baseUrl, '/reminders'),
+    createReminder: (reminder) => post<Reminder>(baseUrl, '/reminders', reminder),
+    changeReminder: (id, change) =>
+      request<Reminder>(baseUrl, `/reminders/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(change),
+      }),
+    deleteReminder: (id) =>
+      request<void>(baseUrl, `/reminders/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getNotificationSettings: () => request<NotificationSettings>(baseUrl, '/notification-settings'),
+    updateNotificationSettings: (settings) =>
+      request<NotificationSettings>(baseUrl, '/notification-settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      }),
+    getNotifications: () => request<Inbox>(baseUrl, '/notifications'),
+    readNotification: (id) =>
+      post<AppNotification>(baseUrl, `/notifications/${encodeURIComponent(id)}/read`),
+    readAllNotifications: () => post<void>(baseUrl, '/notifications/read-all'),
+    setTimezone: (timezone) =>
+      request<void>(baseUrl, '/me/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
     previewTeam: (code) => post<TeamPreview>(baseUrl, '/teams/preview', { code }),
     joinTeam: (code, consentVersion) =>
       post<Membership>(baseUrl, '/teams/join', { code, consentVersion }),

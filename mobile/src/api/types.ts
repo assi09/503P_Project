@@ -201,21 +201,70 @@ export interface Conversation {
   updatedAt: ISODateTime;
 }
 
-export type ReminderStatus = 'proposed' | 'active' | 'declined' | 'muted';
+/** proposed: the agent prepared it and it waits for approval; done: a one-off already sent. */
+export type ReminderStatus = 'proposed' | 'active' | 'paused' | 'declined' | 'done';
+export type ReminderChannel = 'email' | 'in_app';
+
+/** Local wall-clock times in the person's time zone; weekdays 0 (Monday) to 6 (Sunday). */
+export type ReminderSchedule =
+  | { kind: 'once'; date: ISODate; time: string } // "07:00"
+  | { kind: 'weekly'; time: string; weekdays: number[] }; // all seven: every day
 
 export interface Reminder {
   id: string;
   title: string; // "Wind down"
-  message: string; // the notification text
-  schedule: string; // human-readable, e.g. "Weeknights at 23:00"
-  reason: string; // why the agent proposed it
-  findingId: string | null;
+  message: string; // what the notification and email say
+  schedule: ReminderSchedule;
+  scheduleText: string; // "Weeknights at 22:30"
+  timezone: string;
+  channels: ReminderChannel[];
   status: ReminderStatus;
+  source: 'person' | 'agent';
+  reason: string | null; // why the agent suggested it
+  evidenceId: string | null; // the computation behind that reason
+  nextDueAt: ISODateTime | null; // null unless active
+  version: number; // sent back with every change
+  createdAt: ISODateTime;
+}
+
+export interface NewReminder {
+  title: string;
+  message: string;
+  schedule: ReminderSchedule;
+  channels: ReminderChannel[];
+}
+
+/** Approve (active), pause, resume (active), decline, or edit; always at the version shown. */
+export interface ReminderChange {
+  version: number;
+  status?: 'active' | 'paused' | 'declined';
+  title?: string;
+  message?: string;
+  schedule?: ReminderSchedule;
+  channels?: ReminderChannel[];
 }
 
 export interface NotificationSettings {
+  // For suggestions and smart alarms; your own reminders still come at the time you chose.
   quietHours: { start: string; end: string } | null; // "22:00".."07:00", local time; null = off
-  maxPerDay: number;
+  maxPerDay: number; // 1-10
+  email: boolean; // also send by email, where a reminder asks for it
+}
+
+/** One entry in the app's inbox: a reminder that came due (later, smart alarms too). */
+export interface AppNotification {
+  id: string;
+  kind: string; // "reminder"
+  title: string;
+  body: string;
+  link: string | null; // a path in the app, such as "/reminders"
+  createdAt: ISODateTime;
+  readAt: ISODateTime | null;
+}
+
+export interface Inbox {
+  items: AppNotification[]; // newest first, at most 50
+  unread: number; // over all of them
 }
 
 export interface MetricCoverage {
@@ -369,13 +418,22 @@ export interface ApiClient {
   getChat(conversationId?: string): Promise<ChatMessage[]>; // without one: the latest used
   getConversations(): Promise<Conversation[]>; // most recently used first
   createConversation(): Promise<Conversation>;
-  updateConversation(id: string, changes: { title?: string; pinned?: boolean }): Promise<Conversation>;
+  updateConversation(
+    id: string,
+    changes: { title?: string; pinned?: boolean },
+  ): Promise<Conversation>;
   deleteConversation(id: string): Promise<void>;
   sendMessage(text: string, options: SendOptions): Promise<ChatMessage[]>; // returns the new messages
-  getReminders(): Promise<Reminder[]>;
-  setReminderStatus(id: string, status: ReminderStatus): Promise<Reminder>;
+  getReminders(): Promise<Reminder[]>; // all but deleted ones, newest first
+  createReminder(reminder: NewReminder): Promise<Reminder>; // active at once
+  changeReminder(id: string, change: ReminderChange): Promise<Reminder>;
+  deleteReminder(id: string): Promise<void>;
   getNotificationSettings(): Promise<NotificationSettings>;
   updateNotificationSettings(settings: NotificationSettings): Promise<NotificationSettings>;
+  getNotifications(): Promise<Inbox>;
+  readNotification(id: string): Promise<AppNotification>;
+  readAllNotifications(): Promise<void>;
+  setTimezone(timezone: string): Promise<void>; // the device's IANA zone; reminders follow it
   getDataStatus(): Promise<DataStatus>;
   previewTeam(code: string): Promise<TeamPreview>;
   joinTeam(code: string, consentVersion: string): Promise<Membership>;
