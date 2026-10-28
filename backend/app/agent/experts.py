@@ -21,7 +21,14 @@ from enum import StrEnum
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
-from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer_task, run_agent
+from app.agent.agent import (
+    DEFAULT_GUIDE,
+    SYSTEM_PROMPT,
+    AgentResult,
+    ExtraTool,
+    answer_task,
+    run_agent,
+)
 from app.agent.guard import Guard, GuardError
 from app.agent.llm import LLM, Budget
 from app.agent.present import label, metric_list
@@ -156,9 +163,9 @@ BUDGETS = {
 CONSULT_BUDGET = Budget(max_calls=5, max_tool_calls=6, max_cost_usd=0.015)
 
 
-def lead_budget(depth: Depth, consults: int) -> Budget:
-    """The depth's budget, with room for each consult the router allowed."""
-    base = BUDGETS[depth]
+def lead_budget(depth: Depth, consults: int, base: Budget | None = None) -> Budget:
+    """The depth's budget (or `base`, the question type's), with room for each allowed consult."""
+    base = base or BUDGETS[depth]
     return replace(
         base,
         max_calls=base.max_calls + consults * CONSULT_BUDGET.max_calls,
@@ -380,6 +387,9 @@ def ask_expert(
     extra_tools: list[ExtraTool] = (),
     allow_logging: bool = False,
     action_prompt: str = "",
+    tools: tuple[str, ...] | None = None,
+    guide: str | None = None,
+    widen=None,
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -399,12 +409,15 @@ def ask_expert(
             summary=f"There is no {name} data to look at yet.",
             budget=budget,
         )
-    toolbox = Toolbox(frame, visible_metrics(expert))
+    toolbox = Toolbox(frame, visible_metrics(expert), tools)
     toolbox.evidence.update(evidence or {})
+    steps: list[dict] = []
     borrowed: dict[str, str] = dict(owners or {})
     consults = _Consults(llm, frame, expert, toolbox, budget, today, allowed, borrowed, [])
     consultable = consults.experts()
     extras = ([consults.tool()] if consultable else []) + list(extra_tools)
+    if widen is not None:
+        extras.append(widen(toolbox, budget, steps))
     prompt = system_prompt(expert, frame, consultable)
     if allow_logging:
         prompt += LOGGING_PROMPT
@@ -419,7 +432,7 @@ def ask_expert(
     result = run_agent(
         llm,
         toolbox,
-        answer_task(toolbox, question, today, context),
+        answer_task(toolbox, question, today, context, guide or DEFAULT_GUIDE),
         system_prompt=prompt,
         budget=budget,
         extra_tools=extras,
@@ -432,6 +445,7 @@ def ask_expert(
         result.uncovered = coverage(result.claims)
     result.expert = name
     result.consulted = consults.consulted
+    result.trace += steps
     return result
 
 

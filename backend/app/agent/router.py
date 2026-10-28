@@ -36,6 +36,11 @@ from app.agent.intent import (
 )
 from app.agent.jev import JevClient, JevError, clean
 from app.agent.llm import LLM, Budget, LLMError
+from app.agent.strategy_types import (
+    QUESTION_CRITERIA,
+    QUESTION_INSTRUCTIONS,
+    QUESTION_TYPES,
+)
 from app.agent.verifier import MEDICAL
 
 GENERAL = "general"
@@ -108,10 +113,18 @@ class Classification:
     error: str | None = None  # why an earlier router in the chain failed
 
     intent_probabilities: dict[str, float] = field(default_factory=dict)
+    # The kind of answer the question needs (strategy.py); empty when no router gave one.
+    question_types: dict[str, float] = field(default_factory=dict)
 
     @property
     def intent(self) -> Intent:
         return decide_intent(self.intent_probabilities)
+
+    @property
+    def question_type(self) -> str | None:
+        if not self.question_types:
+            return None
+        return max(self.question_types, key=self.question_types.get)
 
     @property
     def top(self) -> str:
@@ -185,6 +198,11 @@ class JevRouter:
                     "instructions": INTENT_INSTRUCTIONS,
                     "criteria": INTENT_CRITERIA,
                 },
+                "question_type": {
+                    "type": "choice",
+                    "instructions": QUESTION_INSTRUCTIONS,
+                    "criteria": QUESTION_CRITERIA,
+                },
                 **{
                     f"needs_{expert}": {"type": "noul", "instructions": needs_instructions(expert)}
                     for expert in EXPERT_LABELS
@@ -223,7 +241,68 @@ class JevRouter:
             latency_s=latency,
             cost_usd=cost,
             intent_probabilities=intents,
+            question_types=_question_types(answers.get("question_type")),
         )
+
+
+def _question_types(answer) -> dict[str, float]:
+    """The question type's probabilities, or none: a missing or malformed answer is not fatal."""
+    if not isinstance(answer, dict) or answer.get("type") != "choice":
+        return {}
+    raw = answer.get("probabilities")
+    if not isinstance(raw, dict):
+        return {}
+    values = {
+        t: float(raw[t])
+        for t in QUESTION_TYPES
+        if isinstance(raw.get(t), int | float) and not isinstance(raw.get(t), bool)
+    }
+    return values if values and sum(values.values()) > 0 else {}
+
+
+# Keyword rules for the question type, tried in order; the first that matches wins.
+QUESTION_WORDS = (
+    (
+        "coaching",
+        re.compile(
+            r"\b(how (?:can|do|could|should) i (?:improve|sleep better|recover|get better|boost|"
+            r"increase|raise|lower|reduce|train)|tips?\b|advice|what should i (?:do|change)|"
+            r"help me (?:sleep|recover|improve))",
+            re.I,
+        ),
+    ),
+    ("why", re.compile(r"\b(why|what(?:'s| is) (?:causing|behind)|explain)\b", re.I)),
+    ("day", re.compile(r"\b(today|tonight|last night|this morning|yesterday)\b", re.I)),
+    (
+        "pattern",
+        re.compile(
+            r"\b(weekends?|weekdays?|correlat\w*|relat\w*|go(?:es)? with|affect\w*|"
+            r"on days (?:i|when))\b",
+            re.I,
+        ),
+    ),
+    (
+        "change",
+        re.compile(
+            r"\b(chang\w*|lately|recently|trend\w*|getting (?:worse|better)|"
+            r"since|dropp?\w*|rising|went (?:up|down))\b",
+            re.I,
+        ),
+    ),
+    (
+        "lookup",
+        re.compile(
+            r"\b(what(?:'s| is| was) my|how (?:much|many|long)|average|best|worst|"
+            r"normal|usual)\b",
+            re.I,
+        ),
+    ),
+)
+
+
+def keyword_question_type(question: str) -> dict[str, float]:
+    found = next((name for name, pattern in QUESTION_WORDS if pattern.search(question)), None)
+    return {found: 1.0} if found else {}
 
 
 def _words(*patterns: str) -> re.Pattern:
@@ -336,6 +415,7 @@ class KeywordRouter:
                 break
             hits = self._hits(previous)
         needs = {label: 1.0 if count else 0.0 for label, count in hits.items()}
+        kinds = keyword_question_type(text)
         if MEDICAL.search(text) or OFF_TOPIC.search(text):
             probabilities[OUT_OF_SCOPE] = 1.0
             return Classification(
@@ -349,7 +429,13 @@ class KeywordRouter:
             probabilities[GENERAL] = 1.0
         else:
             probabilities |= {label: count / total for label, count in hits.items()}
-        return Classification(probabilities, needs, source="keyword", intent_probabilities=intents)
+        return Classification(
+            probabilities,
+            needs,
+            source="keyword",
+            intent_probabilities=intents,
+            question_types=kinds,
+        )
 
     @staticmethod
     def _hits(text: str) -> dict[str, int]:
@@ -367,6 +453,10 @@ LLM_ROUTER_PROMPT = (
     + INTENT_INSTRUCTIONS
     + "\n"
     + "\n".join(f"- {label}: {meaning}" for label, meaning in INTENT_CRITERIA.items())
+    + "\nAnd a probability for each question type. "
+    + QUESTION_INSTRUCTIONS
+    + "\n"
+    + "\n".join(f"- {label}: {meaning}" for label, meaning in QUESTION_CRITERIA.items())
 )
 
 
@@ -396,8 +486,9 @@ class LLMRouter:
                         "topic": _probabilities_schema(LABELS),
                         "needs": _probabilities_schema(EXPERT_LABELS),
                         "intent": _probabilities_schema(tuple(Intent)),
+                        "question_type": _probabilities_schema(QUESTION_TYPES),
                     },
-                    "required": ["topic", "needs", "intent"],
+                    "required": ["topic", "needs", "intent", "question_type"],
                 },
             },
         }
@@ -420,6 +511,7 @@ class LLMRouter:
             intents = intent_probabilities(call.arguments.get("intent"))
         except ValueError as exc:
             raise RouterError(str(exc)) from exc
+        kinds = call.arguments.get("question_type")
         return Classification(
             topic,
             needs,
@@ -427,6 +519,7 @@ class LLMRouter:
             latency_s=completion.latency_s,
             cost_usd=completion.cost_usd,
             intent_probabilities=intents,
+            question_types=_question_types({"type": "choice", "probabilities": kinds}),
         )
 
 

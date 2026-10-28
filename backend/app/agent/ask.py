@@ -9,6 +9,7 @@ are the first steps of the trace, so every answer can be traced to its context a
 """
 
 import json
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -16,7 +17,7 @@ from datetime import date, datetime
 
 import pandas as pd
 
-from app.agent.agent import SYSTEM_PROMPT, AgentResult, ExtraTool, answer
+from app.agent.agent import DEFAULT_GUIDE, SYSTEM_PROMPT, AgentResult, ExtraTool, answer
 from app.agent.context import Attachment, Context, MemoryItem, Turn, build, earlier_questions
 from app.agent.conversation import ask_what_they_want, recall
 from app.agent.experts import (
@@ -26,6 +27,7 @@ from app.agent.experts import (
     Depth,
     ask_expert,
     available,
+    lead_budget,
     owner,
     visible_metrics,
 )
@@ -43,8 +45,19 @@ from app.agent.router import (
     RouterError,
     decide,
 )
+from app.agent.strategy import (
+    COACHING_OFFER,
+    coaching_evidence,
+    expand_tool,
+    scaled,
+    snapshot,
+    strategy_for,
+)
 from app.analysis.evidence import Evidence
 from app.reminders.tools import REMINDER_PROMPT
+
+# A coaching answer that already offers a reminder or a test needs no extra line.
+OFFERED = re.compile(r"\b(remind\w*|test\w*|experiment\w*)\b", re.IGNORECASE)
 
 # The pending state of a chat whose last answer asked about a reminder (see `api/chat.py`).
 REMINDERS = "reminders"
@@ -143,6 +156,7 @@ def _route_step(route: Route) -> dict:
         "probabilities": {label: round(p, 4) for label, p in c.probabilities.items()},
         "needs": {expert: round(p, 4) for expert, p in c.needs.items()},
         "intent": c.intent,
+        "question_type": c.question_type,
         "intent_probabilities": {
             intent: round(p, 4) for intent, p in c.intent_probabilities.items()
         },
@@ -255,6 +269,28 @@ def ask(
     action_prompt = (LOGGING_PROMPT if logging_tools else "") + (
         REMINDER_PROMPT if reminding else ""
     )
+    # How to work on this kind of question; logging and reminders keep the full toolbox.
+    acting = route.classification.intent in (Intent.LOG, Intent.MIXED, Intent.REMIND)
+    plan = (
+        None
+        if acting or continuing or reminding or logging_tools
+        else strategy_for(route.classification.question_type)
+    )
+    block, evidence, owners = context.block, dict(context.evidence), dict(context.owners)
+    if plan:
+        visible = sorted(_scope(route) or frame.columns)
+        found: list[tuple[list[Evidence], str]] = []
+        if plan.snapshot:
+            found.append(snapshot(frame, visible))
+        if plan.coaching:
+            found.append(coaching_evidence(frame, route.expert, visible))
+        for records, text in found:
+            block = "\n\n".join(part for part in (block, text) if part)
+            for record in records:
+                evidence[record.id] = record
+                if metric_owner := owner(record.metrics[0]):
+                    owners[record.id] = metric_owner.name
+    deep = depth == Depth.DEEP
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif route.action == "conversation":
@@ -281,12 +317,15 @@ def ask(
             frame,
             question,
             today=today,
-            budget=replace(BUDGETS[depth]),
+            budget=scaled(plan, deep) if plan else replace(BUDGETS[depth]),
             system_prompt=SYSTEM_PROMPT + action_prompt,
-            context=context.block,
-            evidence=context.evidence,
+            context=block,
+            evidence=evidence,
             guard=guard,
             extra_tools=tools,
+            tools=plan.tools if plan else None,
+            guide=plan.guide if plan else DEFAULT_GUIDE,
+            widen=expand_tool if plan else None,
         )
     else:
         result = ask_expert(
@@ -297,9 +336,13 @@ def ask(
             depth=depth,
             consult=route.consult,
             today=today,
-            context=context.block,
-            evidence=context.evidence,
-            owners=context.owners,
+            context=block,
+            evidence=evidence,
+            owners=owners,
+            budget=lead_budget(depth, len(route.consult), scaled(plan, deep)) if plan else None,
+            tools=plan.tools if plan else None,
+            guide=plan.guide if plan else None,
+            widen=expand_tool if plan else None,
             guard=guard,
             # A request only to log asks nothing about the data, so no part of it can be left
             # uncovered; a mixed request still needs its question answered.
@@ -312,6 +355,13 @@ def ask(
             action_prompt=REMINDER_PROMPT if reminding else "",
         )
         result.notes += _notes(frame, route, result)
+    if (
+        plan
+        and plan.coaching
+        and any(claim.kind == "suggestion" for claim in result.claims)
+        and not OFFERED.search(result.summary)
+    ):
+        result.notes.append(COACHING_OFFER)  # coaching ends with something to do
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log

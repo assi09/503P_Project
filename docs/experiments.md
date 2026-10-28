@@ -503,3 +503,25 @@ and "How can I recover faster?".
 model choosing it); a significant association (more sleep, better recovery) should become a
 suggestion; and every coaching answer should end with the offer of a reminder or a test.
 
+## A way of working per question type (2026-10-28)
+
+**Tested:** the router's question type (day, lookup, change, why, pattern, coaching, in the same
+Jev call) and a strategy for each: starting tools, a budget, a guide in the task, a snapshot of
+the latest day as citable evidence for day, lookup and coaching questions, and for coaching the
+habits the person's own data supports, run by code before the model starts. The agent may widen
+its tools once (`expand_tools`). Synthetic person with a planted bedtime-efficiency link.
+**Showed ($0.0420 for six questions, every type routed right):**
+- "How did I sleep last night?": day, 3 model calls, $0.0056. "What's my usual resting heart
+  rate?": lookup, 2 calls, $0.0041.
+- "How can I sleep better?": coaching, 4 calls, $0.0088 (was $0.0147 before): "You've got one
+  clear sleep lever in your data: being in bed by 23:30 goes with better sleep efficiency ... you
+  could try getting in bed by 23:30 on weeknights, and I can help set a reminder or test it more."
+- "How can I recover faster?": coaching, 1 call, $0.0047: no supported habit, said so, and offered
+  to test an earlier bedtime or a wind-down.
+- "Do I go to bed later on weekends?": pattern, 4 calls: only 8 minutes later.
+- "Why is my sleep efficiency all over the place?": why, 4 calls, $0.0113: found the planted
+  bedtime link and ruled out time in bed and time awake.
+**Changed:** as described. Open: the sleep suggestion stayed in the summary rather than a
+`suggestion` claim (the summary passed its checks, so it is still verified text); nobody widened
+their tools in this run.
+
