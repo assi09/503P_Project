@@ -63,13 +63,15 @@ CRITERIA = {
     # that looks only at data.
     CONVERSATION: "this chat itself, not the data: what the person or the assistant said "
     "earlier in it, a recap of it, or what an earlier answer meant",
-    OUT_OF_SCOPE: "medical diagnosis, symptoms, treatment, medication or health advice, or "
-    "anything unrelated to analysing their own Fitbit data, logging their food, drink or "
-    "workouts, setting everyday reminders, or this conversation",
+    # Coaching on everyday habits ("how can I sleep better?") is in scope since 2026-10-28.
+    OUT_OF_SCOPE: "medical matters (a diagnosis, symptoms, an illness or condition, treatment, "
+    "medication, supplements, diets, or whether to see a doctor), or anything unrelated to their "
+    "own Fitbit data, improving their everyday habits, logging food, drink or workouts, "
+    "reminders, or this conversation",
 }
 INSTRUCTIONS = (
-    "A person asks about their own Fitbit data, asks to log food, drink or workouts, or asks for a "
-    "reminder, possibly following up on earlier "
+    "A person asks about their own Fitbit data, how to improve their everyday habits, to log "
+    "food, drink or workouts, or for a reminder, possibly following up on earlier "
     "questions. Which topic is the current question about? Earlier questions, newest first, only "
     "show what it may refer to."
 )

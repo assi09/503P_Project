@@ -463,3 +463,21 @@ with it. Synthetic people with planted changes; the detectors chose the alarms.
 **Changed:** nothing; both passed the verifier and the advice guard. A summary that fails its check,
 a model error or any medical wording keeps the template.
 
+## Coaching allowed, medical still not (2026-10-28)
+
+**Tested:** the advice guard against the new policy: everyday habit suggestions grounded in the
+person's data are allowed; diagnosis, conditions, treatment, medication, supplements, diets and
+"see a doctor" are not. The set (`eval/advice_sentences.json`) was split: 14 medical sentences
+that must be flagged, 12 coaching and 12 pattern sentences that must pass (six coaching sentences
+moved from the old "advice" list, six new). `PYTHONPATH=backend python eval/advice_guard.py`.
+**Showed ($0.0005 for two Jev runs):**
+- Old guard (flag "changing a habit"): 12 of 14 medical caught, **all 12 coaching flagged**: the
+  reason advice questions came back empty.
+- New guard: **13 of 14 medical caught, 0 of 24 coaching or pattern flagged**, the same in both
+  runs. It now also catches "your body is fighting something off" and "your heart rhythm may be
+  irregular", which the old one missed. The one miss, "Avoid alcohol in the evenings to sleep
+  longer", is a borderline lifestyle tip.
+**Changed:** the guard's question, the router's scope (coaching is in scope), a `suggestion`
+claim kind in the verifier (a significant pattern or a supported habit option, worded as an
+option, never an order), coaching rules in the system prompt, the voice, AGENTS.md and product.md.
+

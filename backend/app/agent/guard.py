@@ -1,7 +1,10 @@
-"""A check by meaning that nothing shown to the person diagnoses or gives health advice.
+"""A check by meaning that nothing shown to the person is medical.
 
-The router only judges the question: an in-scope question ("why is my HRV low?") can still get an
-answer that advises ("cutting caffeine should help") or names a condition. The verifier's word
+Patterns coaches everyday habits (sleep timing, wind-down, training load and rest, movement),
+grounded in the person's own data, since 2026-10-28; it never diagnoses, names a condition, or
+advises treatment, medication, supplements, diets or seeing a doctor. The router only judges the
+question: an in-scope question ("why is my HRV low?") can still get an answer that names a
+condition ("this looks like overtraining") or recommends a supplement. The verifier's word
 check misses anything phrased in other words, so before an answer is shown, every sentence that
 passed the deterministic checks is put to Jev in one call, with one yes/no per sentence. A flagged
 sentence is rejected like any other verifier failure: sent back once, then dropped.
@@ -19,15 +22,17 @@ FLAG_AT = 0.5
 MAX_TEXTS = 8  # a summary and at most five claims, with room to spare
 
 INSTRUCTIONS = (
-    "Below is a list of sentences an app shows a person about their own Fitbit data. The app may "
-    "only describe patterns in the data. Does sentence {i} diagnose, name a medical condition, "
-    "or tell the person what to do for their health (treatment, medication, supplements, seeing "
-    "a doctor, or changing a habit)? Describing what the data shows, including what went with "
-    "what, is not advice."
+    "Below is a list of sentences an app shows a person about their own Fitbit data. The app "
+    "describes patterns and may suggest everyday habits (bedtime and sleep schedule, winding "
+    "down, screens or caffeine timing before bed, naps, training load, rest days, walking and "
+    "movement breaks, reminders) but is not medical. Is sentence {i} medical: does it diagnose, "
+    "name or hint at an illness or condition, read the data as a warning sign about health, or "
+    "advise treatment, medication, supplements, a diet, or seeing a doctor? Describing the data "
+    "and suggesting an everyday habit are not medical."
 )
 REASON = (
-    "gives health advice or names a medical condition; describe only what the data shows, without "
-    "telling the person what to do"
+    "is medical (a diagnosis, a condition, or treatment, medication, supplements, a diet or a "
+    "doctor); describe the data, and suggest only everyday habits grounded in it"
 )
 
 
