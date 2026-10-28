@@ -84,6 +84,52 @@ New tools, so the agent can do what the system needs:
 Each tool validates its input, raises `ToolError`, returns `Evidence`, and gets tests including the
 unhappy paths. Prompt and tool versions are recorded on every trace (workstream I).
 
+### A2. Memory that listens: short-term, long-term, and "cognify"
+
+Asked for on 2026-10-28: the agent should be **actively listening**. Today it mostly forgets what
+people tell it:
+
+- **Short-term memory** is the context builder (`app/agent/context.py`): the last four exchanges
+  verbatim and older ones condensed, within a token budget. A long chat loses its early turns.
+- **Long-term memory** is findings, check-in answers, approved facts and claims from other chats
+  (`app/agent/memory`). New facts arrive only when the model calls `propose_fact`, which it has not
+  done in a real run (issue 15), and there is no screen to approve them (issue 19).
+
+What changes:
+
+1. **A listener on every message.** After each answer, one cheap model call (small model,
+   structured output, no tools) reads the person's message and pulls out what is worth keeping:
+   lasting context ("night shifts since August", "training for a 10 km"), **events with dates**
+   ("exams next week", "sick since Sunday", "travelling to Paris on the 12th"), preferences ("keep
+   it short"), goals and commitments ("I'll be in bed by 23:00 this week"). Each item is typed,
+   dated (start and end where it has them), linked to the message it came from, and checked like
+   any stored text (length, no instructions, no health diagnoses). It runs after the reply is sent,
+   so it never slows the chat, and it is skipped when the daily cap is reached.
+2. **The person stays in control.** Items arrive in the proposals inbox as "Patterns noticed: …
+   keep it?" (decision 10: nothing is remembered without approval), grouped so it is one tap, not a
+   stream of questions; a "What Patterns knows about you" page lists, edits and deletes them.
+3. **Short-term memory per conversation:** a running summary of the chat, updated by the listener,
+   plus open threads (a question the agent asked, a draft waiting), so a long conversation keeps
+   its beginning without carrying every message.
+4. **Long-term memory in three kinds:** *episodic* (events on dates, and each conversation's
+   summary), *semantic* (facts, goals, preferences) and *results* (findings, experiment and
+   reminder outcomes). Retrieval adds time: an event whose dates overlap the window an answer looks
+   at is pulled in, so the agent can say "this dip coincided with the exams you mentioned".
+5. **Acting on what it hears.** A commitment can become a reminder or an experiment proposal;
+   an event that lines up with a smart alarm's change is cited in it; the daily run asks about a
+   large unexplained change only when no remembered event explains it.
+6. **"Cognify": decide by measuring.** [Cognee](https://docs.cognee.ai) is an open-source memory
+   engine (`add` → `cognify` → `search`) that builds a knowledge graph and vector index from text,
+   which suits linking life events, habits and metrics. It is a heavy dependency (AGENTS.md: ask
+   first), sends the text to a model for extraction (cost, and this is personal health context),
+   and needs a graph store hosted next to the API. Plan: a half-day spike on made-up conversations
+   in week 2, compared with our own extractor stored in Postgres on the memory evaluation below;
+   adopt Cognee only if it clearly wins. Either way the step is called "cognify" in the docs: extract,
+   link entities (dates, habits, metrics), store, retrieve.
+7. **Evaluated** (plan G): made-up conversations with planted facts and events; recall and
+   precision of what the listener keeps, wrong or stale memories, whether answers use the right
+   memory, memory-poisoning attempts (red team), and cost per message.
+
 ### B. Personal experiments (the headline feature)
 
 As designed in [product.md](product.md#personal-experiments-headline-agentic-feature-planned) and
@@ -268,6 +314,8 @@ poster if the instructor asks for one (the pitch poster updated with results).
 - The daily run (cron), Today's note, the proposals inbox; reminders backend and agent proposals.
 - New tools: `workouts`, `checkins`, `memory_lookup`; chat fixes A2–A4.
 - **Pilot onboarding** (about 10 people, one team).
+- Memory that listens (A2): the listener, conversation summaries, dated events, the Cognee
+  spike against our own extractor.
 - **Done when**: a synthetic person goes through propose → approve → daily recording → result in
   tests; the pilot team exists; reminders are proposed and approved in the app.
 
@@ -294,8 +342,9 @@ poster if the instructor asks for one (the pitch poster updated with results).
 | Issue | Plan |
 |---|---|
 | 2 consult policy, 5 thresholds, 6 detectable scenarios, 20 verdict vs number of tests | evaluation (G), weeks 1–3 |
-| 4 missing parts, 9 recomputing, 11 overstating, 13 quick depth, 14 hidden change, 23 consults | chat fixes A2–A4, week 2 |
-| 7 quote marks, 15 facts never proposed, 19 facts screen | A5 and the memory page, weeks 1 and 4 |
+| 4 missing parts, 11 overstating, 13 quick depth, 14 hidden change, 23 consults | chat fixes A2–A4, week 2 |
+| 7 quote marks | A5, week 1 |
+| 15 facts never proposed, 19 facts screen, 9 recomputing instead of citing memory | memory that listens (A2), weeks 2–3 |
 | 10 guard misses implied diagnoses, 12 scope check when Jev is down | red team (H), week 3 |
 | 16 no email check or reset, token in localStorage; 18 `?google=`; 21 code in the log | accounts (E), week 1 |
 | 17 phones need the deployed backend | done: deployed on Railway and Vercel |
