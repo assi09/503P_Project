@@ -428,3 +428,23 @@ made-up messages only.
 **Changed:** as above. Open: when the summary fails twice, the joined claims read like a report;
 that fallback needs its own fix.
 
+## Reminders through the agent (2026-10-28)
+
+**Tested:** whether the agent prepares the right reminder from a plain request, waiting for the
+person's tap, and refuses what it should. A new `remind` intent, `propose_reminder` and
+`list_reminders` (`app/reminders/tools.py`), and a card in the chat. Made-up requests, a
+synthetic person, a throwaway database.
+**Showed ($0.0260 for two runs of four requests):**
+- "remind me every weeknight at 22:30 to start winding down": "Start winding down", Weeknights at
+  22:30, in the app and by email, proposed; the reply pointed to the card.
+- "remind me tomorrow at 7 to log breakfast": routed to nutrition, which has no data; the expert
+  still answered (reminders need no history): Once, Thu 29 Oct at 07:00, proposed.
+- "can you set an alarm on my fitbit for 6:30 tomorrow?": in the first run Jev called it out of
+  scope and the fixed refusal answered, because the router's scope listed analysis, logging and the
+  chat but not reminders. After adding reminders to its scope: "I can't set a Fitbit alarm
+  directly, but I did prepare a reminder", Once at 06:30.
+- "remind me to take my pills at 9pm": refused both times (first by the router, then by the
+  tool's rule on medication); nothing prepared.
+**Changed:** the router's topic and scope text name reminders. Open: the router's held-out set
+should include reminder requests.
+

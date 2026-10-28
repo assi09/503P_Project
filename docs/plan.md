@@ -140,6 +140,12 @@ approval and daily recording come first and the report screen last.
 
 ### C. Reminders for real
 
+**Status (2026-10-28):** built and live. Automatic syncing (#100), stored reminders (#101), delivery
+in the app and by email every minute (#102), the Reminders tab with its inbox (#106), and reminders
+set by asking the agent, with a card to confirm (this PR). Setting alarms on the watch itself is
+not possible: the Fitbit Web API is switched off and the Google Health API has no alarm method.
+Smart alarms (automatic, from the data) come next. Phone push notifications are still to do.
+
 Replace the mock ([ui-plan.md](ui-plan.md#reminders), step 5):
 
 - Backend storage and API (kinds: wind-down before a bedtime, move after long sitting, planned
