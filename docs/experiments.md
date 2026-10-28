@@ -448,3 +448,18 @@ synthetic person, a throwaway database.
 **Changed:** the router's topic and scope text name reminders. Open: the router's held-out set
 should include reminder requests.
 
+## Smart alarms explained by the agent (2026-10-28)
+
+**Tested:** whether the expert that owns an alarm's metric explains it usefully in one quick run,
+with every number checked, so a detector's "time asleep well below your usual" comes with what went
+with it. Synthetic people with planted changes; the detectors chose the alarms.
+**Showed ($0.0231):**
+- A short night with a planted two-hour-later bedtime: the sleep expert wrote "Time asleep was well
+  below your usual on Sep 28: 2 h 48 min versus your usual 6 h 43 min–7 h 24 min. That lines up
+  with a much later bedtime, 02:01 instead of your usual 23:28, and much less time in bed..." and
+  ruled out wear time: it found the planted cause by itself. $0.0104.
+- A resting heart rate 7 bpm higher for three days: the recovery expert said it was above usual
+  three days in a row, dated the shift and ruled out a wear-time gap. $0.0128.
+**Changed:** nothing; both passed the verifier and the advice guard. A summary that fails its check,
+a model error or any medical wording keeps the template.
+

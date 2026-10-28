@@ -87,3 +87,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-27 | Questions about the chat itself, made-up text: Jev routing of 10 questions (10/10; $0.000544) and one recall answer from OpenAI ($0.000548) | $0.0011 |
 | 2026-10-27 | Agent voice, synthetic person and made-up messages: the reaction to an unclear workout-and-meal message ($0.0004), a workout-and-meal log request (two drafts, $0.0059), a sleep question ($0.0130), and that question again with its trace ($0.0108) | $0.0301 |
 | 2026-10-28 | Reminders through the agent, made-up requests and a synthetic person: four requests ($0.0136; the Fitbit alarm request was refused as off-topic), then again after putting reminders in the router's scope ($0.0124) | $0.0260 |
+| 2026-10-28 | Smart alarm explanations, synthetic people: a planted short night with a late bedtime (sleep expert, $0.0104) and a 3-day resting heart rate rise (recovery expert, $0.0128) | $0.0231 |
