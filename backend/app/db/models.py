@@ -48,6 +48,8 @@ TEAM_EVENTS = (
     "levels_unshared",
     "levels_viewed",  # the supervisor opened a report's named levels
 )
+REMINDER_STATUSES = ("proposed", "active", "paused", "declined", "cancelled", "done")
+REMINDER_SOURCES = ("person", "agent")
 TEAM_REPORT_STATUSES = ("ready", "withheld")  # withheld: fewer active members than the minimum
 
 
@@ -78,6 +80,8 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     role: Mapped[str] = mapped_column(String(16), default="member", server_default="member")
+    # The device's IANA time zone, sent by the app; reminders are due in it. None: FA_TIMEZONE.
+    timezone: Mapped[str | None] = mapped_column(String(64), default=None)
 
 
 class AuthSession(Base):
@@ -500,3 +504,62 @@ class TeamReport(Base):
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Reminder(Base):
+    """A time-based reminder the person set, or one the agent proposed for them to approve.
+
+    `schedule` is a validated `app.reminders.schedule` value; `next_due_at` is when it is next sent
+    (UTC), kept so delivery reads due rows without recomputing every schedule.
+    """
+
+    __tablename__ = "reminders"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in REMINDER_STATUSES)})",
+            name="ck_reminders_status",
+        ),
+        CheckConstraint(
+            f"source IN ({', '.join(repr(s) for s in REMINDER_SOURCES)})",
+            name="ck_reminders_source",
+        ),
+        CheckConstraint("version > 0", name="ck_reminders_version"),
+        Index("ix_reminders_due", "status", "next_due_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(80))
+    message: Mapped[str] = mapped_column(String(280))
+    schedule: Mapped[dict] = mapped_column(JSON)
+    timezone: Mapped[str] = mapped_column(String(64))
+    channels: Mapped[list] = mapped_column(JSON)  # "email", "in_app"
+    status: Mapped[str] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str | None] = mapped_column(String(280), default=None)  # why the agent asked
+    evidence_id: Mapped[str | None] = mapped_column(String(32), default=None)
+    next_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class NotificationSetting(Base):
+    """How much the person wants to hear from Patterns; the defaults apply until they change it."""
+
+    __tablename__ = "notification_settings"
+    __table_args__ = (
+        CheckConstraint("max_per_day BETWEEN 1 AND 10", name="ck_notification_settings_cap"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Local "HH:MM"; both None when quiet hours are off. The defaults live in the store.
+    quiet_start: Mapped[str | None] = mapped_column(String(5))
+    quiet_end: Mapped[str | None] = mapped_column(String(5))
+    max_per_day: Mapped[int] = mapped_column(default=3)  # applies to suggestions, not your own
+    email: Mapped[bool] = mapped_column(default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
