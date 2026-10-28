@@ -248,7 +248,14 @@ All four experts (sleep, recovery, activity, nutrition) are part of the demo.
 
 - Numbers come from deterministic tools; the model only chooses what to compute and writes text
   that cites evidence.
-- No medical diagnosis or advice. The app describes patterns in the user's own data.
+- Nothing medical: no diagnosis, condition, treatment, medication, supplements, diets or "see a
+  doctor". The app describes patterns in the user's own data and coaches everyday habits.
+- **Coaching (since 2026-10-28):** asked how to improve, the agent suggests at most two everyday
+  habits (bedtime and schedule, wind-down, evening screens or caffeine timing, naps, training load
+  and rest, movement breaks), each a claim of kind `suggestion` that must cite a real pattern in
+  the person's own data and be worded as an option; it then offers a reminder or a test. With no
+  pattern to stand on, it says so and offers a test instead of generic tips. The advice guard
+  flags only medical sentences.
 - A claim the verifier cannot match to evidence is repaired once, then dropped.
 
 ## Evaluation tied to these decisions

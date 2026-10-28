@@ -22,7 +22,7 @@ from app.analysis.screen import benjamini_hochberg
 
 ALPHA = 0.05
 
-ClaimKind = Literal["change", "association", "no_change", "data_quality", "day"]
+ClaimKind = Literal["change", "association", "no_change", "data_quality", "day", "suggestion"]
 Direction = Literal["up", "down"]
 
 
@@ -65,6 +65,9 @@ MEDICAL = re.compile(
     r"depress\w*|prescri\w*|medication|dosage|treatment)\b",
     re.IGNORECASE,
 )
+# A suggestion is an option the person may take up, never an order.
+OPTION_WORDS = re.compile(r"\b(could|might|may|try|trying|consider|option|if you want)\b", re.I)
+ORDER_WORDS = re.compile(r"\b(you should|you must|you need to|make sure (?:to|you))\b", re.I)
 CAUSAL = re.compile(
     r"\b(caused|causes|causing|because of|due to|led to|leads to|results? in|proves?)\b",
     re.IGNORECASE,
@@ -419,6 +422,24 @@ def check_claim(claim: Claim, evidence: dict[str, Evidence]) -> list[str]:
                 reasons.append(f"the evidence does not point {claim.direction}")
     if claim.kind == "no_change" and any(_significant(e) for e in about if e.tool != "coverage"):
         reasons.append("claims no change, but the cited evidence shows a significant one")
+    if claim.kind == "suggestion":
+        # An everyday habit to try, grounded in this person's own data: some cited evidence about
+        # it must show a real pattern (a significant test, or a lever habit_options supports).
+        grounded = [
+            e
+            for e in about
+            if _significant(e) or (e.tool == "habit_options" and e.stats.get("supported"))
+        ]
+        if not grounded:
+            reasons.append(
+                "a suggestion must cite evidence that shows a real pattern in this person's data "
+                "(a significant test or a supported habit option); without one, say there is no "
+                "clear pattern yet and offer an experiment instead"
+            )
+        if not OPTION_WORDS.search(claim.text):
+            reasons.append("word a suggestion as an option the person may try (could, might, try)")
+        if ORDER_WORDS.search(claim.text):
+            reasons.append("do not order the person: offer the habit as an option instead")
     if claim.kind == "data_quality" and not any(e.tool == "coverage" for e in cited):
         reasons.append("a data-quality claim must cite coverage evidence")
     if claim.kind == "day":

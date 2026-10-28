@@ -76,4 +76,5 @@ def test_too_many_sentences_at_once_are_refused_before_calling():
 
 
 def test_the_reason_tells_the_model_what_to_do_instead():
-    assert "describe only what the data shows" in REASON
+    assert "suggest only everyday habits grounded in it" in REASON
+    assert "doctor" in REASON

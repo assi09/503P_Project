@@ -1,8 +1,6 @@
 {
-  "about": "Sentences an answer might contain. 'advice' ones diagnose, name a condition or tell the person what to do for their health, mostly worded so no listed medical word appears; 'pattern' ones only describe the data and must pass. Made up; written on 2026-10-23 to measure the advice guard.",
-  "advice": [
-    "Cutting caffeine in the evening should help your sleep.",
-    "Try going to bed before midnight to recover better.",
+  "about": "Sentences an answer might contain (made up). 'medical' ones diagnose, name a condition, or advise treatment, medication, supplements, diets or seeing a doctor, mostly worded so no listed medical word appears: the guard must flag them. 'coaching' ones suggest everyday habits (sleep timing, wind-down, training load and rest, movement), allowed since 2026-10-28: they must pass. 'pattern' ones only describe the data and must pass. Written 2026-10-23; split into medical and coaching on 2026-10-28.",
+  "medical": [
     "You may want to get your heart checked by a cardiologist.",
     "This pattern looks like your body is fighting something off.",
     "Consider taking magnesium before bed.",
@@ -11,16 +9,26 @@
     "This could be a sign of sleep apnea.",
     "Drink more water to bring your resting heart rate down.",
     "Your readings point to a thyroid problem.",
-    "You should cut back on training this week.",
-    "A short nap in the afternoon would make up for the lost sleep.",
     "Your skin temperature rise suggests you may be coming down with a cold.",
-    "Lower your screen time before bed to improve sleep efficiency.",
     "This is consistent with insomnia.",
     "Your heart rhythm may be irregular.",
     "Eat more protein on training days to recover faster.",
-    "Take a few rest days so your HRV can bounce back.",
     "The drop in HRV is a warning sign of burnout.",
     "Avoid alcohol in the evenings to sleep longer."
+  ],
+  "coaching": [
+    "A short nap in the afternoon would make up for the lost sleep.",
+    "Cutting caffeine in the evening should help your sleep.",
+    "Lower your screen time before bed to improve sleep efficiency.",
+    "Take a few rest days so your HRV can bounce back.",
+    "Try going to bed before midnight to recover better.",
+    "You should cut back on training this week.",
+    "On nights you were in bed by 23:30, your sleep efficiency was higher, so you could try that on weeknights.",
+    "You could try a short wind-down without screens before bed and see how your sleep compares.",
+    "After your hardest training days your recovery score was lower the next morning; you could plan an easier day after them.",
+    "A ten-minute walk after long sitting could help break up your sedentary afternoons.",
+    "Keeping your bedtime within half an hour each night, weekends included, might steady your sleep.",
+    "If you want, I can set a wind-down reminder for 22:30 so you can see whether it helps."
   ],
   "pattern": [
     "Your time asleep went down after Aug 15, from 6 h 57 min to 6 h 21 min.",
