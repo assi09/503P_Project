@@ -3,14 +3,23 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import {
+  useAlarmFeedback,
+  useAlarmSettings,
   useChangeReminder,
   useNotifications,
   useNotificationSettings,
   useReadNotifications,
   useReminders,
+  useUpdateAlarmSettings,
   useUpdateNotificationSettings,
 } from '@/api/hooks';
-import type { AppNotification, NotificationSettings, Reminder } from '@/api/types';
+import type {
+  AlarmKind,
+  AlarmSettings,
+  AppNotification,
+  NotificationSettings,
+  Reminder,
+} from '@/api/types';
 import { Row, Section } from '@/components/list';
 import { QueryState, Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -98,6 +107,7 @@ export default function RemindersScreen() {
         }}
       </QueryState>
       <SettingsSection />
+      <AlertSettings />
     </Screen>
   );
 }
@@ -125,17 +135,76 @@ function Inbox({ items, unread }: { items: AppNotification[]; unread: number }) 
       }
     >
       {items.slice(0, INBOX_SHOWN).map((item) => (
-        <Row
-          key={item.id}
-          icon={item.readAt ? 'notifications-outline' : 'notifications'}
-          title={item.title}
-          detail={`${item.body} · ${timeAgo(item.createdAt)}`}
-          accessory={item.readAt ? undefined : <UnreadDot />}
-          onPress={() => open(item)}
-          accessibilityLabel={`${item.readAt ? '' : 'Unread: '}${item.title}. ${item.body}`}
-        />
+        <View key={item.id}>
+          <Row
+            icon={
+              item.kind === 'alarm'
+                ? item.readAt
+                  ? 'pulse-outline'
+                  : 'pulse'
+                : item.readAt
+                  ? 'notifications-outline'
+                  : 'notifications'
+            }
+            title={item.title}
+            detail={`${item.body} · ${timeAgo(item.createdAt)}`}
+            accessory={item.readAt ? undefined : <UnreadDot />}
+            onPress={() => open(item)}
+            accessibilityLabel={`${item.readAt ? '' : 'Unread: '}${item.title}. ${item.body}`}
+          />
+          {item.alarmId && <AlarmFeedback alarmId={item.alarmId} given={item.alarmFeedback} />}
+        </View>
       ))}
     </Section>
+  );
+}
+
+/** "Was this alert useful?" under an alert, answered once; it tunes alerts and is evaluated. */
+function AlarmFeedback({
+  alarmId,
+  given,
+}: {
+  alarmId: string;
+  given: AppNotification['alarmFeedback'];
+}) {
+  const feedback = useAlarmFeedback();
+  if (given) {
+    return (
+      <Text variant="caption" color="muted" style={styles.feedback}>
+        {given === 'useful' ? 'Marked useful. Thanks.' : 'Marked not useful. Thanks.'}
+      </Text>
+    );
+  }
+  const answer = (useful: boolean) => {
+    select();
+    feedback.mutate({ alarmId, useful });
+  };
+  return (
+    <View style={[styles.feedback, styles.feedbackRow]}>
+      <Text variant="caption" color="muted">
+        Was this alert useful?
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        disabled={feedback.isPending}
+        onPress={() => answer(true)}
+        hitSlop={8}
+      >
+        <Text variant="caption" color="accent">
+          Yes
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        disabled={feedback.isPending}
+        onPress={() => answer(false)}
+        hitSlop={8}
+      >
+        <Text variant="caption" color="accent">
+          No
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -307,6 +376,100 @@ function SettingsSection() {
   );
 }
 
+const ALERT_KINDS: { kind: AlarmKind; label: string }[] = [
+  { kind: 'day', label: 'A day far from usual' },
+  { kind: 'streak', label: 'Several days running' },
+  { kind: 'finding', label: 'Two-week changes' },
+  { kind: 'data', label: 'Data and sync' },
+];
+const SENSITIVITY: { value: AlarmSettings['sensitivity']; label: string }[] = [
+  { value: 'fewer', label: 'Fewer' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'more', label: 'More' },
+];
+
+/** Alerts Patterns sends by itself when something in the data looks off. */
+function AlertSettings() {
+  const colors = useColors();
+  const settings = useAlarmSettings();
+  const update = useUpdateAlarmSettings();
+  return (
+    <Section
+      title="Alerts"
+      footer="Patterns checks your data through the day and tells you when something stands out, like a night far below your usual. Each alert links to its numbers. Patterns in your data, not medical advice."
+    >
+      <QueryState query={settings}>
+        {() => {
+          const current = update.isPending ? update.variables! : settings.data!;
+          const save = (next: Partial<AlarmSettings>) => update.mutate({ ...current, ...next });
+          return (
+            <View style={styles.settings}>
+              <Row
+                icon="pulse-outline"
+                title="Send me alerts"
+                accessory={
+                  <Switch
+                    accessibilityLabel="Send me alerts"
+                    value={current.enabled}
+                    onValueChange={(enabled) => save({ enabled })}
+                    trackColor={{ true: colors.accent, false: colors.track }}
+                    thumbColor="#FFFFFF"
+                    {...({ activeThumbColor: '#FFFFFF' } as object)}
+                  />
+                }
+              />
+              {current.enabled && (
+                <>
+                  <Text variant="caption" color="muted" style={styles.label}>
+                    About
+                  </Text>
+                  <View style={styles.chips}>
+                    {ALERT_KINDS.map(({ kind, label }) => {
+                      const on = !current.mutedKinds.includes(kind);
+                      return (
+                        <Chip
+                          key={kind}
+                          label={label}
+                          selected={on}
+                          onPress={() =>
+                            save({
+                              mutedKinds: on
+                                ? [...current.mutedKinds, kind]
+                                : current.mutedKinds.filter((k) => k !== kind),
+                            })
+                          }
+                        />
+                      );
+                    })}
+                  </View>
+                  <Text variant="caption" color="muted" style={styles.label}>
+                    How many
+                  </Text>
+                  <View style={styles.chips}>
+                    {SENSITIVITY.map(({ value, label }) => (
+                      <Chip
+                        key={value}
+                        label={label}
+                        selected={current.sensitivity === value}
+                        onPress={() => save({ sensitivity: value })}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
+              {update.error && (
+                <Text variant="caption" color="danger">
+                  Could not save. Please try again.
+                </Text>
+              )}
+            </View>
+          );
+        }}
+      </QueryState>
+    </Section>
+  );
+}
+
 const styles = StyleSheet.create({
   add: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -315,4 +478,6 @@ const styles = StyleSheet.create({
   settings: { paddingBottom: spacing.md },
   label: { marginTop: spacing.md, marginBottom: spacing.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  feedback: { marginLeft: 36, marginTop: -6, marginBottom: spacing.sm },
+  feedbackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 });

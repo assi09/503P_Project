@@ -4,6 +4,7 @@ import { getToken } from './token';
 import type {
   AccessRequest,
   Account,
+  AlarmSettings,
   ApiClient,
   AppNotification,
   ChatMessage,
@@ -149,6 +150,16 @@ export function httpClient(baseUrl: string, fallback: ApiClient): ApiClient {
     readNotification: (id) =>
       post<AppNotification>(baseUrl, `/notifications/${encodeURIComponent(id)}/read`),
     readAllNotifications: () => post<void>(baseUrl, '/notifications/read-all'),
+    getAlarmSettings: () => request<AlarmSettings>(baseUrl, '/alarm-settings'),
+    updateAlarmSettings: (settings) =>
+      request<AlarmSettings>(baseUrl, '/alarm-settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      }),
+    sendAlarmFeedback: (alarmId, useful) =>
+      post<unknown>(baseUrl, `/alarms/${encodeURIComponent(alarmId)}/feedback`, { useful }).then(
+        () => undefined,
+      ),
     setTimezone: (timezone) =>
       request<void>(baseUrl, '/me/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
     previewTeam: (code) => post<TeamPreview>(baseUrl, '/teams/preview', { code }),

@@ -64,6 +64,19 @@ def start_due_syncs(now: datetime) -> int:
     return started
 
 
+def _explainers():
+    """The model and the advice guard for alarm explanations; none when not set up or turned off."""
+    if not settings.alarm_explanations:
+        return None, None
+    from app.agent.ask import default_guard
+    from app.agent.llm import LLMError, OpenAILLM
+
+    try:
+        return OpenAILLM.from_settings(settings), default_guard(settings)
+    except LLMError:
+        return None, None
+
+
 class Background:
     def __init__(self, tick_s: float = TICK_S):
         self.tick_s = tick_s
@@ -92,7 +105,8 @@ class Background:
         now = datetime.now(UTC)
         try:
             synced = start_due_syncs(now)
-            counts = run_all(session_scope, now, _mailer(), settings.app_url)
+            llm, guard = _explainers()
+            counts = run_all(session_scope, now, _mailer(), settings.app_url, llm, guard)
         except Exception:
             logger.exception("The alarm pass failed")
             return

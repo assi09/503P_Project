@@ -360,3 +360,23 @@ describe('reminders through the chat', () => {
     expect(set.nextDueAt).not.toBeNull();
   });
 });
+
+describe('alerts', () => {
+  it('asks whether an alert was useful and keeps the answer', async () => {
+    const alert = (await mockClient.getNotifications()).items.find((n) => n.alarmId);
+    expect(alert?.alarmFeedback).toBeNull();
+    await mockClient.sendAlarmFeedback(alert!.alarmId!, false);
+    const after = (await mockClient.getNotifications()).items.find((n) => n.id === alert!.id);
+    expect(after?.alarmFeedback).toBe('not_useful');
+  });
+
+  it('keeps alert settings', async () => {
+    const changed = {
+      enabled: true,
+      mutedKinds: ['finding' as const],
+      sensitivity: 'fewer' as const,
+    };
+    expect(await mockClient.updateAlarmSettings(changed)).toEqual(changed);
+    expect(await mockClient.getAlarmSettings()).toEqual(changed);
+  });
+});

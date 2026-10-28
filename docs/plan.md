@@ -150,8 +150,9 @@ and stale data or an expired sign-in; a cooldown per kind and metric, quiet hour
 shared with suggested reminders; a templated text from the evidence, sent in the app and by email.
 Tuned on calm synthetic people (about 0.5 single-day and 0.1 streak alarms a person a week before
 the cooldown) while catching most planted changes (73% of 2.5-hour short nights, 83% of a 6 bpm
-resting heart rate rise). Next: the agent's explanation and the app's alarm screens. Phone push
-notifications are still to do.
+resting heart rate rise). The owning expert explains each alarm before it is sent (checked, with the template as fallback),
+and the inbox asks whether each alert was useful; Alerts settings choose kinds and how many. Phone
+push notifications are still to do.
 
 Replace the mock ([ui-plan.md](ui-plan.md#reminders), step 5):
 
