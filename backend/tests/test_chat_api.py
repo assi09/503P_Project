@@ -556,3 +556,86 @@ def test_only_ones_own_question_can_be_replaced(client, engine, agent):
         )
         == 2
     )
+
+
+# Reminders through the agent
+
+
+def remind_router(agent, intent_name):
+    from app.agent.intent import Intent
+
+    agent.router.result = Classification(
+        dict.fromkeys(LABELS, 0.0) | {"sleep": 0.9},
+        dict.fromkeys(EXPERT_LABELS, 0.0),
+        source="test",
+        intent_probabilities={str(i): float(i == Intent(intent_name)) for i in Intent},
+    )
+
+
+def test_asking_for_a_reminder_prepares_one_to_tap_on(client, engine, agent):
+    headers = signed_in(client, engine)
+    remind_router(agent, "remind")
+    nights = {"kind": "weekly", "time": "22:30", "weekdays": [0, 1, 2, 3, 4]}
+    agent.llm.turns.extend(
+        [
+            ScriptedLLM.call(
+                "propose_reminder", title="Wind down", message="Screens off soon.", schedule=nights
+            ),
+            submission("Here's a wind-down reminder. Tap Set on the card to turn it on."),
+        ]
+    )
+    _, answer = ask(client, headers, "Remind me every weeknight at 22:30 to wind down").json()
+    assert answer["text"] == "Here's a wind-down reminder. Tap Set on the card to turn it on."
+    [reminder_id] = answer["reminderIds"]
+    request = agent.llm.requests[0]
+    assert {"propose_reminder", "list_reminders"} <= set(request["tools"])
+    assert "propose_reminder" in request["messages"][0]["content"]  # the reminder rules
+    [reminder] = client.get("/reminders", headers=headers).json()
+    assert reminder["id"] == reminder_id and reminder["status"] == "proposed"
+    assert reminder["source"] == "agent" and reminder["nextDueAt"] is None
+    # The chat keeps the card after a reload.
+    assert client.get("/chat", headers=headers).json()[-1]["reminderIds"] == [reminder_id]
+
+
+def test_a_reply_saying_the_reminder_is_on_is_replaced(client, engine, agent):
+    from app.reminders.tools import REMINDER_NOTE
+
+    headers = signed_in(client, engine)
+    remind_router(agent, "remind")
+    once = {"kind": "once", "date": "2030-01-02", "time": "07:00"}
+    agent.llm.turns.extend(
+        [
+            ScriptedLLM.call("propose_reminder", title="Log breakfast", message="", schedule=once),
+            submission("Done! I've set it for 07:00."),
+        ]
+    )
+    _, answer = ask(client, headers, "Remind me tomorrow at 7 to log breakfast").json()
+    assert answer["text"] == REMINDER_NOTE
+
+
+def test_the_answer_to_a_missing_time_continues_the_reminder(client, engine, agent):
+    headers = signed_in(client, engine)
+    remind_router(agent, "remind")
+    agent.llm.turns.append(submission("What time would you like it?"))
+    ask(client, headers, "Remind me to stretch every day")
+    remind_router(agent, "clarify")  # "at 18:00" alone is unclear
+    every_day = {"kind": "weekly", "time": "18:00", "weekdays": list(range(7))}
+    agent.llm.turns.extend(
+        [
+            ScriptedLLM.call("propose_reminder", title="Stretch", message="", schedule=every_day),
+            submission("Tap Set on the card to turn it on."),
+        ]
+    )
+    _, answer = ask(client, headers, "at 18:00").json()
+    request = agent.llm.requests[-2]
+    assert "Earlier request: Remind me to stretch every day" in request["messages"][1]["content"]
+    assert "propose_reminder" in request["tools"]
+    assert len(answer["reminderIds"]) == 1
+
+
+def test_questions_about_data_are_not_offered_reminder_tools(client, engine, agent):
+    headers = signed_in(client, engine)
+    remind_router(agent, "read")
+    agent.llm.turns.append(submission("Nothing stood out."))
+    ask(client, headers)
+    assert "propose_reminder" not in agent.llm.requests[0]["tools"]

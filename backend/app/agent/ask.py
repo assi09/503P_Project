@@ -44,6 +44,10 @@ from app.agent.router import (
     decide,
 )
 from app.analysis.evidence import Evidence
+from app.reminders.tools import REMINDER_PROMPT
+
+# The pending state of a chat whose last answer asked about a reminder (see `api/chat.py`).
+REMINDERS = "reminders"
 
 # Shown without calling the model: the refusal costs nothing and cannot be talked around.
 REFUSAL = (
@@ -188,6 +192,7 @@ def ask(
     now: datetime | None = None,
     action_tools: dict[str, list[ExtraTool]] | None = None,
     continuing_log: str | None = None,
+    reminder_tools: list[ExtraTool] | None = None,
 ) -> Answer:
     """Routes the question and has the right agent answer it, with verified claims.
 
@@ -205,6 +210,15 @@ def ask(
         )
         and route.classification.intent == Intent.CLARIFY
         and route.action not in ("refuse", "conversation")
+    )
+    # A reminder request, or the answer to the agent's question about one ("at 10").
+    reminding = (
+        bool(reminder_tools)
+        and route.action not in ("refuse", "conversation")
+        and (
+            route.classification.intent == Intent.REMIND
+            or (continuing_log == REMINDERS and route.classification.intent == Intent.CLARIFY)
+        )
     )
     if continuing:
         # This state comes from the server's unfinished clarification, not earlier text alone.
@@ -236,6 +250,11 @@ def ask(
             names = (route.expert,) if continuing else (route.expert, *route.consult)
             logging_tools = [tool for name in names for tool in (action_tools or {}).get(name, [])]
     tools += logging_tools
+    if reminding:
+        tools += reminder_tools
+    action_prompt = (LOGGING_PROMPT if logging_tools else "") + (
+        REMINDER_PROMPT if reminding else ""
+    )
     if route.action == "refuse":
         result = AgentResult(run_id=uuid.uuid4().hex[:12], stop_reason="refused", summary=REFUSAL)
     elif route.action == "conversation":
@@ -245,7 +264,8 @@ def ask(
             run_id=uuid.uuid4().hex[:12],
             stop_reason="action_controls",
             summary="Use the entry card to edit or cancel a draft. To remove a logged entry, "
-            "choose Undo and confirm the removal. Chat messages cannot confirm Google writes.",
+            "choose Undo and confirm the removal. Chat messages cannot confirm Google writes. "
+            "Reminders are paused, changed or deleted in Reminders.",
         )
     elif (
         action_tools
@@ -262,7 +282,7 @@ def ask(
             question,
             today=today,
             budget=replace(BUDGETS[depth]),
-            system_prompt=SYSTEM_PROMPT + (LOGGING_PROMPT if logging_tools else ""),
+            system_prompt=SYSTEM_PROMPT + action_prompt,
             context=context.block,
             evidence=context.evidence,
             guard=guard,
@@ -284,13 +304,17 @@ def ask(
             # A request only to log asks nothing about the data, so no part of it can be left
             # uncovered; a mixed request still needs its question answered.
             needs=()
-            if logging_tools and (route.classification.intent == Intent.LOG or continuing)
+            if reminding
+            or (logging_tools and (route.classification.intent == Intent.LOG or continuing))
             else (route.expert, *route.consult),
             extra_tools=tools,
             allow_logging=bool(logging_tools),
+            action_prompt=REMINDER_PROMPT if reminding else "",
         )
         result.notes += _notes(frame, route, result)
     result.trace[:0] = [_context_step(context), _route_step(route)]
     if continuing:
         result.trace[1]["continuing_log_expert"] = continuing_log
+    if reminding:
+        result.trace[1]["reminding"] = True
     return Answer(route, result, context, proposals)

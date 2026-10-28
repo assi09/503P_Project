@@ -14,6 +14,7 @@ class Intent(StrEnum):
     LOG = "log"
     MIXED = "mixed"
     MANAGE = "manage"
+    REMIND = "remind"
     CLARIFY = "clarify"
 
 
@@ -28,6 +29,8 @@ INTENT_CRITERIA = {
     Intent.MANAGE: "Asks to edit, cancel, delete or undo a particular logged entry or draft. "
     "A conversational yes or confirmation also belongs here if it refers to a draft; it never "
     "authorizes execution by itself.",
+    Intent.REMIND: "Asks to be reminded of something at a time, or about their reminders: set, "
+    "list, change or stop one. Not a request to log food or a workout.",
     Intent.CLARIFY: "Unclear whether the person wants analysis or logging, only states what "
     "they ate/did, supplies a photo without instructions, or a follow-up lacks enough context. "
     "Ask what they want; do not assume that a nutrition topic requests logging.",
@@ -74,6 +77,10 @@ _MANAGE = re.compile(
     r"(?:undo|delete|remove|cancel|edit|update|correct)\b",
     re.IGNORECASE,
 )
+_REMIND = re.compile(
+    r"\b(?:remind me|reminders?\b|stop reminding|set (?:an? )?(?:alarm|reminder))",
+    re.IGNORECASE,
+)
 _QUESTION = re.compile(
     r"^(?:how|what|when|why|which|has|have|did|does|do|is|are|was|were)\b", re.IGNORECASE
 )
@@ -91,7 +98,9 @@ def keyword_intent(question: str) -> dict[str, float]:
     """
     text = question.strip()
     mode = Intent.CLARIFY
-    if _MANAGE.search(text):
+    if _REMIND.search(text):
+        mode = Intent.REMIND
+    elif _MANAGE.search(text):
         mode = Intent.MANAGE
     elif _LOG.search(text):
         mode = Intent.MIXED if _ANALYSE.search(text) else Intent.LOG

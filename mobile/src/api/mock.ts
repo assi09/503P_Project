@@ -386,6 +386,32 @@ let notificationSettings: NotificationSettings = {
   email: true,
 };
 
+/** Like the agent with `propose_reminder`: "remind me … at 22:30 …" becomes a proposal. */
+function proposeReminder(text: string): Reminder | null {
+  if (!/\bremind me\b/i.test(text)) return null;
+  const clock = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(text);
+  let hours = clock ? Number(clock[1]) % 24 : 22;
+  if (clock?.[3]?.toLowerCase() === 'pm' && hours < 12) hours += 12;
+  const time = `${String(hours).padStart(2, '0')}:${clock?.[2] ?? (clock ? '00' : '30')}`;
+  const weekdays = /weeknight|weekday/i.test(text)
+    ? [0, 1, 2, 3, 4]
+    : /weekend/i.test(text)
+      ? [5, 6]
+      : [0, 1, 2, 3, 4, 5, 6];
+  const what = /\bto (.+?)(?:\s+(?:at|every|on|tonight|tomorrow)\b|[.?!]|$)/i.exec(text)?.[1];
+  const title = what ? what.charAt(0).toUpperCase() + what.slice(1, 60) : 'Reminder';
+  const proposed = mockReminder({
+    id: `r_${Date.now().toString(36)}`,
+    title,
+    message: what ? `Time to ${what}.` : '',
+    schedule: { kind: 'weekly', time, weekdays },
+    status: 'proposed',
+    source: 'agent',
+  });
+  reminders = [proposed, ...reminders];
+  return proposed;
+}
+
 function checkReminder(reminder: Pick<Reminder, 'title' | 'schedule' | 'channels'>) {
   if (!reminder.title.trim())
     throw new ApiError('A reminder needs a title.', 'invalid_reminder', 422);
@@ -1339,7 +1365,19 @@ export const mockClient: ApiClient = {
       }),
     ];
     chat = [...chat, ...added];
-    const answer = message({ ...reply(text, options), conversationId });
+    const prepared = proposeReminder(text);
+    const answer = message({
+      ...(prepared
+        ? {
+            role: 'assistant' as const,
+            text: "Here's the reminder. Tap Set on the card to turn it on.",
+            evidenceIds: [],
+            answeredBy: 'general' as const,
+            reminderIds: [prepared.id],
+          }
+        : reply(text, options)),
+      conversationId,
+    });
     chat = [...chat, answer];
     return delay([...added, answer]);
   },

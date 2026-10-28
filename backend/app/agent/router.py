@@ -57,18 +57,19 @@ CRITERIA = {
     "nutrition": "logging food and drink, or analysing food and drink logged: calories eaten, "
     "protein, carbohydrates, fat, nutrients, "
     "meals",
-    GENERAL: "the person's own Fitbit data overall, or several areas with no main one",
+    GENERAL: "the person's own Fitbit data overall, or several areas with no main one, or a "
+    "reminder about no particular area",
     # Without it, "what did I just say?" takes the earlier questions' topic and reaches an expert
     # that looks only at data.
     CONVERSATION: "this chat itself, not the data: what the person or the assistant said "
     "earlier in it, a recap of it, or what an earlier answer meant",
     OUT_OF_SCOPE: "medical diagnosis, symptoms, treatment, medication or health advice, or "
     "anything unrelated to analysing their own Fitbit data, logging their food, drink or "
-    "workouts, or this conversation",
+    "workouts, setting everyday reminders, or this conversation",
 }
 INSTRUCTIONS = (
-    "A person asks about their own Fitbit data or asks to log food, drink or workouts, possibly "
-    "following up on earlier "
+    "A person asks about their own Fitbit data, asks to log food, drink or workouts, or asks for a "
+    "reminder, possibly following up on earlier "
     "questions. Which topic is the current question about? Earlier questions, newest first, only "
     "show what it may refer to."
 )

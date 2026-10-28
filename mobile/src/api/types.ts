@@ -181,6 +181,7 @@ export interface ChatMessage {
   role: ChatRole;
   text: string;
   actionIds?: string[]; // owned logging drafts to review; never statistical evidence
+  reminderIds?: string[]; // reminders the agent prepared here, each waiting for one tap
   evidenceIds: string[]; // what the assistant's statements are based on
   attachment?: Attachment; // what a user message asked about, if anything
   answeredBy?: Expert | 'general'; // assistant only; absent on refusals
