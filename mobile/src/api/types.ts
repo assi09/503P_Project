@@ -353,7 +353,9 @@ export interface ApiClient {
   decideAccessRequest(id: string, approve: boolean, role?: Account['role']): Promise<Account>; // admins only; role on approval, member by default
   getGoogleStatus(): Promise<GoogleStatus>;
   connectGoogle(capability?: 'food_logging' | 'workout_logging'): Promise<{ url: string }>; // Google's sign-in page; it returns to /settings
-  syncGoogle(): Promise<GoogleStatus>;
+  // The app calls it by itself (open, focus, pull to refresh); the server starts a sync only when
+  // the last one began over 10 minutes ago, unless `force` (Settings' "Sync now").
+  syncGoogle(options?: { force?: boolean }): Promise<GoogleStatus>;
   disconnectGoogle(): Promise<GoogleStatus>; // the synced days are kept
   getLatestReport(): Promise<Report>;
   getDay(date: ISODate | 'latest'): Promise<DaySummary>;

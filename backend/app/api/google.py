@@ -3,18 +3,24 @@
 `POST /google/connect` returns Google's sign-in address; the browser comes back to
 `GET /google/callback`, which stores the encrypted token, starts the first sync and sends the
 browser back to the app. `POST /google/sync` refreshes the data; `GET /google/status` reports it.
+
+The app calls `POST /google/sync` by itself whenever it is opened, comes back to the front or is
+pulled to refresh, so syncing is nothing people think about. The server keeps that cheap: a sync
+starts only when none is running and the last one began over `RESYNC_AFTER` ago, unless the person
+asked for it with `force` (Settings' "Sync now").
 """
 
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func, select
 
 from app.actions.schemas import WRITE_SCOPES
 from app.api import schemas
@@ -22,7 +28,7 @@ from app.api.auth import Db, Now, approved_user
 from app.api.chat import Sessions, get_sessions
 from app.api.errors import ApiError
 from app.config import settings
-from app.db.models import GoogleConnection, User
+from app.db.models import GoogleConnection, SyncRun, User
 from app.sync import connections
 from app.sync.client import HealthClient
 from app.sync.connections import OAuth, SignIns, Syncs, TokenBox
@@ -33,6 +39,10 @@ router = APIRouter(prefix="/google", tags=["google"])
 
 sign_ins = SignIns()
 syncs = Syncs()
+
+# How soon the app's automatic syncs may start another one. Counted from the last attempt, not the
+# last success, so a failing sync is not retried on every refresh.
+RESYNC_AFTER = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
@@ -143,12 +153,28 @@ def sync_now(
     google: Google,
     clock: Now,
     sessions: Annotated[Sessions, Depends(get_sessions)],
+    force: Annotated[bool, Body(embed=True)] = False,
 ) -> schemas.GoogleStatus:
     connection = db.get(GoogleConnection, user.id)
     if connection is None or connection.status != "active":
         raise ApiError(409, "not_connected", "Connect Google Health first.")
-    _start_sync(google, sessions, user, clock.date())
+    if force or not _recent(db, user, clock):
+        _start_sync(google, sessions, user, clock.date())
     return _status(db, user)
+
+
+def _recent(db, user: User, now: datetime) -> bool:
+    """Whether a sync started for this person within `RESYNC_AFTER`."""
+    started = db.scalar(
+        select(func.max(SyncRun.started_at)).where(
+            SyncRun.user_id == user.id, SyncRun.source == connections.SOURCE
+        )
+    )
+    if started is None:
+        return False
+    if started.tzinfo is None:  # SQLite returns naive times; they are stored in UTC
+        started = started.replace(tzinfo=UTC)
+    return now - started < RESYNC_AFTER
 
 
 @router.post("/disconnect", response_model=schemas.GoogleStatus)

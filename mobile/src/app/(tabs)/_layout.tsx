@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
+import { useAutoSync } from '@/api/hooks';
 import { select } from '@/lib/haptics';
 import { useSession } from '@/lib/session';
 import { floatingTabBar as glass } from '@/lib/platform';
@@ -32,6 +33,7 @@ const TABS: {
 
 export default function TabLayout() {
   const { account } = useSession();
+  useAutoSync(); // signed in from here on: keep the data fresh without a button
   const supervisor = account?.role === 'supervisor';
   const colors = useColors();
   const scheme = useScheme();
