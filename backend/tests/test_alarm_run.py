@@ -292,3 +292,25 @@ def test_the_api_lists_sent_alarms_takes_feedback_and_keeps_settings(client, eng
     assert saved == {"enabled": True, "mutedKinds": ["day", "finding"], "sensitivity": "fewer"}
     bad = client.put("/alarm-settings", json={**changed, "sensitivity": "loud"}, headers=headers)
     assert bad.status_code == 422
+
+
+def test_every_kind_of_alarm_has_text_from_its_own_evidence():
+    """A finding compares two windows, so it has means and no usual range (seen on 2026-10-28)."""
+    from app.alarms.detect import Candidate, detect, detect_finding
+    from app.synthetic import Trend
+
+    drop = Trend("hrv_ms", LAST - timedelta(days=13), LAST, -20)
+    findings = []
+    for seed in range(10):
+        findings += detect_finding(with_scores(generate(START, 90, (drop,), seed=seed).frame), LAST)
+    hrv = [c for c in findings if c.metric == "hrv_ms"]  # the recovery score drops with it
+    assert hrv, "a planted two-week HRV drop should give at least one finding"
+    title, body = run.text(hrv[0])
+    assert title == "Heart rate variability (HRV) has dropped over two weeks"
+    assert body.startswith("The last 14 days averaged ")
+    kinds = {c.kind for c in detect(with_scores(bad_night_frame()), LAST)} | {"finding"}
+    for candidate in [*findings, *detect(with_scores(bad_night_frame()), LAST)]:
+        assert all(run.text(candidate))
+    for metric in ("reconnect", "stale"):
+        assert all(run.text(Candidate("data", metric, LAST, None, 1.0)))
+    assert "finding" in kinds
