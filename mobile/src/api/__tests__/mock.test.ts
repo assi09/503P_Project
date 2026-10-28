@@ -341,3 +341,22 @@ describe('teams', () => {
     expect(await mockClient.getMyTeams()).toEqual([]);
   });
 });
+
+describe('reminders through the chat', () => {
+  it('prepares a reminder to tap on, off until it is set', async () => {
+    const [, answer] = await mockClient.sendMessage(
+      'Remind me every weeknight at 22:30 to wind down',
+      AUTO,
+    );
+    const [id] = answer.reminderIds ?? [];
+    const reminder = (await mockClient.getReminders()).find((r) => r.id === id);
+    expect(reminder?.status).toBe('proposed');
+    expect(reminder?.scheduleText).toBe('Weeknights at 22:30');
+    expect(reminder?.title).toBe('Wind down');
+    const set = await mockClient.changeReminder(id, {
+      version: reminder!.version,
+      status: 'active',
+    });
+    expect(set.nextDueAt).not.toBeNull();
+  });
+});

@@ -16,6 +16,7 @@ import type { ChatMessage, Evidence, ExpertChoice } from '@/api/types';
 import { useEvidence } from '@/api/hooks';
 import { EvidenceChip } from '@/components/evidence';
 import { LogDraftCard } from '@/components/LogDraftCard';
+import { ReminderDraftCard } from '@/components/ReminderDraftCard';
 import { Text } from '@/components/Text';
 import { expertInfo, useExpertColor } from '@/lib/experts';
 import { evidenceLabel, metricLabel } from '@/lib/format';
@@ -193,6 +194,9 @@ export const MessageBubble = memo(function MessageBubble({
           )}
           {message.actionIds?.map((id) => (
             <LogDraftCard key={id} id={id} />
+          ))}
+          {message.reminderIds?.map((id) => (
+            <ReminderDraftCard key={id} id={id} />
           ))}
           {message.evidenceIds.length > 0 && (
             <View style={styles.chips}>
