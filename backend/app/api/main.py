@@ -16,6 +16,7 @@ from starlette.exceptions import HTTPException
 
 from app.api import (
     actions,
+    alarms,
     auth,
     chat,
     data,
@@ -29,9 +30,9 @@ from app.api import (
 from app.api.errors import ApiError
 from app.api.schemas import ErrorBody, ErrorResponse
 from app.auth.accounts import AuthError
+from app.background import Background
 from app.config import settings
 from app.ingest.takeout import IngestError
-from app.reminders.loop import ReminderLoop
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Background work that lives as long as the server: sending due reminders."""
-    loop = ReminderLoop() if settings.reminders_enabled else None
+    """Background work that lives as long as the server: reminders, syncs and smart alarms."""
+    loop = Background() if settings.reminders_enabled else None
     if loop:
         loop.start()
     yield
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(actions.router)
+    app.include_router(alarms.router)
     app.include_router(auth.router)
     app.include_router(chat.router)
     app.include_router(google.router)

@@ -25,7 +25,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import Notification, NotificationSetting, Reminder, ReminderDelivery, User
+from app.db.models import (
+    Alarm,
+    Notification,
+    NotificationSetting,
+    Reminder,
+    ReminderDelivery,
+    User,
+)
 from app.email import Email, Mailer, MailError
 from app.reminders import store
 from app.reminders.schedule import next_due, zone
@@ -136,17 +143,28 @@ def _held(
     if prefs.quiet_start and _quiet(local.time(), prefs.quiet_start, prefs.quiet_end):
         return "skipped_quiet"
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    sent_today = db.scalar(
+    sent_today = suggestions_sent(db, user.id, midnight)
+    return "skipped_cap" if sent_today >= prefs.max_per_day else None
+
+
+def suggestions_sent(db: Session, user_id: uuid.UUID, since: datetime) -> int:
+    """Suggested reminders and smart alarms sent since `since`: the daily limit counts both."""
+    reminders = db.scalar(
         select(func.count(func.distinct(ReminderDelivery.reminder_id)))
         .join(Reminder, Reminder.id == ReminderDelivery.reminder_id)
         .where(
-            ReminderDelivery.user_id == user.id,
+            ReminderDelivery.user_id == user_id,
             ReminderDelivery.status == "sent",
-            ReminderDelivery.due_at >= midnight,
+            ReminderDelivery.due_at >= since,
             Reminder.source == "agent",
         )
     )
-    return "skipped_cap" if sent_today >= prefs.max_per_day else None
+    alarms = db.scalar(
+        select(func.count(Alarm.id)).where(
+            Alarm.user_id == user_id, Alarm.status == "sent", Alarm.sent_at >= since
+        )
+    )
+    return reminders + alarms
 
 
 def _quiet(at: time, start: str, end: str) -> bool:

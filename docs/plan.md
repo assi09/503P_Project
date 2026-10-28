@@ -144,7 +144,14 @@ approval and daily recording come first and the report screen last.
 in the app and by email every minute (#102), the Reminders tab with its inbox (#106), and reminders
 set by asking the agent, with a card to confirm (this PR). Setting alarms on the watch itself is
 not possible: the Fitbit Web API is switched off and the Google Health API has no alarm method.
-Smart alarms (automatic, from the data) come next. Phone push notifications are still to do.
+Smart alarms, data side (this PR): a background sync every 3 hours for every connected person;
+detectors for a day far outside the usual range, a three-day streak, a significant two-week change
+and stale data or an expired sign-in; a cooldown per kind and metric, quiet hours and a daily limit
+shared with suggested reminders; a templated text from the evidence, sent in the app and by email.
+Tuned on calm synthetic people (about 0.5 single-day and 0.1 streak alarms a person a week before
+the cooldown) while catching most planted changes (73% of 2.5-hour short nights, 83% of a 6 bpm
+resting heart rate rise). Next: the agent's explanation and the app's alarm screens. Phone push
+notifications are still to do.
 
 Replace the mock ([ui-plan.md](ui-plan.md#reminders), step 5):
 

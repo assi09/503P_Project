@@ -60,6 +60,7 @@ DELIVERY_STATUSES = (
     "skipped_late",
     "skipped_off",
 )
+ALARM_STATUSES = ("pending", "sent", "suppressed", "expired")
 TEAM_REPORT_STATUSES = ("ready", "withheld")  # withheld: fewer active members than the minimum
 
 
@@ -625,3 +626,60 @@ class Notification(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Alarm(Base):
+    """A smart alarm: something in the person's data worth knowing, found by a detector.
+
+    `pending` until it can be sent (outside quiet hours, under the daily cap); `suppressed` with a
+    reason when it is not sent at all, kept for the evaluation; `expired` when it waited too long.
+    """
+
+    __tablename__ = "alarms"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({', '.join(repr(s) for s in ALARM_STATUSES)})", name="ck_alarms_status"
+        ),
+        CheckConstraint(
+            "feedback IS NULL OR feedback IN ('useful', 'not_useful')", name="ck_alarms_feedback"
+        ),
+        Index("ix_alarms_user_key", "user_id", "key", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))  # day, streak, finding, data
+    metric: Mapped[str | None] = mapped_column(String(64), default=None)
+    key: Mapped[str] = mapped_column(String(96))  # what the cooldown is kept by
+    day: Mapped[date] = mapped_column(Date)
+    severity: Mapped[float] = mapped_column(Float)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(600))
+    written_by: Mapped[str] = mapped_column(String(16), default="template")  # or an expert
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    reason: Mapped[str | None] = mapped_column(String(32), default=None)  # why not sent
+    feedback: Mapped[str | None] = mapped_column(String(16), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class AlarmSetting(Base):
+    """Which smart alarms the person wants; the defaults apply until they change something."""
+
+    __tablename__ = "alarm_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "sensitivity IN ('fewer', 'normal', 'more')", name="ck_alarm_settings_sensitivity"
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(default=True)
+    muted_kinds: Mapped[list[str]] = mapped_column(JSON, default=list)
+    sensitivity: Mapped[str] = mapped_column(String(8), default="normal")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
