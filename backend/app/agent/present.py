@@ -20,6 +20,7 @@ class MetricInfo:
 
 METRICS: dict[str, MetricInfo] = {
     "steps": MetricInfo("steps", "count"),
+    "checkin_rating": MetricInfo("morning check-in rating", "score"),
     "calories": MetricInfo("calories burned", "kcal"),
     "distance_km": MetricInfo("distance", "km"),
     "active_zone_minutes": MetricInfo("Active Zone Minutes", "minutes"),
@@ -155,11 +156,53 @@ def display(evidence: Evidence) -> dict[str, str]:
         }
         if (pct := evidence.stats.get("pct_change")) is not None:
             shown["pct_change"] = f"{abs(pct):.0f}%"
+    shown |= _extra_display(evidence)
     if change_date := evidence.stats.get("change_date"):
         shown["change_date"] = short_date(change_date)
     shown["windows"] = ", ".join(
         f"{short_date(w.start)} to {short_date(w.end)}" for w in evidence.windows
     )
+    return shown
+
+
+def _extra_display(evidence: Evidence) -> dict[str, str]:
+    """Readable values for the tools whose results are not a single metric's levels."""
+    stats, shown = evidence.stats, {}
+    metric = evidence.metrics[0] if evidence.metrics else ""
+    if evidence.tool == "habit_options":
+        if (split := stats.get("split_at")) is not None:
+            shown["split_at"] = clock(split)
+        shown["levers"] = "; ".join(
+            f"{lever['habit']} ({'supported' if lever['supported'] else 'not supported'}): "
+            f"{lever['group']} {format_level(metric, lever['mean_with'])}, "
+            f"{lever['other_group']} {format_level(metric, lever['mean_without'])}"
+            for lever in stats.get("levers", [])
+            if lever.get("mean_with") is not None and lever.get("mean_without") is not None
+        )
+    elif evidence.tool == "sleep_regularity":
+        if (median := stats.get("median")) is not None:
+            shown["median"] = clock(median)
+        for key in ("bedtime_spread_minutes", "wake_spread_minutes"):
+            if stats.get(key) is not None:
+                shown[key] = duration(stats[key])
+        if (shift := stats.get("weekend_shift_minutes")) is not None:
+            shown["weekend_shift_minutes"] = (
+                f"{duration(shift)} {'later' if shift > 0 else 'earlier'} on weekends"
+            )
+    elif evidence.tool == "rank_days":
+        shown["days"] = ", ".join(
+            f"{short_date(d['day'])}: {format_level(metric, d['value'])}"
+            for d in stats.get("days", [])
+        )
+    elif evidence.tool == "usual_ranges":
+        shown["ranges"] = "; ".join(
+            f"{label(m)} {format_level(m, r['low'])} to {format_level(m, r['high'])}"
+            for m, r in stats.get("ranges", {}).items()
+        )
+    elif evidence.tool == "tag_effect" and stats.get("mean_with") is not None:
+        tag = str(stats.get("tag", "")).replace("_", " ")
+        shown["with_tag"] = f"{format_level(metric, stats['mean_with'])} on days with {tag}"
+        shown["without_tag"] = f"{format_level(metric, stats['mean_without'])} on days without"
     return shown
 
 

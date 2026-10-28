@@ -37,6 +37,7 @@ from app.agent.intent import Intent
 from app.agent.llm import LLM, LLMError, OpenAILLM
 from app.agent.router import Router
 from app.analysis.day import with_scores
+from app.analysis.habits import with_checkins
 from app.api import schemas
 from app.api.auth import Db, approved_user
 from app.api.errors import ApiError
@@ -44,7 +45,7 @@ from app.api.store import LoadedData, get_data
 from app.config import settings
 from app.db import chat as store
 from app.db import memory
-from app.db.models import ChatMessage, Conversation, User
+from app.db.models import CHECKIN_TAGS, ChatMessage, CheckIn, Conversation, User
 from app.db.session import session_scope
 from app.reminders.tools import reminder_reply, reminder_tools
 
@@ -236,6 +237,10 @@ def _answer(
             turns = turns_from(earlier)
             cited = store.load_evidence(db, user_id, {i for t in turns for i in t.evidence_ids})
             remembered = memory.memory_items(db, user_id, now, conversation_id)
+            checkins = [
+                (row.day, row.rating, list(row.tags or []))
+                for row in db.scalars(select(CheckIn).where(CheckIn.user_id == user_id))
+            ]
         last = earlier[-1] if earlier and earlier[-1].role == "assistant" else None
         continuing_log = None
         if last and last.pending_log_expert:
@@ -244,8 +249,9 @@ def _answer(
             )
             if timedelta(0) <= now - created <= timedelta(hours=24):
                 continuing_log = last.pending_log_expert
-        # With the app's own scores as daily metrics, so they can be asked about and cited.
-        frame = with_scores(data.daily.frame)
+        # With the app's own scores as daily metrics, and the morning check-ins (rating and tags),
+        # so they can be asked about and cited.
+        frame = with_checkins(with_scores(data.daily.frame), checkins, CHECKIN_TAGS)
         # The agent gets the person's local time, so "just now" or "this morning" needs no
         # question; the data range is in the task separately.
         local_now = now.astimezone(ZoneInfo(settings.timezone))

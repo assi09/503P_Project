@@ -481,3 +481,25 @@ moved from the old "advice" list, six new). `PYTHONPATH=backend python eval/advi
 claim kind in the verifier (a significant pattern or a supported habit option, worded as an
 option, never an order), coaching rules in the system prompt, the voice, AGENTS.md and product.md.
 
+## Coaching with the person's own data (2026-10-28)
+
+**Tested:** whether the agent coaches from evidence with the new tools (`habit_options`,
+`sleep_regularity`, `training_load`, `rank_days`, `usual_ranges`, `checkins`, `tag_effect`). A
+synthetic person whose sleep efficiency is planted to follow bedtime; "How can I sleep better?"
+and "How can I recover faster?".
+**Showed ($0.0745 for five answers):**
+- First run: the agent never called `habit_options`; it ran change tests, missed the planted link
+  and said there was no lever (honest, but useless). Recovery: it found that more sleep went with
+  better recovery and stated it, without a suggestion.
+- After the coaching rules said to start with `habit_options` on the goal's metrics: "On nights you
+  were in bed by 23:30, your sleep efficiency was higher, so you could try that on weeknights", a
+  `suggestion` claim citing the planted link. But the summary failed its check twice and the joined
+  claims were shown.
+- The trace showed why: the summary said bedtime was "earlier", and the overstatement check only
+  counted change tests as support. A supported `habit_options` result now counts too. In the traced
+  rerun the reply read naturally: "being in bed by 23:30 lines up with better sleep efficiency, so
+  that looks like the clearest habit to try."
+**Open, for the strategy PR:** coaching should always start with `habit_options` (not depend on the
+model choosing it); a significant association (more sleep, better recovery) should become a
+suggestion; and every coaching answer should end with the offer of a reminder or a test.
+

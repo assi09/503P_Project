@@ -89,3 +89,4 @@ Larger evaluation and user-testing runs in the final week need a top-up, decided
 | 2026-10-28 | Reminders through the agent, made-up requests and a synthetic person: four requests ($0.0136; the Fitbit alarm request was refused as off-topic), then again after putting reminders in the router's scope ($0.0124) | $0.0260 |
 | 2026-10-28 | Smart alarm explanations, synthetic people: a planted short night with a late bedtime (sleep expert, $0.0104) and a 3-day resting heart rate rise (recovery expert, $0.0128) | $0.0231 |
 | 2026-10-28 | Advice guard on the medical/coaching split, two runs, Jev | $0.0005 |
+| 2026-10-28 | Coaching with the new tools, synthetic person with a planted bedtime-efficiency link: "sleep better" and "recover faster" twice ($0.0317, $0.0305), and a traced rerun ($0.0123) | $0.0745 |
