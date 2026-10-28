@@ -10,8 +10,9 @@ import type {
   CheckIn,
   GoogleStatus,
   ISODate,
+  NewReminder,
   NotificationSettings,
-  ReminderStatus,
+  ReminderChange,
   SendOptions,
 } from './types';
 
@@ -22,6 +23,7 @@ export const keys = {
   reminders: ['reminders'] as const,
   dataStatus: ['data-status'] as const,
   notificationSettings: ['settings', 'notifications'] as const,
+  notifications: ['notifications'] as const,
   accessRequests: ['admin', 'access-requests'] as const,
   google: ['google', 'status'] as const,
   myTeams: ['me', 'teams'] as const,
@@ -200,13 +202,56 @@ export function useReminders() {
   return useQuery({ queryKey: keys.reminders, queryFn: api.getReminders });
 }
 
-export function useSetReminderStatus() {
+export function useCreateReminder() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ReminderStatus }) =>
-      api.setReminderStatus(id, status),
+    mutationFn: (reminder: NewReminder) => api.createReminder(reminder),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.reminders }),
   });
+}
+
+export function useChangeReminder() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, change }: { id: string; change: ReminderChange }) =>
+      api.changeReminder(id, change),
+    // A stale version means someone else changed it: show what is there now.
+    onSettled: () => client.invalidateQueries({ queryKey: keys.reminders }),
+  });
+}
+
+export function useDeleteReminder() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteReminder(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.reminders }),
+  });
+}
+
+/** The inbox, checked every minute while the app is open, so a due reminder shows up. */
+export function useNotifications() {
+  return useQuery({
+    queryKey: keys.notifications,
+    queryFn: api.getNotifications,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useReadNotifications() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string | 'all') =>
+      id === 'all' ? api.readAllNotifications() : api.readNotification(id).then(() => undefined),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.notifications }),
+  });
+}
+
+/** Tells the server this device's time zone once per sign-in, so reminders come at local time. */
+export function useSyncTimezone() {
+  useEffect(() => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) void api.setTimezone(zone).catch(() => undefined);
+  }, []);
 }
 
 export function useNotificationSettings() {

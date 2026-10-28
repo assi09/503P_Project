@@ -2,10 +2,12 @@
 import { logSignature, validateLog } from '@/lib/actionLog';
 import { expertForMetric } from '@/lib/experts';
 import { shortDate } from '@/lib/format';
+import { describeSchedule, nextDue, validTime } from '@/lib/reminders';
 
 import { ApiError } from './http';
 import { getToken } from './token';
 import type {
+  AppNotification,
   AccessRequest,
   Account,
   ApiClient,
@@ -58,7 +60,13 @@ function random(seed: number): () => number {
   };
 }
 
-function series(seed: number, base: number, noise: number, shift: number, shiftDay: number): Point[] {
+function series(
+  seed: number,
+  base: number,
+  noise: number,
+  shift: number,
+  shiftDay: number,
+): Point[] {
   const next = random(seed);
   return Array.from({ length: DAYS }, (_, i) => {
     const daysAgo = DAYS - 1 - i;
@@ -196,7 +204,14 @@ const evidence: Record<string, Evidence> = {
     windows: [recent, baseline],
     n: 27,
     sufficient: true,
-    stats: { mean_recent: 86.1, mean_baseline: 91.6, difference: -5.5, pct_change: -6.0, cliffs_delta: -0.71, p_value: 0.0008 },
+    stats: {
+      mean_recent: 86.1,
+      mean_baseline: 91.6,
+      difference: -5.5,
+      pct_change: -6.0,
+      cliffs_delta: -0.71,
+      p_value: 0.0008,
+    },
   },
   ev_bed: {
     id: 'ev_bed',
@@ -205,7 +220,13 @@ const evidence: Record<string, Evidence> = {
     windows: [recent, baseline],
     n: 27,
     sufficient: true,
-    stats: { mean_recent: 0.4, mean_baseline: -0.45, difference: 0.85, cliffs_delta: 0.64, p_value: 0.002 },
+    stats: {
+      mean_recent: 0.4,
+      mean_baseline: -0.45,
+      difference: 0.85,
+      cliffs_delta: 0.64,
+      p_value: 0.002,
+    },
   },
   ev_corr: {
     id: 'ev_corr',
@@ -223,7 +244,14 @@ const evidence: Record<string, Evidence> = {
     windows: [{ start: isoDate(27), end: isoDate(0) }],
     n: 28,
     sufficient: true,
-    stats: { slope_per_day: 61.2, slope_low: 22.5, slope_high: 98.0, change_over_window: 1652, kendall_tau: 0.33, p_value: 0.013 },
+    stats: {
+      slope_per_day: 61.2,
+      slope_low: 22.5,
+      slope_high: 98.0,
+      change_over_window: 1652,
+      kendall_tau: 0.33,
+      p_value: 0.013,
+    },
   },
   ev_hrv: {
     id: 'ev_hrv',
@@ -232,7 +260,14 @@ const evidence: Record<string, Evidence> = {
     windows: [recent, baseline],
     n: 26,
     sufficient: true,
-    stats: { mean_recent: 48.2, mean_baseline: 55.9, difference: -7.7, pct_change: -13.8, cliffs_delta: -0.52, p_value: 0.011 },
+    stats: {
+      mean_recent: 48.2,
+      mean_baseline: 55.9,
+      difference: -7.7,
+      pct_change: -13.8,
+      cliffs_delta: -0.52,
+      p_value: 0.011,
+    },
   },
 };
 
@@ -240,7 +275,8 @@ const findings: Finding[] = [
   {
     id: 'f_eff',
     title: 'Sleep efficiency dropped',
-    summary: 'Your sleep efficiency averaged 86% over the last two weeks, down from 92% the two weeks before.',
+    summary:
+      'Your sleep efficiency averaged 86% over the last two weeks, down from 92% the two weeks before.',
     metric: 'sleep_efficiency',
     unit: '%',
     direction: 'down',
@@ -265,12 +301,16 @@ const findings: Finding[] = [
   {
     id: 'f_steps',
     title: 'Steps trending up',
-    summary: 'Daily steps rose by about 60 a day over the last four weeks, around 1,650 more per day overall.',
+    summary:
+      'Daily steps rose by about 60 a day over the last four weeks, around 1,650 more per day overall.',
     metric: 'steps',
     unit: 'steps',
     direction: 'up',
     change: '+1,650/day',
-    series: series(3, 8200, 1400, 0, 0).map((point, i) => ({ ...point, value: Math.round((point.value ?? 0) + i * 61) })),
+    series: series(3, 8200, 1400, 0, 0).map((point, i) => ({
+      ...point,
+      value: Math.round((point.value ?? 0) + i * 61),
+    })),
     evidenceIds: ['ev_steps'],
   },
 ];
@@ -285,24 +325,56 @@ let questions: ContextQuestion[] = [
   },
 ];
 
+// Reminders, as the backend keeps them: the agent's suggestion waits for approval.
+function mockReminder(
+  fields: Pick<Reminder, 'id' | 'title' | 'message' | 'schedule' | 'status' | 'source'> &
+    Partial<Reminder>,
+): Reminder {
+  const active = fields.status === 'active';
+  return {
+    channels: ['in_app', 'email'],
+    reason: null,
+    evidenceId: null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    version: 1,
+    createdAt: new Date().toISOString(),
+    ...fields,
+    scheduleText: describeSchedule(fields.schedule),
+    nextDueAt: active ? (nextDue(fields.schedule)?.toISOString() ?? null) : null,
+  };
+}
+
 let reminders: Reminder[] = [
-  {
+  mockReminder({
     id: 'r_wind',
     title: 'Wind down',
     message: 'Time to start winding down for bed.',
-    schedule: 'Weeknights at 23:00',
-    reason: 'Later bedtimes went with lower sleep efficiency over the last four weeks.',
-    findingId: 'f_bed',
+    schedule: { kind: 'weekly', time: '23:00', weekdays: [0, 1, 2, 3, 4] },
     status: 'proposed',
-  },
-  {
-    id: 'r_sync',
-    title: 'Sync reminder',
-    message: "Your data hasn't synced in 3 days.",
-    schedule: 'When data is 3 days old',
-    reason: 'Analysis needs recent data.',
-    findingId: null,
+    source: 'agent',
+    reason: 'Later bedtimes went with lower sleep efficiency over the last four weeks.',
+    evidenceId: null,
+    channels: ['in_app'],
+  }),
+  mockReminder({
+    id: 'r_stretch',
+    title: 'Stretch',
+    message: 'Ten minutes of stretching before dinner.',
+    schedule: { kind: 'weekly', time: '18:30', weekdays: [0, 2, 4] },
     status: 'active',
+    source: 'person',
+  }),
+];
+
+let inbox: AppNotification[] = [
+  {
+    id: 'n_stretch',
+    kind: 'reminder',
+    title: 'Stretch',
+    body: 'Ten minutes of stretching before dinner.',
+    link: '/reminders',
+    createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    readAt: null,
   },
 ];
 
@@ -310,10 +382,29 @@ let chat: ChatMessage[] = [];
 
 let notificationSettings: NotificationSettings = {
   quietHours: { start: '22:00', end: '07:00' },
-  maxPerDay: 2,
+  maxPerDay: 3,
+  email: true,
 };
 
-const MEDICAL = /\b(diagnos|disease|illness|sick|medic|medication|doctor|symptom|treat|apnea|afib|heart attack)/i;
+function checkReminder(reminder: Pick<Reminder, 'title' | 'schedule' | 'channels'>) {
+  if (!reminder.title.trim())
+    throw new ApiError('A reminder needs a title.', 'invalid_reminder', 422);
+  if (reminder.channels.length === 0) {
+    throw new ApiError('Choose email, in the app, or both.', 'invalid_reminder', 422);
+  }
+  if (!validTime(reminder.schedule.time)) {
+    throw new ApiError('That schedule is not valid.', 'invalid_reminder', 422);
+  }
+  if (reminder.schedule.kind === 'weekly' && reminder.schedule.weekdays.length === 0) {
+    throw new ApiError('That schedule is not valid.', 'invalid_reminder', 422);
+  }
+  if (reminder.schedule.kind === 'once' && nextDue(reminder.schedule) === null) {
+    throw new ApiError('That time has already passed.', 'in_the_past', 422);
+  }
+}
+
+const MEDICAL =
+  /\b(diagnos|disease|illness|sick|medic|medication|doctor|symptom|treat|apnea|afib|heart attack)/i;
 
 // Stand-in for the router: keywords per expert. Ties go to the earlier expert in this list.
 const TOPICS: [Expert, RegExp][] = [
@@ -602,17 +693,21 @@ function transition(id: string, version: number, from: string[], to: HealthActio
 const MOCK_TEAM = { id: 't1', name: 'Design', code: 'DEMO2345', supervisor: 'lead@patterns.app' };
 const MOCK_CONSENT = {
   consent:
-    'Your supervisor will see weekly figures about the whole team: how its sleep, activity, recovery, strain and stress changed, each built from at least 5 people. They will not see your name, your own values, your days, your chats or anything else from your account, and they will not see whether you joined. You can leave at any time in Settings; from then on your data is left out of the team\'s figures.',
+    "Your supervisor will see weekly figures about the whole team: how its sleep, activity, recovery, strain and stress changed, each built from at least 5 people. They will not see your name, your own values, your days, your chats or anything else from your account, and they will not see whether you joined. You can leave at any time in Settings; from then on your data is left out of the team's figures.",
   consentVersion: 'teams-v1',
   levelsConsent:
-    'Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week\'s average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.',
+    "Your supervisor will also see your name with your own weekly recovery, sleep, strain and stress, each as below, within or above your own usual range and as the week's average. Nothing else: no days, no other metrics, no chats. You can turn this off at any time; your row then disappears, including from past weeks.",
   levelsConsentVersion: 'team-levels-v1',
 };
 let myTeams: Membership[] = [];
 
 function mockTeam(code: string) {
   if (code.toUpperCase().replace(/[^A-Z0-9]/g, '') !== MOCK_TEAM.code) {
-    throw new ApiError('No team has this code. Check it with your supervisor.', 'unknown_code', 404);
+    throw new ApiError(
+      'No team has this code. Check it with your supervisor.',
+      'unknown_code',
+      404,
+    );
   }
   return MOCK_TEAM;
 }
@@ -657,7 +752,9 @@ function lastFullWeek(): ISODate {
 }
 
 function mockReport(team: SupervisedTeam, start: ISODate): TeamReport {
-  const end = new Date(Date.parse(`${start}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
+  const end = new Date(Date.parse(`${start}T00:00:00Z`) + 6 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   // A section and the aggregate evidence it cites, as the backend stores them.
   const evidence: Record<string, Evidence> = {};
   const change = (
@@ -879,7 +976,11 @@ export const mockClient: ApiClient = {
     later<Membership>(() => {
       const team = mockTeam(code);
       if (consentVersion !== MOCK_CONSENT.consentVersion) {
-        throw new ApiError('What joining means has changed. Read it again.', 'consent_changed', 409);
+        throw new ApiError(
+          'What joining means has changed. Read it again.',
+          'consent_changed',
+          409,
+        );
       }
       if (myTeams.some((m) => m.teamId === team.id)) {
         throw new ApiError('You are already in this team.', 'already_member', 409);
@@ -1156,7 +1257,9 @@ export const mockClient: ApiClient = {
     }),
 
   getEvidence: (id) =>
-    evidence[id] ? delay(evidence[id]) : Promise.reject(new Error('This evidence no longer exists.')),
+    evidence[id]
+      ? delay(evidence[id])
+      : Promise.reject(new Error('This evidence no longer exists.')),
 
   answerQuestion: (questionId, answer) => {
     questions = questions.map((q) => (q.id === questionId ? { ...q, answer } : q));
@@ -1241,28 +1344,83 @@ export const mockClient: ApiClient = {
     return delay([...added, answer]);
   },
 
-  getReminders: () => delay(reminders),
+  getReminders: () =>
+    delay(reminders.filter((r) => r.status !== 'declined' || r.source === 'agent')),
 
-  setReminderStatus: (id, status) => {
-    reminders = reminders.map((r) => (r.id === id ? { ...r, status } : r));
-    const updated = reminders.find((r) => r.id === id);
-    return updated ? delay(updated) : Promise.reject(new Error('Unknown reminder'));
-  },
+  createReminder: (reminder) =>
+    later(() => {
+      checkReminder(reminder);
+      const created = mockReminder({
+        ...reminder,
+        id: `r_${Date.now().toString(36)}`,
+        status: 'active',
+        source: 'person',
+      });
+      reminders = [created, ...reminders];
+      return created;
+    }),
+
+  changeReminder: (id, change) =>
+    later(() => {
+      const current = reminders.find((r) => r.id === id);
+      if (!current) throw new ApiError('No such reminder.', 'not_found', 404);
+      if (change.version !== current.version) {
+        throw new ApiError('This reminder changed; reload and try again.', 'version_conflict', 409);
+      }
+      const next = {
+        ...current,
+        ...change,
+        status: change.status ?? current.status,
+        version: current.version + 1,
+      };
+      checkReminder(next);
+      const updated = mockReminder(next);
+      reminders = reminders.map((r) => (r.id === id ? updated : r));
+      return updated;
+    }),
+
+  deleteReminder: (id) =>
+    later(() => {
+      reminders = reminders.filter((r) => r.id !== id);
+    }),
 
   getNotificationSettings: () => delay(notificationSettings),
 
   updateNotificationSettings: (settings) => {
-    if (!Number.isInteger(settings.maxPerDay) || settings.maxPerDay < 1 || settings.maxPerDay > 5) {
-      return Promise.reject(new Error('maxPerDay must be between 1 and 5'));
+    if (
+      !Number.isInteger(settings.maxPerDay) ||
+      settings.maxPerDay < 1 ||
+      settings.maxPerDay > 10
+    ) {
+      return Promise.reject(new Error('maxPerDay must be between 1 and 10'));
     }
     notificationSettings = settings;
     return delay(notificationSettings);
   },
 
+  getNotifications: () =>
+    delay({ items: inbox, unread: inbox.filter((n) => n.readAt === null).length }),
+
+  readNotification: (id) =>
+    later(() => {
+      const found = inbox.find((n) => n.id === id);
+      if (!found) throw new ApiError('No such notification.', 'not_found', 404);
+      found.readAt ??= new Date().toISOString();
+      return found;
+    }),
+
+  readAllNotifications: () =>
+    later(() => {
+      const now = new Date().toISOString();
+      inbox = inbox.map((n) => ({ ...n, readAt: n.readAt ?? now }));
+    }),
+
+  setTimezone: () => delay(undefined),
+
   getDataStatus: () =>
     later<DataStatus>(() => {
       ownData();
-        return {
+      return {
         source: 'takeout',
         lastSync: new Date(Date.now() - 2 * 3600_000).toISOString(),
         range: { start: isoDate(110), end: isoDate(0) },

@@ -86,8 +86,12 @@ describe('httpClient', () => {
     await expect(client.getDataStatus()).resolves.toEqual(status);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await client.getReminders();
-    expect(fetchMock).toHaveBeenCalledTimes(1); // still the mock
+    // Context questions have no endpoint yet, so the mock answers them.
+    await client.answerQuestion('q_shift', 'Exams');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await client.getReminders(); // served by the backend since reminders became real
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
