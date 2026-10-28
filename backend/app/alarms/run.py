@@ -93,26 +93,25 @@ def text(candidate: Candidate) -> tuple[str, str]:
     name = label(metric)
     side = _side(candidate.direction)
     first = candidate.evidence[0].stats
-    usual = (
-        f"{format_level(metric, first['usual_low'])}–{format_level(metric, first['usual_high'])}"
-    )
+    if candidate.kind == "finding":  # two windows compared: means, not a usual range
+        moved = "dropped" if candidate.direction == "down" else "risen"
+        return (
+            f"{name[0].upper()}{name[1:]} has {moved} over two weeks",
+            f"The last 14 days averaged {format_level(metric, first['mean_recent'])}, against "
+            f"{format_level(metric, first['mean_baseline'])} in the four weeks before.",
+        )
+    low, high = format_level(metric, first["usual_low"]), format_level(metric, first["usual_high"])
+    usual = f"{low}–{high}"
     if candidate.kind == "day":
         return (
             f"{name[0].upper()}{name[1:]} well {side} your usual",
             f"{short_date(candidate.day)}: {format_level(metric, first['value'])}, against your "
             f"usual {usual}.",
         )
-    if candidate.kind == "streak":
-        days = len(candidate.evidence)
-        return (
-            f"{name[0].upper()}{name[1:]} {side} usual {days} days running",
-            f"Each of the last {days} days was {side} your usual {usual}.",
-        )
-    moved = "dropped" if candidate.direction == "down" else "risen"
+    days = len(candidate.evidence)  # a streak
     return (
-        f"{name[0].upper()}{name[1:]} has {moved} over two weeks",
-        f"The last 14 days averaged {format_level(metric, first['mean_recent'])}, against "
-        f"{format_level(metric, first['mean_baseline'])} in the four weeks before.",
+        f"{name[0].upper()}{name[1:]} {side} usual {days} days running",
+        f"Each of the last {days} days was {side} your usual {usual}.",
     )
 
 
