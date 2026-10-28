@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.actions.schemas import Measured
 from app.actions.tools import proposal_tools
-from app.agent.ask import ask, default_guard, default_router
+from app.agent.ask import REMINDERS, ask, default_guard, default_router
 from app.agent.context import Attachment, turns_from
 from app.agent.conversation import DRAFT_NOTE, draft_reply
 from app.agent.experts import EXPERTS, Depth, available
@@ -46,6 +46,7 @@ from app.db import chat as store
 from app.db import memory
 from app.db.models import ChatMessage, Conversation, User
 from app.db.session import session_scope
+from app.reminders.tools import reminder_reply, reminder_tools
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -119,6 +120,7 @@ def _message(row: ChatMessage) -> schemas.ChatMessage:
         text=row.text,
         evidence_ids=list(row.evidence_ids or []),
         action_ids=list(row.action_ids or []) or None,
+        reminder_ids=list(row.reminder_ids or []) or None,
         attachment=row.attachment,
         answered_by=row.answered_by if row.role == "assistant" else None,
         routed=row.routed if row.role == "assistant" else None,
@@ -266,6 +268,8 @@ def _answer(
                 return measure_workout(db, user_id, start, end, exercise_type)
 
         draft_tools = proposal_tools(sessions, user_id, question_id, now, prepared, measurer)
+        reminders: list[str] = []
+        reminding_tools = reminder_tools(sessions, user_id, now, reminders)
         try:
             reply = ask(
                 agent.llm,
@@ -283,6 +287,7 @@ def _answer(
                 now=now,
                 action_tools=draft_tools,
                 continuing_log=continuing_log,
+                reminder_tools=reminding_tools,
             )
         except Exception:
             logger.exception("Answering failed")
@@ -318,6 +323,10 @@ def _answer(
                     result.summary = "No nutrition history is available yet. " + note
                 else:
                     result.notes.append(note)
+            reminding = any(step.get("reminding") for step in result.trace)
+            if reminders:
+                # The agent's words when they do not claim it is on; the card holds the details.
+                result.summary, result.claims = reminder_reply(result.summary), []
             refused = reply.route.action == "refuse"
             memory.mark_used(db, user_id, reply.context.memory_used, now)
             for fact in reply.proposed_facts:
@@ -336,8 +345,15 @@ def _answer(
                 run_id=result.run_id,
                 cost_usd=result.budget.cost_usd,
                 action_ids=prepared or None,
+                reminder_ids=reminders or None,
                 conversation_id=conversation_id,
-                pending_log_expert=(reply.route.expert or "general")
+                # The agent asked for a reminder's missing detail: the reply continues the request.
+                pending_log_expert=REMINDERS
+                if reminding
+                and not reminders
+                and not prepared
+                and result.summary.rstrip().endswith("?")
+                else (reply.route.expert or "general")
                 if not prepared
                 and (reply.route.expert in draft_tools or reply.route.action == "general")
                 and (

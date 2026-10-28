@@ -203,6 +203,8 @@ class ChatMessage(Base):
         default=None,
     )
     action_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+    # Reminders the agent prepared in this answer, each waiting for the person's tap on its card.
+    reminder_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
     # An unfinished clarification, usable only by the next reply within 24 hours.
     pending_log_expert: Mapped[str | None] = mapped_column(String(16), default=None)
     text: Mapped[str] = mapped_column(Text)

@@ -379,6 +379,7 @@ def ask_expert(
     needs: Iterable[str] = (),
     extra_tools: list[ExtraTool] = (),
     allow_logging: bool = False,
+    action_prompt: str = "",
 ) -> AgentResult:
     """Has one expert answer a question about the person's data, with verified claims.
 
@@ -389,7 +390,8 @@ def ask_expert(
     expert = EXPERTS[name]
     allowed = tuple(dict.fromkeys(c for c in consult if c != name))[:MAX_CONSULTS]
     budget = budget or lead_budget(depth, len(allowed))
-    if not available(expert, frame) and not allow_logging:
+    # Preparing a log or a reminder needs no history ("remind me to log breakfast").
+    if not available(expert, frame) and not allow_logging and not action_prompt:
         return AgentResult(
             run_id="",
             stop_reason="unavailable",
@@ -406,6 +408,7 @@ def ask_expert(
     prompt = system_prompt(expert, frame, consultable)
     if allow_logging:
         prompt += LOGGING_PROMPT
+    prompt += action_prompt
     coverage = (
         coverage_check(
             [n for n in needs if n in EXPERTS and available(EXPERTS[n], frame)], toolbox.evidence

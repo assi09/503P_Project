@@ -200,6 +200,7 @@ class ChatMessage(ApiModel):
     text: str
     evidence_ids: list[str]
     action_ids: list[str] | None = None  # owned drafts, never statistical evidence
+    reminder_ids: list[str] | None = None  # reminders prepared here, waiting for one tap
     attachment: dict[str, Any] | None = None  # what a question asked about
     answered_by: str | None = None  # an expert or "general"; absent on refusals
     routed: bool | None = None  # true if the router chose the expert
